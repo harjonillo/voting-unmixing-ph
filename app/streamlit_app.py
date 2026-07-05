@@ -107,7 +107,8 @@ value_kind = st.sidebar.selectbox(
 sel_arch = st.sidebar.selectbox(
     "Archetype", arch_cols,
     format_func=lambda c: f"Archetype {c.split('_')[1]}",
-    disabled=(value_kind != "Archetype abundance"),
+    help="Colors the map when Quantity = Archetype abundance, and picks "
+         "which archetype's loadings appear beside the map.",
 )
 
 weighted = st.sidebar.checkbox(
@@ -146,6 +147,21 @@ else:
 
 name_col = LEVEL_COLS[level][-1] if LEVEL_COLS[level] else None
 
+
+def loadings_fig(arch_col: str, top_n: int = 15, height: int | None = None):
+    """Horizontal bar chart of the top-N candidate loadings for one archetype."""
+    sub = endmembers[arch_col].sort_values(ascending=False).head(top_n)
+    fig = px.bar(
+        x=sub.values[::-1], y=sub.index[::-1], orientation="h",
+        labels={"x": "loading", "y": ""},
+        title=f"Archetype {arch_col.split('_')[1]} — top {top_n} loadings",
+    )
+    fig.update_layout(
+        height=height or max(300, 24 * top_n),
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+    return fig
+
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
@@ -163,12 +179,15 @@ with tab_map:
             col.metric(f"Archetype {c.split('_')[1]}", f"{row[c]:.1%}")
         st.caption("Mean archetype abundance across all precincts"
                    + (" (ballot-weighted)" if weighted else ""))
+        col_left, col_right = st.columns([1, 1])
         fig = px.bar(
             x=[f"Archetype {c.split('_')[1]}" for c in arch_cols],
             y=[row[c] for c in arch_cols],
             labels={"x": "", "y": "mean abundance"},
         )
-        st.plotly_chart(fig, use_container_width=True)
+        col_left.plotly_chart(fig, use_container_width=True)
+        col_right.plotly_chart(loadings_fig(sel_arch, height=450),
+                               use_container_width=True)
 
     elif level == "clustered_precinct":
         st.info(
@@ -225,7 +244,16 @@ with tab_map:
                     gdf, value_col, hover_name=hover, simplify_tolerance=tol,
                 )
             fig.update_coloraxes(colorbar_title=colorbar)
-            st.plotly_chart(fig, use_container_width=True)
+            col_map, col_load = st.columns([5, 3])
+            col_map.plotly_chart(fig, use_container_width=True)
+            col_load.plotly_chart(loadings_fig(sel_arch, height=650),
+                                  use_container_width=True)
+            if value_kind != "Archetype abundance":
+                col_load.caption(
+                    "Loadings of the archetype selected in the sidebar "
+                    "(the map itself shows "
+                    f"{'the dominant archetype' if value_kind == 'Dominant archetype' else 'turnout'})."
+                )
 
         if unmatched:
             with st.expander(f"{len(unmatched)} units without a matched boundary"):
