@@ -77,3 +77,37 @@ def load_processed(config):
     with open(out / "meta.json") as f:
         meta = json.load(f)
     return endmembers, abundances, meta
+
+
+def load_sweep(config, full_resolution: bool = False):
+    """Load the endmember-count sweep written by ``scripts/run_sweep.py``.
+
+    Returns {p: dict} with keys ``loadings_mean``, ``loadings_std``
+    (DataFrames indexed by candidate), ``agg_trials`` (per-trial municipality
+    aggregates), ``meta``, and — when ``full_resolution`` — ``abundances_ref``.
+    Returns an empty dict if the sweep has not been run.
+    """
+    import json
+
+    from src.config import processed_path
+
+    root = processed_path(config, "sweep")
+    out = {}
+    if not root.exists():
+        return out
+    for sub in sorted(root.glob("p*")):
+        try:
+            p = int(sub.name[1:])
+        except ValueError:
+            continue
+        entry = {
+            "loadings_mean": pd.read_csv(sub / "loadings_mean.csv", index_col="candidate"),
+            "loadings_std": pd.read_csv(sub / "loadings_std.csv", index_col="candidate"),
+            "agg_trials": pd.read_parquet(sub / "agg_municipality_trials.parquet"),
+        }
+        with open(sub / "meta.json") as f:
+            entry["meta"] = json.load(f)
+        if full_resolution:
+            entry["abundances_ref"] = pd.read_parquet(sub / "abundances_ref.parquet")
+        out[p] = entry
+    return out

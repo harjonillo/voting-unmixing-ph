@@ -21,6 +21,8 @@ src/
   figures/              archetype/abundance plots + choropleth helpers
 scripts/
   run_pipeline.py       CSV -> HySime -> MVSA -> SUNSAL -> data/processed/
+  run_sweep.py          multi-trial sweep over p = p_min..p_max (error bars,
+                        stability, lineage) -> data/processed/sweep/p{p}/
   fetch_boundaries.py   downloads municipal boundaries (GADM, optional)
 notebooks/              demo notebooks (how to make each kind of plot)
 app/streamlit_app.py    interactive explorer
@@ -40,6 +42,7 @@ Populate `data/` (see `data/README.md`), then from the repo root:
 ```bash
 python scripts/fetch_boundaries.py   # optional: municipal-level maps
 python scripts/run_pipeline.py       # writes data/processed/
+python scripts/run_sweep.py          # ~5 min: powers the Model-comparison tab
 streamlit run app/streamlit_app.py
 ```
 
@@ -51,6 +54,7 @@ streamlit run app/streamlit_app.py
 | `02_unmixing_pipeline` | noise estimation, HySime, MVSA, SUNSAL, diagnostics |
 | `03_archetype_plots` | endmember loadings, abundance panels, reconstruction, noise floor |
 | `04_maps` | choropleths at each aggregation level |
+| `05_model_comparison` | RMSE/stability vs p, archetype lineage, loadings ± std over trials |
 
 ## Notes
 

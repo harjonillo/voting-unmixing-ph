@@ -42,6 +42,51 @@ def match_to_reference(M_ref, M_other):
     return perm, matched_sim
 
 
+def archetype_lineage(loadings_by_p):
+    """Trace how archetypes split as the endmember count p increases.
+
+    For each consecutive pair (p, p+1), the p+1 columns are Hungarian-matched
+    to the p columns by cosine similarity; the one leftover column in p+1 is
+    linked to its most similar parent and flagged as the "split" child.
+
+    Parameters
+    ----------
+    loadings_by_p : dict[int, ndarray]
+        {p: (L, p) consensus loading matrix}. Keys need not be contiguous;
+        consecutive *available* p values are compared.
+
+    Returns
+    -------
+    edges : list of dict with keys
+        ``p_from``, ``k_from``, ``p_to``, ``k_to``, ``similarity``,
+        ``split`` (True for the leftover child matched by max similarity).
+    """
+    edges = []
+    ps = sorted(loadings_by_p)
+    for p_from, p_to in zip(ps[:-1], ps[1:]):
+        M_a = np.asarray(loadings_by_p[p_from])
+        M_b = np.asarray(loadings_by_p[p_to])
+        C = cosine_matrix(M_a, M_b)                    # (p_a, p_b)
+        row_ind, col_ind = linear_sum_assignment(-C)   # matches min(p_a, p_b) pairs
+        matched_children = set()
+        for i, j in zip(row_ind, col_ind):
+            edges.append({
+                "p_from": p_from, "k_from": int(i),
+                "p_to": p_to, "k_to": int(j),
+                "similarity": float(C[i, j]), "split": False,
+            })
+            matched_children.add(int(j))
+        for j in range(M_b.shape[1]):
+            if j not in matched_children:
+                parent = int(np.argmax(C[:, j]))
+                edges.append({
+                    "p_from": p_from, "k_from": parent,
+                    "p_to": p_to, "k_to": j,
+                    "similarity": float(C[parent, j]), "split": True,
+                })
+    return edges
+
+
 def relabel_to_reference(ref, other, n_clusters):
     """Permute `other` cluster labels via Hungarian so cluster k of `other` overlaps
     cluster k of `ref` as much as possible. Requires equal cluster counts."""

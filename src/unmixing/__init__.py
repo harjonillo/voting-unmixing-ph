@@ -6,6 +6,7 @@ from .tools import match_endmembers, plot_elbow, endmember_noise_floor, abundanc
 from .matching import (
     cosine_matrix,
     match_to_reference,
+    archetype_lineage,
     relabel_to_reference,
     relabel_density_to_reference,
 )
@@ -32,6 +33,7 @@ __all__ = [
     # Matching / cluster alignment (cosine-based, multi-trial workflow)
     "cosine_matrix",
     "match_to_reference",
+    "archetype_lineage",
     "relabel_to_reference",
     "relabel_density_to_reference",
     # Metrics
