@@ -25,7 +25,12 @@ scripts/
                         stability, lineage) -> data/processed/sweep/p{p}/
   fetch_boundaries.py   downloads municipal boundaries (GADM, optional)
 notebooks/              demo notebooks (how to make each kind of plot)
-app/streamlit_app.py    interactive explorer
+app/
+  streamlit_app.py      interactive explorer: loads artifacts, draws the tabs
+  components/           sidebar controls, cached loading + derived View,
+                        shared chart/map builders
+  tabs/                 one module per tab (overview, loadings,
+                        distributions, table, comparison)
 ```
 
 ## Setup
