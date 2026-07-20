@@ -3,16 +3,15 @@
 import plotly.express as px
 import streamlit as st
 
+from app.components import theme
 from app.components.charts import loadings_bar
 from app.components.constants import arch_label
 from app.components.data import View
 from app.components.map import choropleth_fig, join_to_boundaries, render_unmatched
 
-
 def render(view: View) -> None:
-    if view.controls.level == "national":
-        _render_national(view)
-    elif view.controls.level == "clustered_precinct":
+
+    if view.controls.level == "clustered_precinct":
         st.info(
             "Clustered precincts have no boundary geometry — see the "
             "distribution and table tabs; the map is available down to the "
@@ -20,48 +19,38 @@ def render(view: View) -> None:
         )
         st.dataframe(view.agg.head(1000), use_container_width=True)
     else:
-        _render_map(view)
+        col_0, col_1 = st.columns([2, 3])
+        _render_map(col_0, view)
+        _render_endmembers(col_1, view)
 
 
-def _render_national(view: View) -> None:
-    st.subheader("National overview")
+def _render_endmembers(col_1: st.container, view: View) -> None:
+
     row = view.agg.iloc[0]
-
-    cols = st.columns(view.n_arch)
-    for c, col in zip(view.arch_cols, cols):
-        col.metric(arch_label(c), f"{row[c]:.1%}")
-    st.caption("Mean archetype abundance across all precincts"
-               + (" (ballot-weighted)" if view.controls.weighted else ""))
-
-    col_left, col_right = st.columns([1, 1])
-    fig = px.bar(
-        x=[arch_label(c) for c in view.arch_cols],
-        y=[row[c] for c in view.arch_cols],
-        labels={"x": "", "y": "mean abundance"},
-    )
-    col_left.plotly_chart(fig, use_container_width=True)
-    col_right.plotly_chart(
-        loadings_bar(view.endmembers, view.controls.sel_arch, height=450),
-        use_container_width=True,
-    )
+    
+    with col_1:
+        st.subheader("Endmember (archetype) loadings")
+        st.caption("Candidate weights per archetype from MVSA — a national-level "
+                "property of the unmixing, independent of the aggregation level.")
 
 
-def _render_map(view: View) -> None:
-    gdf, hover, unmatched = join_to_boundaries(view)
+        ncols = min(3, max(1, len(view.controls.which_arch)))
+        cols = st.columns(ncols)
+        for i, c in enumerate(view.controls.which_arch):
+            fig = loadings_bar(view.endmembers, c, view.controls.top_n, title=arch_label(c),
+                               color=theme.archetype_color(c, view.n_arch))
+            cols[i % ncols].plotly_chart(fig, use_container_width=True)
 
-    if gdf is not None and len(gdf):
-        col_map, col_load = st.columns([5, 3])
-        col_map.plotly_chart(choropleth_fig(gdf, view, hover), use_container_width=True)
-        col_load.plotly_chart(
-            loadings_bar(view.endmembers, view.controls.sel_arch, height=650),
-            use_container_width=True,
-        )
-        if view.controls.value_kind != "Archetype abundance":
-            shows = ("the dominant archetype"
-                     if view.controls.value_kind == "Dominant archetype" else "turnout")
-            col_load.caption(
-                "Loadings of the archetype selected in the sidebar "
-                f"(the map itself shows {shows})."
+    
+
+
+def _render_map(col_0: st.container, view: View) -> None:
+    with col_0:
+        st.subheader(f"Endmember {view.controls.value_kind.lower()} by {view.controls.level}")
+        gdf, hover, unmatched = join_to_boundaries(view)
+
+        if gdf is not None and len(gdf):
+            st.plotly_chart(
+                choropleth_fig(gdf, view, hover), 
+                use_container_width=True
             )
-
-    render_unmatched(unmatched)

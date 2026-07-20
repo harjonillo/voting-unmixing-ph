@@ -1,0 +1,8 @@
+# Site chrome only (sidebar, widgets, base font). Plot colors/fonts live in
+# app/components/theme.py — Streamlit's theme can't reach inside Plotly figures.
+[theme]
+primaryColor = "#3a7ca5"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f4f3ee"
+textColor = "#1a1a1a"
+font = "sans serif"

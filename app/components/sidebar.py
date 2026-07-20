@@ -15,6 +15,8 @@ class Controls:
     level: str
     value_kind: str
     sel_arch: str
+    top_n: int
+    which_arch: list[str]
     weighted: bool
     region_filter: list[str]
 
@@ -50,6 +52,11 @@ def render_sidebar(abundances: pd.DataFrame, arch_cols: list[str], meta: dict) -
         help="Colors the map when Quantity = Archetype abundance, and picks "
              "which archetype's loadings appear beside the map.",
     )
+    top_n = st.sidebar.number_input("Top N candidates", min_value=3, max_value=15, value=5, step=1)
+    which_arch = st.sidebar.multiselect(
+        "Archetypes", arch_cols, default=arch_cols,
+        format_func=arch_label,
+    )
 
     weighted = st.sidebar.checkbox(
         "Weight means by valid ballots", value=True,
@@ -65,6 +72,8 @@ def render_sidebar(abundances: pd.DataFrame, arch_cols: list[str], meta: dict) -
         level=level,
         value_kind=value_kind,
         sel_arch=sel_arch,
+        top_n=top_n,
+        which_arch=which_arch,
         weighted=weighted,
         region_filter=region_filter,
     )

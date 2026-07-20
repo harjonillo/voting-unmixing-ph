@@ -4,7 +4,9 @@ builds the figure. Used by the overview tab.
 
 import geopandas as gpd
 import streamlit as st
+import plotly.express as px
 
+from app.components import theme
 from app.components.data import View, get_municipalities, get_provinces
 from src.aggregation import aggregate_abundances, dominant_archetype
 from src.figures.maps import plotly_choropleth
@@ -61,10 +63,43 @@ def choropleth_fig(gdf: gpd.GeoDataFrame, view: View, hover: str):
         has_data = gdf[view.arch_cols[0]].notna().to_numpy()
         gdf["dominant"] = [str(d) if ok else None for d, ok in zip(dom, has_data)]
 
-    fig = plotly_choropleth(
-        gdf, view.value_col, hover_name=hover, simplify_tolerance=tol,
+    # fig = plotly_choropleth(
+    #     gdf, view.value_col, hover_name=hover, simplify_tolerance=tol,
+    # )
+    # fig.update_coloraxes(colorbar_title=view.colorbar)
+    # fig.update_geos(
+    #     fitbounds="locations",   # crop the projection to your geometries
+    #     visible=False,           # drop base map / graticule
+    #     domain=dict(x=[0, 1], y=[0, 1]),
+    # )
+
+    # fig.update_layout(
+    #     height=800,
+    #     margin=dict(l=0, r=0, t=0, b=0),
+    #     legend=dict(
+    #         title_text="dominant",
+    #         orientation="v",
+    #         x=0.99, xanchor="right",
+    #         y=0.99, yanchor="top",
+    #     ),
+    # )
+
+    # Dominant archetype is nominal (discrete colors keyed to the archetype
+    # index); everything else is a magnitude (the sequential ramp).
+    if view.value_col == "dominant":
+        color_kw = dict(color_discrete_map=theme.dominant_color_map(view.n_arch))
+    else:
+        color_kw = dict(color_continuous_scale=theme.SEQUENTIAL)
+
+    fig = px.choropleth_map(
+        gdf, geojson=gdf.__geo_interface__, locations=gdf.index,
+        color=view.value_col, hover_name=hover,
+        center={"lat": 12.8, "lon": 122.0}, zoom=4.6,
+        map_style="white-bg", opacity=0.9,
+        **color_kw,
     )
-    fig.update_coloraxes(colorbar_title=view.colorbar)
+    fig.update_layout(height=800, margin=dict(l=0, r=0, t=0, b=0))
+
     return fig
 
 

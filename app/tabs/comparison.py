@@ -7,6 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from app.components import theme
 from app.components.charts import loadings_bar
 from app.components.constants import arch_label
 from app.components.data import get_provinces, get_sweep, sweep_province_stats
@@ -54,7 +55,7 @@ def _render_rmse_and_stability(sweep: dict, ps: list[int]) -> None:
                    title="Trial-to-reference cosine similarity per archetype")
     mean_line = stab_df.groupby("p")["stability"].mean().reset_index()
     fig.add_scatter(x=mean_line["p"], y=mean_line["stability"],
-                    mode="lines+markers", name="mean", line=dict(color="crimson"))
+                    mode="lines+markers", name="mean", line=dict(color=theme.HIGHLIGHT))
     fig.update_layout(height=380, margin=dict(l=0, r=0, t=40, b=0),
                       xaxis_title="number of archetypes p")
     col_stab.plotly_chart(fig, use_container_width=True)
@@ -86,8 +87,8 @@ def _render_lineage(sweep: dict, ps: list[int]) -> None:
             source=[node_ids[(e["p_from"], e["k_from"])] for e in edges],
             target=[node_ids[(e["p_to"], e["k_to"])] for e in edges],
             value=[max(e["similarity"], 0.05) for e in edges],
-            color=["rgba(214,39,40,0.55)" if e["split"] else "rgba(100,120,160,0.35)"
-                   for e in edges],
+            color=[theme.rgba(theme.HIGHLIGHT, 0.55) if e["split"]
+                   else "rgba(100,120,160,0.35)" for e in edges],
             customdata=[round(e["similarity"], 3) for e in edges],
             hovertemplate="similarity %{customdata}<extra></extra>",
         ),
@@ -116,7 +117,8 @@ def _render_detail(sweep: dict, ps: list[int]) -> None:
         stats = (std_prov if show_std else mean_prov)[[sel_arch_p]].reset_index()
         gdf = get_provinces().merge(stats, on="PROV_KEY", how="left")
         fig = plotly_choropleth(gdf, sel_arch_p, hover_name="PROV_KEY",
-                                simplify_tolerance=0.005)
+                                simplify_tolerance=0.005,
+                                color_continuous_scale=theme.SEQUENTIAL)
         fig.update_coloraxes(colorbar_title=("std" if show_std else "mean")
                              + f" ({sel_arch_p})")
         fig.update_layout(height=520)
@@ -129,5 +131,6 @@ def _render_detail(sweep: dict, ps: list[int]) -> None:
             errors=ls,
             height=max(400, 26 * top_n_p),
             x_label="loading (mean ± std over trials)",
+            color=theme.archetype_color(sel_arch_p, sel_p),
         )
         st.plotly_chart(fig, use_container_width=True)

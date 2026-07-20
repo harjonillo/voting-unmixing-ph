@@ -19,11 +19,13 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import streamlit as st
 
+from app.components import theme
 from app.components.data import build_view, get_processed
 from app.components.sidebar import render_sidebar
-from app.tabs import comparison, distributions, loadings, overview, table
+from app.tabs import comparison, distributions, overview, table
 
 st.set_page_config(page_title="PH voting archetypes", layout="wide")
+theme.register_template()
 
 try:
     endmembers, abundances, meta = get_processed()
@@ -44,9 +46,6 @@ tab_map, tab_loadings, tab_dist, tab_table, tab_compare = st.tabs(
 
 with tab_map:
     overview.render(view)
-
-with tab_loadings:
-    loadings.render(view)
 
 with tab_dist:
     distributions.render(view)

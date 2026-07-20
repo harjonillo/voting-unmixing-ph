@@ -1,7 +1,7 @@
 """Labels and source-column names shared by the sidebar and the tabs."""
 
 LEVEL_LABELS = {
-    "national": "National",
+    # "national": "National",
     "region": "Region",
     "province": "Province",
     "municipality": "City / municipality",
