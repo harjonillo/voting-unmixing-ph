@@ -1,4 +1,4 @@
-"""Sidebar controls — the single place user selections enter the app."""
+"""Sidebar controls for global user selections"""
 
 from dataclasses import dataclass
 
@@ -13,8 +13,6 @@ class Controls:
     """The current sidebar selections."""
 
     level: str
-    value_kind: str
-    sel_arch: str
     top_n: int
     which_arch: list[str]
     weighted: bool
@@ -41,17 +39,6 @@ def render_sidebar(abundances: pd.DataFrame, arch_cols: list[str], meta: dict) -
         index=1,
     )
 
-    value_kind = st.sidebar.selectbox(
-        "Quantity",
-        ["Archetype abundance", "Dominant archetype", "Turnout"],
-    )
-
-    sel_arch = st.sidebar.selectbox(
-        "Archetype", arch_cols,
-        format_func=arch_label,
-        help="Colors the map when Quantity = Archetype abundance, and picks "
-             "which archetype's loadings appear beside the map.",
-    )
     top_n = st.sidebar.number_input("Top N candidates", min_value=3, max_value=15, value=5, step=1)
     which_arch = st.sidebar.multiselect(
         "Archetypes", arch_cols, default=arch_cols,
@@ -70,8 +57,6 @@ def render_sidebar(abundances: pd.DataFrame, arch_cols: list[str], meta: dict) -
 
     return Controls(
         level=level,
-        value_kind=value_kind,
-        sel_arch=sel_arch,
         top_n=top_n,
         which_arch=which_arch,
         weighted=weighted,

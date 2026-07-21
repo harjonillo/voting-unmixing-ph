@@ -2,7 +2,7 @@
 the sidebar selections that every tab reads.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pandas as pd
 import streamlit as st
@@ -76,11 +76,28 @@ def add_turnout(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+VALUE_KINDS = ["Archetype abundance", "Dominant archetype", "Turnout"]
+
+
+def resolve_value(value_kind: str, sel_arch: str) -> tuple[str, str]:
+    """(column of `agg` to color by, colorbar title) for a quantity choice."""
+    if value_kind == "Archetype abundance":
+        return sel_arch, f"mean abundance ({sel_arch})"
+    if value_kind == "Dominant archetype":
+        return "dominant", "dominant archetype"
+    return "turnout_pct", "turnout (%)"
+
+
 @dataclass
 class View:
     """The loaded artifacts plus the aggregation implied by `controls`.
 
     Tabs read this rather than recomputing; it is rebuilt on every rerun.
+
+    `value_col`/`colorbar` are the map's quantity choice. That control now
+    lives inside the tab, which renders after `build_view` has run, so the
+    view is built with a default and the tab calls `with_value()` to get a
+    copy carrying its own selection.
     """
 
     endmembers: pd.DataFrame
@@ -89,8 +106,13 @@ class View:
     controls: Controls
     df_ab: pd.DataFrame  # precincts after the region filter
     agg: pd.DataFrame  # df_ab aggregated to controls.level
-    value_col: str  # column of `agg` the map colors by
-    colorbar: str
+    value_col: str = "dominant"  # column of `agg` the map colors by
+    colorbar: str = "dominant archetype"
+
+    def with_value(self, value_kind: str, sel_arch: str) -> "View":
+        """A copy colored by `value_kind` (shares the underlying frames)."""
+        value_col, colorbar = resolve_value(value_kind, sel_arch)
+        return replace(self, value_col=value_col, colorbar=colorbar)
 
     @property
     def arch_cols(self) -> list[str]:
@@ -123,13 +145,8 @@ def build_view(
     agg["dominant"] = dominant_archetype(agg, arch_cols) if len(agg) else []
     add_turnout(agg)
 
-    if controls.value_kind == "Archetype abundance":
-        value_col, colorbar = controls.sel_arch, f"mean abundance ({controls.sel_arch})"
-    elif controls.value_kind == "Dominant archetype":
-        value_col, colorbar = "dominant", "dominant archetype"
-    else:
-        value_col, colorbar = "turnout_pct", "turnout (%)"
-
+    # No value_col here: the quantity is chosen inside the map tab, which
+    # renders later — see View.with_value().
     return View(
         endmembers=endmembers,
         abundances=abundances,
@@ -137,6 +154,4 @@ def build_view(
         controls=controls,
         df_ab=df_ab,
         agg=agg,
-        value_col=value_col,
-        colorbar=colorbar,
     )

@@ -6,7 +6,7 @@ import streamlit as st
 from app.components import theme
 from app.components.charts import loadings_bar
 from app.components.constants import arch_label
-from app.components.data import View
+from app.components.data import VALUE_KINDS, View
 from app.components.map import choropleth_fig, join_to_boundaries, render_unmatched
 
 def render(view: View) -> None:
@@ -46,11 +46,27 @@ def _render_endmembers(col_1: st.container, view: View) -> None:
 
 def _render_map(col_0: st.container, view: View) -> None:
     with col_0:
-        st.subheader(f"Endmember {view.controls.value_kind.lower()} by {view.controls.level}")
+        st.subheader(f"Geographic distribution of archetypes by {view.controls.level}")
+        input_col_0, input_col_1 = st.columns([1, 1])
+
+        value_kind = input_col_0.selectbox(
+            "Quantity", VALUE_KINDS, key="map_value_kind",
+        )
+
+        sel_arch = input_col_1.selectbox(
+            "Archetype", view.arch_cols,
+            format_func=arch_label,
+            key="map_sel_arch",
+            help="Colors the map when Quantity = Archetype abundance, and picks "
+                "which archetype's loadings appear beside the map.",
+        )
+
+        view = view.with_value(value_kind, sel_arch)
+
         gdf, hover, unmatched = join_to_boundaries(view)
 
         if gdf is not None and len(gdf):
             st.plotly_chart(
-                choropleth_fig(gdf, view, hover), 
+                choropleth_fig(gdf, view, hover),
                 use_container_width=True
             )
