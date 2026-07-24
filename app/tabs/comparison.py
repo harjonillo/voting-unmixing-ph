@@ -29,8 +29,8 @@ def render() -> None:
                "(cosine) to each p's lowest-RMSE trial. All values precomputed by "
                "`scripts/run_sweep.py`.")
 
-    _render_rmse_and_stability(sweep, ps)
-    _render_lineage(sweep, ps)
+    # _render_rmse_and_stability(sweep, ps)
+    # _render_lineage(sweep, ps)
     _render_detail(sweep, ps)
 
 
@@ -99,38 +99,61 @@ def _render_lineage(sweep: dict, ps: list[int]) -> None:
 
 def _render_detail(sweep: dict, ps: list[int]) -> None:
     """Loadings with error bars + province map at a chosen p."""
+
     st.markdown("#### Detail at a chosen p")
-    sel_p = st.selectbox("Number of archetypes", ps,
-                         index=len(ps) - 1, key="compare_p")
-    entry = sweep[sel_p]
+
+    n_arch_input_col, map_arch_col, map_stat_col, n_top_cand_col = st.columns([1, 1, 1, 1])
+    n_arch = n_arch_input_col.number_input(
+        label="Number of archetypes",
+        min_value=2, 
+        value=5, 
+        step=1,
+        max_value=len(ps) - 1,
+        key="compare_p"
+    )
+
+    entry = sweep[n_arch]
     lm, ls = entry["loadings_mean"], entry["loadings_std"]
     arch_cols_p = list(lm.columns)
 
-    map_col, load_col = st.columns([1, 1])
-    with map_col:
-        sel_arch_p = st.selectbox(
-            "Archetype", arch_cols_p, format_func=arch_label, key="compare_arch",
-        )
-        show_std = st.radio("Map shows", ["Mean abundance", "Std across trials"],
-                            horizontal=True, key="compare_stat") == "Std across trials"
-        mean_prov, std_prov = sweep_province_stats(sel_p)
-        stats = (std_prov if show_std else mean_prov)[[sel_arch_p]].reset_index()
-        gdf = get_provinces().merge(stats, on="PROV_KEY", how="left")
-        fig = plotly_choropleth(gdf, sel_arch_p, hover_name="PROV_KEY",
-                                simplify_tolerance=0.005,
-                                color_continuous_scale=theme.SEQUENTIAL)
-        fig.update_coloraxes(colorbar_title=("std" if show_std else "mean")
-                             + f" ({sel_arch_p})")
-        fig.update_layout(height=520)
-        st.plotly_chart(fig, use_container_width=True)
+    sel_arch_p = map_arch_col.selectbox(
+        "Archetype", arch_cols_p, format_func=arch_label, key="compare_arch",
+    )
+    show_std = map_stat_col.radio(
+        "Map shows", ["Mean abundance", "Std across trials"],
+        horizontal=True, key="compare_stat"
+    ) == "Std across trials"
+    top_n_p = n_top_cand_col.number_input(
+        label="Top N candidates", min_value=5, max_value=len(lm), value=15, 
+        key="compare_topn"
+    )
+    
+    mean_prov, std_prov = sweep_province_stats(n_arch)
+    stats = (std_prov if show_std else mean_prov)[[sel_arch_p]].reset_index()
+    
+    gdf = get_provinces().merge(stats, on="PROV_KEY", how="left")
+    fig = px.choropleth_map(
+        gdf, geojson=gdf.__geo_interface__, locations=gdf.index,
+        color=sel_arch_p,
+        center={"lat": 12.8, "lon": 122.0}, zoom=4.6,
+        map_style="white-bg", opacity=0.9,
+    )
+    fig.update_layout(height=800, margin=dict(l=0, r=0, t=0, b=0))
+    fig.update_coloraxes(
+        colorbar_title=("std" if show_std else "mean") + f" ({sel_arch_p})"
+    )
+    fig.update_layout(height=520)
+    st.plotly_chart(fig, use_container_width=True)
 
-    with load_col:
-        top_n_p = st.slider("Top N candidates", 5, len(lm), 15, key="compare_topn")
+
+   # loadings
+    arch_cols = st.columns([1] * n_arch)
+    for c, arch_col in zip(arch_cols, arch_cols_p):
         fig = loadings_bar(
-            lm, sel_arch_p, top_n_p,
+            lm, arch_col, top_n_p,
             errors=ls,
             height=max(400, 26 * top_n_p),
             x_label="loading (mean ± std over trials)",
-            color=theme.archetype_color(sel_arch_p, sel_p),
+            color=theme.archetype_color(arch_col, n_arch),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        c.plotly_chart(fig, use_container_width=True)

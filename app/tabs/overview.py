@@ -13,9 +13,9 @@ def render(view: View) -> None:
 
     if view.controls.level == "clustered_precinct":
         st.info(
-            "Clustered precincts have no boundary geometry — see the "
-            "distribution and table tabs; the map is available down to the "
-            "municipality level."
+            "Clustered precincts have no boundary geometry."
+            "See distribution and table tabs for clustered precinct aggregations."
+            "The map is available down to the municipality level."
         )
         st.dataframe(view.agg.head(1000), use_container_width=True)
     else:
