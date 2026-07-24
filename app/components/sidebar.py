@@ -24,7 +24,9 @@ class Controls:
         return BALLOT_COL if self.weighted else None
 
 
-def render_sidebar(abundances: pd.DataFrame, arch_cols: list[str], meta: dict) -> Controls:
+def render_sidebar(
+    abundances: pd.DataFrame, arch_cols: list[str], meta: dict
+) -> Controls:
     st.sidebar.title("PH voting archetypes")
     st.sidebar.caption(
         f"2025 senatorial race — {meta['n_archetypes']} archetypes, "
@@ -39,20 +41,27 @@ def render_sidebar(abundances: pd.DataFrame, arch_cols: list[str], meta: dict) -
         index=1,
     )
 
-    top_n = st.sidebar.number_input("Top N candidates", min_value=3, max_value=15, value=5, step=1)
+    top_n = st.sidebar.number_input(
+        "Top N candidates", min_value=3, max_value=15, value=5, step=1
+    )
     which_arch = st.sidebar.multiselect(
-        "Archetypes", arch_cols, default=arch_cols,
+        "Archetypes",
+        arch_cols,
+        default=arch_cols,
         format_func=arch_label,
     )
 
     weighted = st.sidebar.checkbox(
-        "Weight means by valid ballots", value=True,
+        "Weight means by valid ballots",
+        value=True,
         help="Off = plain mean over precincts",
     )
 
     regions_all = sorted(abundances["REGION"].unique())
     region_filter = st.sidebar.multiselect(
-        "Filter regions (empty = all)", regions_all, default=[],
+        "Filter regions (empty = all)",
+        regions_all,
+        default=[],
     )
 
     return Controls(

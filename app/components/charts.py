@@ -26,10 +26,16 @@ def loadings_bar(
     sub = loadings[arch_col].sort_values(ascending=False).head(top_n)
     err = None if errors is None else errors.loc[sub.index, arch_col].to_numpy()[::-1]
     fig = px.bar(
-        x=sub.values[::-1], y=sub.index[::-1], orientation="h",
+        x=sub.values[::-1],
+        y=sub.index[::-1],
+        orientation="h",
         error_x=err,
         labels={"x": x_label, "y": ""},
-        title=title if title is not None else f"{arch_label(arch_col)} — top {top_n} loadings",
+        title=(
+            title
+            if title is not None
+            else f"{arch_label(arch_col)} — top {top_n} loadings"
+        ),
     )
     if color is not None:
         fig.update_traces(marker_color=color)
@@ -40,20 +46,24 @@ def loadings_bar(
     return fig
 
 
-def abundance_histogram(source: pd.DataFrame, arch_col: str, unit: str,
-                        color: str | None = None):
+def abundance_histogram(
+    source: pd.DataFrame, arch_col: str, unit: str, color: str | None = None
+):
     """Distribution of one archetype's abundance over `unit`s (precincts, provinces...).
 
     `color`, when given, pins the bars to that archetype's color.
     """
     fig = px.histogram(
-        source, x=arch_col, nbins=40,
+        source,
+        x=arch_col,
+        nbins=40,
         labels={arch_col: "abundance"},
         title=arch_label(arch_col),
         color_discrete_sequence=None if color is None else [color],
     )
     fig.update_layout(
-        height=280, margin=dict(l=0, r=0, t=40, b=0),
+        height=280,
+        margin=dict(l=0, r=0, t=40, b=0),
         yaxis_title=f"# {unit}s",
     )
     return fig

@@ -40,8 +40,7 @@ controls = render_sidebar(abundances, list(endmembers.columns), meta)
 view = build_view(endmembers, abundances, meta, controls)
 
 tab_map, tab_dist, tab_table, tab_compare = st.tabs(
-    ["Map / overview", "Abundance distributions", "Table",
-     "Model comparison"]
+    ["Map / overview", "Abundance distributions", "Table", "Model comparison"]
 )
 
 with tab_map:

@@ -29,7 +29,9 @@ def join_to_boundaries(view: View):
     if level == "region":
         # Province polygons dissolved by the data's own province->region map.
         agg_prov = aggregate_abundances(
-            view.df_ab, level="province", weight_col=view.controls.weight_col,
+            view.df_ab,
+            level="province",
+            weight_col=view.controls.weight_col,
         )
         gdf, unmatched = join_regions(agg_prov, provinces, view.agg)
         return gdf, "REGION", unmatched
@@ -71,10 +73,15 @@ def choropleth_fig(gdf: gpd.GeoDataFrame, view: View, hover: str):
         color_kw = dict(color_continuous_scale=theme.SEQUENTIAL)
 
     fig = px.choropleth_map(
-        gdf, geojson=gdf.__geo_interface__, locations=gdf.index,
-        color=view.value_col, hover_name=hover,
-        center={"lat": 12.8, "lon": 122.0}, zoom=4.6,
-        map_style="white-bg", opacity=0.9,
+        gdf,
+        geojson=gdf.__geo_interface__,
+        locations=gdf.index,
+        color=view.value_col,
+        hover_name=hover,
+        center={"lat": 12.8, "lon": 122.0},
+        zoom=4.6,
+        map_style="white-bg",
+        opacity=0.9,
         **color_kw,
     )
     fig.update_layout(height=800, margin=dict(l=0, r=0, t=0, b=0))

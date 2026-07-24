@@ -14,10 +14,10 @@ from src.config import load_config
 from src.data.loading import load_processed, load_sweep
 from src.geo import canonical_province, load_municipalities, load_provinces
 
-
 # ---------------------------------------------------------------------------
 # Cached loading
 # ---------------------------------------------------------------------------
+
 
 @st.cache_data
 def get_processed():
@@ -68,6 +68,7 @@ def sweep_province_stats(p: int):
 # ---------------------------------------------------------------------------
 # Derived view
 # ---------------------------------------------------------------------------
+
 
 def add_turnout(df: pd.DataFrame) -> pd.DataFrame:
     """Add a `turnout_pct` column in place when the voter counts are present."""
@@ -140,7 +141,9 @@ def build_view(
         df_ab = df_ab[df_ab["REGION"].isin(controls.region_filter)]
 
     agg = aggregate_abundances(
-        df_ab, level=controls.level, weight_col=controls.weight_col,
+        df_ab,
+        level=controls.level,
+        weight_col=controls.weight_col,
     )
     agg["dominant"] = dominant_archetype(agg, arch_cols) if len(agg) else []
     add_turnout(agg)

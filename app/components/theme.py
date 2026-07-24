@@ -37,9 +37,9 @@ GRID = "#e6e5df"
 SURFACE = "#fcfcfb"
 
 # -------------------------------------------------------- named seaborn ramps
-CAT_NAME = "husl"      # discrete: evenly-spaced hues, any count (perceptual)
-SEQ_NAME = "mako_r"    # continuous: light (0) -> dark (max), perceptually uniform
-DIV_NAME = "vlag"      # diverging: blue (-1) -> white (0) -> red (+1), uniform arms
+CAT_NAME = "husl"  # discrete: evenly-spaced hues, any count (perceptual)
+SEQ_NAME = "mako_r"  # continuous: light (0) -> dark (max), perceptually uniform
+DIV_NAME = "vlag"  # diverging: blue (-1) -> white (0) -> red (+1), uniform arms
 
 
 def _colorscale(cmap: Colormap, n: int = 32) -> list[list]:
@@ -63,11 +63,12 @@ HIGHLIGHT = to_hex(sns.color_palette(DIV_NAME, as_cmap=True)(0.88))
 def rgba(hex_color: str, alpha: float) -> str:
     """``"#rrggbb"`` -> ``"rgba(r, g, b, alpha)"`` for translucent fills."""
     h = hex_color.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = (int(h[i : i + 2], 16) for i in (0, 2, 4))
     return f"rgba({r}, {g}, {b}, {alpha})"
 
 
 # --------------------------------------------------------------- discrete API
+
 
 def categorical(n: int) -> list[str]:
     """``n`` distinct hex colors (HUSL — equal perceived lightness)."""
@@ -106,6 +107,7 @@ def model_colors(ps: list[int]) -> dict[int, str]:
 
 
 # ------------------------------------------------------------ plotly template
+
 
 def register_template() -> None:
     """Install the app's fonts, backgrounds, and default ramps on every figure.

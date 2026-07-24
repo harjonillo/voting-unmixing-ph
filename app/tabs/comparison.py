@@ -18,16 +18,20 @@ from src.unmixing.matching import archetype_lineage
 def render() -> None:
     sweep = get_sweep()
     if not sweep:
-        st.info("No sweep artifacts found — run `python scripts/run_sweep.py` "
-                "from the repo root (precomputes p = p_min..p_max × n_trials).")
+        st.info(
+            "No sweep artifacts found — run `python scripts/run_sweep.py` "
+            "from the repo root (precomputes p = p_min..p_max × n_trials)."
+        )
         return
 
     ps = sorted(sweep)
     n_trials = sweep[ps[0]]["meta"]["n_trials"]
     st.subheader("Endmember-count comparison")
-    st.caption(f"{n_trials} MVSA+SUNSAL trials per p, archetypes Hungarian-aligned "
-               "(cosine) to each p's lowest-RMSE trial. All values precomputed by "
-               "`scripts/run_sweep.py`.")
+    st.caption(
+        f"{n_trials} MVSA+SUNSAL trials per p, archetypes Hungarian-aligned "
+        "(cosine) to each p's lowest-RMSE trial. All values precomputed by "
+        "`scripts/run_sweep.py`."
+    )
 
     # _render_rmse_and_stability(sweep, ps)
     # _render_lineage(sweep, ps)
@@ -39,34 +43,54 @@ def _render_rmse_and_stability(sweep: dict, ps: list[int]) -> None:
 
     rmse_mean = [sweep[p]["meta"]["rmse_mean"] for p in ps]
     rmse_std = [sweep[p]["meta"]["rmse_std"] for p in ps]
-    fig = px.scatter(x=ps, y=rmse_mean, error_y=rmse_std,
-                     labels={"x": "number of archetypes p", "y": "reconstruction RMSE"},
-                     title="RMSE vs p (mean ± std over trials)")
+    fig = px.scatter(
+        x=ps,
+        y=rmse_mean,
+        error_y=rmse_std,
+        labels={"x": "number of archetypes p", "y": "reconstruction RMSE"},
+        title="RMSE vs p (mean ± std over trials)",
+    )
     fig.update_traces(mode="lines+markers")
     fig.update_layout(height=380, margin=dict(l=0, r=0, t=40, b=0))
     col_rmse.plotly_chart(fig, use_container_width=True)
 
-    stab_df = pd.DataFrame([
-        {"p": p, "archetype": k, "stability": s}
-        for p in ps
-        for k, s in enumerate(sweep[p]["meta"]["stability_per_archetype"])
-    ])
-    fig = px.strip(stab_df, x="p", y="stability",
-                   title="Trial-to-reference cosine similarity per archetype")
+    stab_df = pd.DataFrame(
+        [
+            {"p": p, "archetype": k, "stability": s}
+            for p in ps
+            for k, s in enumerate(sweep[p]["meta"]["stability_per_archetype"])
+        ]
+    )
+    fig = px.strip(
+        stab_df,
+        x="p",
+        y="stability",
+        title="Trial-to-reference cosine similarity per archetype",
+    )
     mean_line = stab_df.groupby("p")["stability"].mean().reset_index()
-    fig.add_scatter(x=mean_line["p"], y=mean_line["stability"],
-                    mode="lines+markers", name="mean", line=dict(color=theme.HIGHLIGHT))
-    fig.update_layout(height=380, margin=dict(l=0, r=0, t=40, b=0),
-                      xaxis_title="number of archetypes p")
+    fig.add_scatter(
+        x=mean_line["p"],
+        y=mean_line["stability"],
+        mode="lines+markers",
+        name="mean",
+        line=dict(color=theme.HIGHLIGHT),
+    )
+    fig.update_layout(
+        height=380,
+        margin=dict(l=0, r=0, t=40, b=0),
+        xaxis_title="number of archetypes p",
+    )
     col_stab.plotly_chart(fig, use_container_width=True)
 
 
 def _render_lineage(sweep: dict, ps: list[int]) -> None:
     """Sankey of which archetype splits as p grows."""
     st.markdown("#### Archetype lineage")
-    st.caption("Consecutive p Hungarian-matched by cosine similarity; the red link "
-               "marks the archetype that appears/splits when p increases by one. "
-               "Nodes are labelled with each archetype's top-loading candidate.")
+    st.caption(
+        "Consecutive p Hungarian-matched by cosine similarity; the red link "
+        "marks the archetype that appears/splits when p increases by one. "
+        "Nodes are labelled with each archetype's top-loading candidate."
+    )
 
     edges = archetype_lineage({p: sweep[p]["loadings_mean"].to_numpy() for p in ps})
 
@@ -80,19 +104,27 @@ def _render_lineage(sweep: dict, ps: list[int]) -> None:
             node_x.append(pi / max(len(ps) - 1, 1))
             node_y.append((k + 0.5) / p)
 
-    fig = go.Figure(go.Sankey(
-        arrangement="fixed",
-        node=dict(label=node_labels, x=node_x, y=node_y, pad=8, thickness=12),
-        link=dict(
-            source=[node_ids[(e["p_from"], e["k_from"])] for e in edges],
-            target=[node_ids[(e["p_to"], e["k_to"])] for e in edges],
-            value=[max(e["similarity"], 0.05) for e in edges],
-            color=[theme.rgba(theme.HIGHLIGHT, 0.55) if e["split"]
-                   else "rgba(100,120,160,0.35)" for e in edges],
-            customdata=[round(e["similarity"], 3) for e in edges],
-            hovertemplate="similarity %{customdata}<extra></extra>",
-        ),
-    ))
+    fig = go.Figure(
+        go.Sankey(
+            arrangement="fixed",
+            node=dict(label=node_labels, x=node_x, y=node_y, pad=8, thickness=12),
+            link=dict(
+                source=[node_ids[(e["p_from"], e["k_from"])] for e in edges],
+                target=[node_ids[(e["p_to"], e["k_to"])] for e in edges],
+                value=[max(e["similarity"], 0.05) for e in edges],
+                color=[
+                    (
+                        theme.rgba(theme.HIGHLIGHT, 0.55)
+                        if e["split"]
+                        else "rgba(100,120,160,0.35)"
+                    )
+                    for e in edges
+                ],
+                customdata=[round(e["similarity"], 3) for e in edges],
+                hovertemplate="similarity %{customdata}<extra></extra>",
+            ),
+        )
+    )
     fig.update_layout(height=480, margin=dict(l=10, r=10, t=10, b=10))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -102,14 +134,16 @@ def _render_detail(sweep: dict, ps: list[int]) -> None:
 
     st.markdown("#### Detail at a chosen p")
 
-    n_arch_input_col, map_arch_col, map_stat_col, n_top_cand_col = st.columns([1, 1, 1, 1])
+    n_arch_input_col, map_arch_col, map_stat_col, n_top_cand_col = st.columns(
+        [1, 1, 1, 1]
+    )
     n_arch = n_arch_input_col.number_input(
         label="Number of archetypes",
-        min_value=2, 
-        value=5, 
+        min_value=2,
+        value=5,
         step=1,
         max_value=len(ps) - 1,
-        key="compare_p"
+        key="compare_p",
     )
 
     entry = sweep[n_arch]
@@ -117,26 +151,41 @@ def _render_detail(sweep: dict, ps: list[int]) -> None:
     arch_cols_p = list(lm.columns)
 
     sel_arch_p = map_arch_col.selectbox(
-        "Archetype", arch_cols_p, format_func=arch_label, key="compare_arch",
+        "Archetype",
+        arch_cols_p,
+        format_func=arch_label,
+        key="compare_arch",
     )
-    show_std = map_stat_col.radio(
-        "Map shows", ["Mean abundance", "Std across trials"],
-        horizontal=True, key="compare_stat"
-    ) == "Std across trials"
+    show_std = (
+        map_stat_col.radio(
+            "Map shows",
+            ["Mean abundance", "Std across trials"],
+            horizontal=True,
+            key="compare_stat",
+        )
+        == "Std across trials"
+    )
     top_n_p = n_top_cand_col.number_input(
-        label="Top N candidates", min_value=5, max_value=len(lm), value=15, 
-        key="compare_topn"
+        label="Top N candidates",
+        min_value=5,
+        max_value=len(lm),
+        value=15,
+        key="compare_topn",
     )
-    
+
     mean_prov, std_prov = sweep_province_stats(n_arch)
     stats = (std_prov if show_std else mean_prov)[[sel_arch_p]].reset_index()
-    
+
     gdf = get_provinces().merge(stats, on="PROV_KEY", how="left")
     fig = px.choropleth_map(
-        gdf, geojson=gdf.__geo_interface__, locations=gdf.index,
+        gdf,
+        geojson=gdf.__geo_interface__,
+        locations=gdf.index,
         color=sel_arch_p,
-        center={"lat": 12.8, "lon": 122.0}, zoom=4.6,
-        map_style="white-bg", opacity=0.9,
+        center={"lat": 12.8, "lon": 122.0},
+        zoom=4.6,
+        map_style="white-bg",
+        opacity=0.9,
     )
     fig.update_layout(height=800, margin=dict(l=0, r=0, t=0, b=0))
     fig.update_coloraxes(
@@ -145,12 +194,13 @@ def _render_detail(sweep: dict, ps: list[int]) -> None:
     fig.update_layout(height=520)
     st.plotly_chart(fig, use_container_width=True)
 
-
-   # loadings
+    # loadings
     arch_cols = st.columns([1] * n_arch)
     for c, arch_col in zip(arch_cols, arch_cols_p):
         fig = loadings_bar(
-            lm, arch_col, top_n_p,
+            lm,
+            arch_col,
+            top_n_p,
             errors=ls,
             height=max(400, 26 * top_n_p),
             x_label="loading (mean ± std over trials)",
