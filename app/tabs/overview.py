@@ -36,9 +36,11 @@ def _render_endmembers(col_1: st.container, view: View) -> None:
             "property of the unmixing, independent of the aggregation level."
         )
 
-        ncols = min(3, max(1, len(view.controls.which_arch)))
+        endmembers = view.endmembers.columns
+
+        ncols = min(3, max(1, len(endmembers)))
         cols = st.columns(ncols)
-        for i, c in enumerate(view.controls.which_arch):
+        for i, c in enumerate(endmembers):
             fig = loadings_bar(
                 view.endmembers,
                 c,

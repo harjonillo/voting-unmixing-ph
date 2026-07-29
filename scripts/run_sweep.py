@@ -1,7 +1,7 @@
 """Multi-trial endmember-count sweep.
 
 For each p in [sweep] p_min..p_max, run n_trials MVSA+SUNSAL trials
-(different seeds), Hungarian-align archetypes across trials (cosine
+(different seeds), align archetypes across trials by linear sum assignment (cosine
 similarity, reference = lowest-RMSE trial), and write per-p artifacts under
 data/processed/sweep/p{p}/:
 
@@ -113,7 +113,7 @@ def main():
         ref = int(np.argmin(rmse_trials))
         M_ref = results[ref][0]
 
-        # Hungarian-align every trial to the lowest-RMSE trial
+        # Align every trial to the lowest-RMSE trial by linear sum assignment on cosine similarity
         M_aligned = np.empty((n_trials, Y.shape[0], p))
         A_aligned = [None] * n_trials
         sims = np.empty((n_trials, p))

@@ -14,7 +14,6 @@ class Controls:
 
     level: str
     top_n: int
-    which_arch: list[str]
     weighted: bool
     region_filter: list[str]
 
@@ -29,9 +28,8 @@ def render_sidebar(
 ) -> Controls:
     st.sidebar.title("PH voting archetypes")
     st.sidebar.caption(
-        f"2025 senatorial race — {meta['n_archetypes']} archetypes, "
+        f"2025 senatorial race with {meta['n_archetypes']} archetypes, "
         f"{len(abundances):,} clustered precincts "
-        f"(HySime kf = {meta['hysime_kf']}, RMSE = {meta['rmse']:.4f})"
     )
 
     level = st.sidebar.radio(
@@ -43,12 +41,6 @@ def render_sidebar(
 
     top_n = st.sidebar.number_input(
         "Top N candidates", min_value=3, max_value=15, value=5, step=1
-    )
-    which_arch = st.sidebar.multiselect(
-        "Archetypes",
-        arch_cols,
-        default=arch_cols,
-        format_func=arch_label,
     )
 
     weighted = st.sidebar.checkbox(
@@ -67,7 +59,6 @@ def render_sidebar(
     return Controls(
         level=level,
         top_n=top_n,
-        which_arch=which_arch,
         weighted=weighted,
         region_filter=region_filter,
     )

@@ -28,7 +28,7 @@ def render() -> None:
     n_trials = sweep[ps[0]]["meta"]["n_trials"]
     st.subheader("Endmember-count comparison")
     st.caption(
-        f"{n_trials} MVSA+SUNSAL trials per p, archetypes Hungarian-aligned "
+        f"{n_trials} MVSA+SUNSAL trials per p, archetypes linear sum assigned "
         "(cosine) to each p's lowest-RMSE trial. All values precomputed by "
         "`scripts/run_sweep.py`."
     )
