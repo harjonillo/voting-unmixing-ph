@@ -30,10 +30,9 @@ def _render_endmembers(col_1: st.container, view: View) -> None:
     row = view.agg.iloc[0]
 
     with col_1:
-        st.subheader("Endmember (archetype) loadings")
+        st.subheader("Endmember loadings")
         st.caption(
-            "Candidate weights per archetype from MVSA — a national-level "
-            "property of the unmixing, independent of the aggregation level."
+            "Candidate weights per endmember from MVSA (national-level, independent of aggregation level)"
         )
 
         endmembers = view.endmembers.columns

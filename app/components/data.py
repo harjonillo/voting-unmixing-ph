@@ -137,8 +137,6 @@ def build_view(
     arch_cols = list(endmembers.columns)
 
     df_ab = abundances
-    if controls.region_filter:
-        df_ab = df_ab[df_ab["REGION"].isin(controls.region_filter)]
 
     agg = aggregate_abundances(
         df_ab,

@@ -15,7 +15,6 @@ class Controls:
     level: str
     top_n: int
     weighted: bool
-    region_filter: list[str]
 
     @property
     def weight_col(self) -> str | None:
@@ -28,7 +27,7 @@ def render_sidebar(
 ) -> Controls:
     st.sidebar.title("PH voting archetypes")
     st.sidebar.caption(
-        f"2025 senatorial race with {meta['n_archetypes']} archetypes, "
+        f"2025 senatorial race with {meta['n_archetypes']} endmembers, "
         f"{len(abundances):,} clustered precincts "
     )
 
@@ -49,16 +48,8 @@ def render_sidebar(
         help="Off = plain mean over precincts",
     )
 
-    regions_all = sorted(abundances["REGION"].unique())
-    region_filter = st.sidebar.multiselect(
-        "Filter regions (empty = all)",
-        regions_all,
-        default=[],
-    )
-
     return Controls(
         level=level,
         top_n=top_n,
         weighted=weighted,
-        region_filter=region_filter,
     )

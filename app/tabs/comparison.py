@@ -191,7 +191,7 @@ def _render_detail(sweep: dict, ps: list[int]) -> None:
     fig.update_coloraxes(
         colorbar_title=("std" if show_std else "mean") + f" ({sel_arch_p})"
     )
-    fig.update_layout(height=520)
+    fig.update_layout(height=620)
     st.plotly_chart(fig, use_container_width=True)
 
     # loadings
