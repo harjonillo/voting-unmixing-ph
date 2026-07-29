@@ -51,6 +51,31 @@ python scripts/run_sweep.py          # ~5 min: powers the Model-comparison tab
 streamlit run app/streamlit_app.py
 ```
 
+## Web deployment (stlite)
+
+The app is also published as a static, in-browser build via
+[stlite](https://github.com/whitphx/stlite) (Streamlit on Pyodide/WASM) — no
+server needed. `scripts/build_stlite.py` bundles the `app/`/`src/` code and the
+data files the app reads into `dist/`; `.github/workflows/deploy-stlite.yml`
+publishes it to GitHub Pages on every push to `main`.
+
+Test the static build locally:
+
+```bash
+python scripts/build_stlite.py --out dist
+cd dist && python -m http.server 8000   # open http://localhost:8000 (needs internet for the stlite CDN)
+```
+
+Deploy: commit the needed data files (the `.gitignore` un-ignores exactly
+`data/processed/` + `data/shapefiles/`, minus the files the app never reads),
+push to `main`, and set **Settings → Pages → Source = "GitHub Actions"** once.
+Published at `harjonillo.github.io/voting-unmixing-ph/`.
+
+The whole scientific stack plus ~36 MB of data loads in each visitor's browser,
+so this is a lightweight dev/backup endpoint; a normal server deploy
+(`pip install -r requirements.txt && streamlit run app/streamlit_app.py`) is the
+path for production.
+
 ## Notebooks
 
 | notebook | shows |
