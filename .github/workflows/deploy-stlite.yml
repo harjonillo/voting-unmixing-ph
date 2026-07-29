@@ -1,0 +1,48 @@
+name: Deploy stlite app to GitHub Pages
+
+# Streamlit can't run on GitHub Pages (static hosting only), so the app is built
+# with stlite, which runs it entirely in the browser (Pyodide/WebAssembly).
+# scripts/build_stlite.py assembles a static dist/ that this workflow publishes.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Required for the Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one concurrent Pages deploy; don't cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build stlite site
+        run: python scripts/build_stlite.py --out dist
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,16 @@
+# Runtime dependencies for the Streamlit app.
+#
+# Used both by the stlite build (mirrored in scripts/build_stlite.py's
+# REQUIREMENTS) and as a ready-made file if the app is ever hosted on a server
+# (e.g. Streamlit Community Cloud), where `streamlit` must be listed too.
+streamlit
+geopandas
+pyarrow
+plotly
+matplotlib
+seaborn
+scikit-learn
+scipy
+tqdm
+pandas
+numpy
