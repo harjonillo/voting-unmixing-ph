@@ -10,9 +10,6 @@ LEVEL_COLS = {
     "province": ["REGION", "PROVINCE"],
     "municipality": ["REGION", "PROVINCE", "CITY_MUNICIPALITY"],
     "barangay": ["REGION", "PROVINCE", "CITY_MUNICIPALITY", "BARANGAY"],
-    "clustered_precinct": [
-        "REGION", "PROVINCE", "CITY_MUNICIPALITY", "BARANGAY", "CLUSTERED_PRECINCT",
-    ],
 }
 
 LEVELS = list(LEVEL_COLS)
