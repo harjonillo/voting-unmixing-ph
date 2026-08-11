@@ -39,8 +39,8 @@ except FileNotFoundError:
 controls = render_sidebar(abundances, list(endmembers.columns), meta)
 view = build_view(endmembers, abundances, meta, controls)
 
-tab_map, tab_compare, tab_dist, tab_table = st.tabs(
-    ["Map / overview", "Model comparison", "Abundance distributions", "Table"]
+tab_map, tab_compare, tab_dist = st.tabs(
+    ["Map / overview", "Model comparison", "Abundance distributions"]
 )
 
 with tab_map:
@@ -51,7 +51,4 @@ with tab_compare:
 
 with tab_dist:
     distributions.render(view)
-
-with tab_table:
-    table.render(view)
 

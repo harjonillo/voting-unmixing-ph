@@ -12,17 +12,9 @@ from app.components.map import choropleth_fig, join_to_boundaries, render_unmatc
 
 def render(view: View) -> None:
 
-    if view.controls.level == "clustered_precinct":
-        st.info(
-            "Clustered precincts have no boundary geometry."
-            "See distribution and table tabs for clustered precinct aggregations."
-            "The map is available down to the municipality level."
-        )
-        st.dataframe(view.agg.head(1000), use_container_width=True)
-    else:
-        col_0, col_1 = st.columns([2, 3])
-        _render_map(col_0, view)
-        _render_endmembers(col_1, view)
+    col_0, col_1 = st.columns([2, 3])
+    _render_map(col_0, view)
+    _render_endmembers(col_1, view)
 
 
 def _render_endmembers(col_1: st.container, view: View) -> None:

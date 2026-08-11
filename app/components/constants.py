@@ -5,7 +5,6 @@ LEVEL_LABELS = {
     "region": "Region",
     "province": "Province",
     "municipality": "City / municipality",
-    "clustered_precinct": "Clustered precinct",
 }
 
 BALLOT_COL = "information.numberOfValidBallot"
