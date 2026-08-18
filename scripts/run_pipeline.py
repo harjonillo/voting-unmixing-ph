@@ -1,10 +1,13 @@
 """End-to-end unmixing pipeline.
 
 load complete CSV -> filter/normalize -> noise + HySime -> MVSA -> SUNSAL
--> write data/processed/{endmembers.csv, abundances.parquet, meta.json}
+-> write <processed_path>/{endmembers.csv, abundances.parquet, meta.json}
+
+The input CSV and output directory are taken from the per-year config passed
+via --config (e.g. configs/config_2025.ini).
 
 Run from the repo root:
-    python scripts/run_pipeline.py [--config configs/config.ini] [--n-archetypes 7]
+    python scripts/run_pipeline.py --config configs/config_2025.ini [--n-archetypes 7]
 """
 
 import argparse
@@ -25,7 +28,8 @@ from src.unmixing import est_noise, hysime, mvsa, sunsal_mod
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default=None)
+    parser.add_argument("--config", required=True,
+                        help="per-year config, e.g. configs/config_2025.ini")
     parser.add_argument("--n-archetypes", type=int, default=None,
                         help="override [unmixing] n_archetypes (0 = use HySime kf)")
     args = parser.parse_args()

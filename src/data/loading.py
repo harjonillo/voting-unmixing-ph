@@ -6,30 +6,22 @@ import pandas as pd
 from src.config import data_path
 
 
-def load_complete(config, section: str = "2025-senators") -> pd.DataFrame:
+def load_complete(config) -> pd.DataFrame:
     """Load the per-clustered-precinct results table (geography + stats + votes).
 
-    Drops the stray index column and rows with any NaN, matching the notebooks.
+    Reads the senatorial-votes CSV named in the ``[elections]`` config section.
+    Drops the stray index column, any entirely-empty column (e.g. 2019's
+    unused ``information.abstentions``, which is all-NaN), then rows with any
+    remaining NaN, matching the notebooks.
     """
-    path = data_path(config, config[section]["file_complete"])
+    path = data_path(config, config["elections"]["senatorial_votes_file"])
     df = pd.read_csv(path)
     if "Unnamed: 0" in df.columns:
         df = df.drop("Unnamed: 0", axis=1)
+    # Drop all-NaN columns first so one unused empty column (2019 abstentions)
+    # does not cause dropna(axis=0) to discard every row.
+    df = df.dropna(axis=1, how="all")
     return df.dropna(axis=0)
-
-
-def load_matlab_results(config, section: str = "2025-senators"):
-    """Load the MATLAB unmixing outputs: mixing matrix M and abundance matrix S.
-
-    Y ≈ M @ S with M (candidates x archetypes), S (archetypes x precincts).
-    Row/column alignment with the CSVs is NOT guaranteed — use only for
-    qualitative comparison (as in the original eda/visualizer notebooks).
-    """
-    file_spectra = data_path(config, config[section]["file_spectra"])
-    file_abundance = data_path(config, config[section]["file_abundance"])
-    M = pd.read_csv(file_spectra, sep="\t", header=None).to_numpy()
-    S = pd.read_csv(file_abundance, sep="\t", header=None).to_numpy()
-    return M, S
 
 
 def save_processed(pre, endmembers: np.ndarray, abundances: np.ndarray, meta: dict, config):

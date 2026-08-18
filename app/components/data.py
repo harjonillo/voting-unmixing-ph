@@ -10,45 +10,85 @@ import streamlit as st
 from app.components.constants import BALLOT_COL, REGISTERED_COL, VOTERS_COL
 from app.components.sidebar import Controls
 from src.aggregation import aggregate_abundances, dominant_archetype
-from src.config import load_config
+from src.config import REPO_ROOT, load_config
 from src.data.loading import load_processed, load_sweep
 from src.geo import canonical_province, load_municipalities, load_provinces
+from src.unmixing.matching import match_to_reference
+
+# Election years selectable in the app. Each needs a configs/config_<year>.ini
+# and its processed artifacts under data/processed/<year>/.
+AVAILABLE_YEARS = ["2025", "2022", "2019"]
+DEFAULT_YEAR = AVAILABLE_YEARS[0]
 
 # ---------------------------------------------------------------------------
 # Cached loading
 # ---------------------------------------------------------------------------
 
 
+def config_for_year(year: str):
+    """Load the per-year config (configs/config_<year>.ini)."""
+    return load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
+
+
 @st.cache_data
-def get_processed():
-    config = load_config()
-    endmembers, abundances, meta = load_processed(config)
+def get_processed(year: str):
+    endmembers, abundances, meta = load_processed(config_for_year(year))
     return endmembers, abundances, meta
 
 
+# Boundaries are shared across years, so they are loaded once from any config.
 @st.cache_resource
 def get_provinces():
-    return load_provinces(load_config())
+    return load_provinces(config_for_year(DEFAULT_YEAR))
 
 
 @st.cache_resource
 def get_municipalities():
-    return load_municipalities(load_config())
+    return load_municipalities(config_for_year(DEFAULT_YEAR))
 
 
 @st.cache_data
-def get_sweep():
-    return load_sweep(load_config())
+def get_sweep(year: str):
+    return load_sweep(config_for_year(year))
 
 
 @st.cache_data
-def sweep_province_stats(p: int):
+def endmember_loading_std(year: str):
+    """Per-loading std for the overview's endmembers, from the sweep trials.
+
+    The overview shows a single MVSA fit (endmembers.csv); its per-archetype
+    uncertainty is the std across the sweep's trials at the same archetype
+    count. The sweep is an independent decomposition, so its archetype columns
+    are Hungarian-aligned (cosine) to the single fit before the std is borrowed.
+
+    Returns a DataFrame shaped like ``endmembers`` (same index/columns), or
+    None when the matching sweep entry is unavailable or the candidate sets
+    don't line up.
+    """
+    endmembers, _, meta = get_processed(year)
+    entry = get_sweep(year).get(meta["n_archetypes"])
+    if entry is None:
+        return None
+    mean = entry["loadings_mean"].reindex(endmembers.index)
+    std = entry["loadings_std"].reindex(endmembers.index)
+    if mean.isna().any().any() or std.isna().any().any():
+        return None
+    # perm aligns the sweep columns to the single-fit columns:
+    # mean.iloc[:, perm] matches endmembers column-wise, so std uses the same perm.
+    perm, _ = match_to_reference(endmembers.to_numpy(), mean.to_numpy())
+    std_aligned = std.iloc[:, perm]
+    std_aligned.columns = endmembers.columns
+    return std_aligned
+
+
+@st.cache_data
+def sweep_province_stats(year: str, p: int):
     """Province-level mean/std across trials for sweep entry p.
 
     Municipality aggregates are re-aggregated per trial (ballot-weighted,
     exact) to province level, then mean/std are taken across trials.
     """
-    entry = get_sweep()[p]
+    entry = get_sweep(year)[p]
     df = entry["agg_trials"].copy()
     arch_cols_p = [c for c in df.columns if c.startswith("arch_")]
     df["PROV_KEY"] = [

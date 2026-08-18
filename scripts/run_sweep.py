@@ -3,7 +3,7 @@
 For each p in [sweep] p_min..p_max, run n_trials MVSA+SUNSAL trials
 (different seeds), align archetypes across trials by linear sum assignment (cosine
 similarity, reference = lowest-RMSE trial), and write per-p artifacts under
-data/processed/sweep/p{p}/:
+<processed_path>/sweep/p{p}/:
 
     loadings_mean.csv / loadings_std.csv   consensus loadings (aligned)
     agg_municipality_trials.parquet        per-trial ballot-weighted mean
@@ -15,8 +15,11 @@ data/processed/sweep/p{p}/:
 Municipality-level aggregates carry summed ballot weights, so province- and
 region-level means can be re-derived exactly (weighted mean of weighted means).
 
+The input CSV and output directory are taken from the per-year config passed
+via --config (e.g. configs/config_2025.ini).
+
 Run from the repo root (takes a few minutes; trials run in parallel):
-    python scripts/run_sweep.py
+    python scripts/run_sweep.py --config configs/config_2025.ini
 """
 
 import argparse
@@ -68,7 +71,8 @@ def aggregate_to_municipality(A, codes, w, n_units):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default=None)
+    parser.add_argument("--config", required=True,
+                        help="per-year config, e.g. configs/config_2025.ini")
     parser.add_argument("--n-trials", type=int, default=None)
     args = parser.parse_args()
 
@@ -146,10 +150,16 @@ def main():
         out = sweep_root / f"p{p}"
         out.mkdir(parents=True, exist_ok=True)
         arch_cols = [f"arch_{j}" for j in range(p)]
-        pd.DataFrame(loadings_mean, index=pre.candidate_labels, columns=arch_cols) \
-            .rename_axis("candidate").to_csv(out / "loadings_mean.csv")
-        pd.DataFrame(loadings_std, index=pre.candidate_labels, columns=arch_cols) \
-            .rename_axis("candidate").to_csv(out / "loadings_std.csv")
+        pd.DataFrame(
+            loadings_mean, 
+            index=pre.candidate_labels, 
+            columns=arch_cols
+        ).rename_axis("candidate").to_csv(out / "loadings_mean.csv")
+        pd.DataFrame(
+            loadings_std, 
+            index=pre.candidate_labels, 
+            columns=arch_cols
+        ).rename_axis("candidate").to_csv(out / "loadings_std.csv")
         agg_trials.to_parquet(out / "agg_municipality_trials.parquet", index=False)
         df_ref.to_parquet(out / "abundances_ref.parquet", index=False)
         with open(out / "meta.json", "w") as f:

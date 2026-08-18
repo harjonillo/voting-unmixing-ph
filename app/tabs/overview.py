@@ -6,7 +6,7 @@ import streamlit as st
 from app.components import theme
 from app.components.charts import loadings_bar
 from app.components.constants import arch_label
-from app.components.data import VALUE_KINDS, View
+from app.components.data import VALUE_KINDS, View, endmember_loading_std
 from app.components.map import choropleth_fig, join_to_boundaries, render_unmatched
 
 
@@ -21,10 +21,18 @@ def _render_endmembers(col_1: st.container, view: View) -> None:
 
     row = view.agg.iloc[0]
 
+    std = endmember_loading_std(view.controls.year)
+
     with col_1:
         st.subheader("Endmember loadings")
         st.caption(
-            "Candidate weights per endmember from MVSA (national-level, independent of aggregation level)"
+            "Candidate weights per endmember from MVSA (national-level, "
+            "independent of aggregation level). "
+            + (
+                "Error bars: std across the sweep's trials at this archetype count."
+                if std is not None
+                else "Run the sweep for this year to add trial-based error bars."
+            )
         )
 
         endmembers = view.endmembers.columns
@@ -36,6 +44,7 @@ def _render_endmembers(col_1: st.container, view: View) -> None:
                 view.endmembers,
                 c,
                 view.controls.top_n,
+                errors=std,
                 title=arch_label(c),
                 color=theme.archetype_color(c, view.n_arch),
             )

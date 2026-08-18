@@ -10,17 +10,19 @@ import streamlit as st
 from app.components import theme
 from app.components.charts import loadings_bar
 from app.components.constants import arch_label
-from app.components.data import get_provinces, get_sweep, sweep_province_stats
+from app.components.data import View, get_provinces, get_sweep, sweep_province_stats
 from src.figures.maps import plotly_choropleth
 from src.unmixing.matching import archetype_lineage
 
 
-def render() -> None:
-    sweep = get_sweep()
+def render(view: View) -> None:
+    year = view.controls.year
+    sweep = get_sweep(year)
     if not sweep:
         st.info(
-            "No sweep artifacts found — run `python scripts/run_sweep.py` "
-            "from the repo root (precomputes p = p_min..p_max × n_trials)."
+            f"No sweep artifacts for {year} — run `python scripts/run_sweep.py "
+            f"--config configs/config_{year}.ini` from the repo root "
+            "(precomputes p = p_min..p_max × n_trials)."
         )
         return
 
@@ -35,7 +37,7 @@ def render() -> None:
 
     # _render_rmse_and_stability(sweep, ps)
     # _render_lineage(sweep, ps)
-    _render_detail(sweep, ps)
+    _render_detail(year, sweep, ps)
 
 
 def _render_rmse_and_stability(sweep: dict, ps: list[int]) -> None:
@@ -129,7 +131,7 @@ def _render_lineage(sweep: dict, ps: list[int]) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_detail(sweep: dict, ps: list[int]) -> None:
+def _render_detail(year: str, sweep: dict, ps: list[int]) -> None:
     """Loadings with error bars + province map at a chosen p."""
 
     st.markdown("#### Detail at a chosen p")
@@ -173,7 +175,7 @@ def _render_detail(sweep: dict, ps: list[int]) -> None:
         key="compare_topn",
     )
 
-    mean_prov, std_prov = sweep_province_stats(n_arch)
+    mean_prov, std_prov = sweep_province_stats(year, n_arch)
     stats = (std_prov if show_std else mean_prov)[[sel_arch_p]].reset_index()
 
     gdf = get_provinces().merge(stats, on="PROV_KEY", how="left")

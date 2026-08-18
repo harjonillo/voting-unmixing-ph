@@ -12,6 +12,7 @@ from app.components.constants import BALLOT_COL, LEVEL_LABELS, arch_label
 class Controls:
     """The current sidebar selections."""
 
+    year: str
     level: str
     top_n: int
     weighted: bool
@@ -22,12 +23,21 @@ class Controls:
         return BALLOT_COL if self.weighted else None
 
 
-def render_sidebar(
-    abundances: pd.DataFrame, arch_cols: list[str], meta: dict
-) -> Controls:
+def select_year(years: list[str]) -> str:
+    """Render the app title and the election-year selector, returning the year.
+
+    Rendered before the artifacts are loaded, so the rest of the sidebar
+    (which needs the loaded data) can be drawn for the chosen year.
+    """
     st.sidebar.title("PH voting archetypes")
+    return st.sidebar.selectbox("Election year", years, index=0)
+
+
+def render_sidebar(
+    abundances: pd.DataFrame, arch_cols: list[str], meta: dict, year: str
+) -> Controls:
     st.sidebar.caption(
-        f"2025 senatorial race with {meta['n_archetypes']} endmembers, "
+        f"{year} senatorial race with {meta['n_archetypes']} endmembers, "
         f"{len(abundances):,} clustered precincts "
     )
 
@@ -49,6 +59,7 @@ def render_sidebar(
     )
 
     return Controls(
+        year=year,
         level=level,
         top_n=top_n,
         weighted=weighted,
