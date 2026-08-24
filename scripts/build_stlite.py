@@ -65,7 +65,7 @@ DATA_FILES = [
 ]
 
 for year in ["2019", "2022", "2025"]:
-    DATA_FILES = [
+    DATA_FILES += [
         # processed pipeline outputs
         f"data/processed/{year}/endmembers.csv",
         f"data/processed/{year}/abundances.parquet",

@@ -9,7 +9,7 @@ data/*
 !data/shapefiles/
 # per-p full-resolution abundances: only used when full_resolution=True, which
 # the app never sets — ~32 MB the browser would otherwise download for nothing
-data/processed/sweep/*/abundances_ref.parquet
+data/processed/*/sweep/*/abundances_ref.parquet
 # region shapefile: referenced in config.ini but never loaded (regions are
 # built by dissolving provinces)
 data/shapefiles/regions/
