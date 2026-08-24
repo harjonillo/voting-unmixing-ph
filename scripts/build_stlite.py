@@ -46,17 +46,13 @@ ENTRYPOINT = "app/streamlit_app.py"
 
 # Python/text trees inlined into index.html. __pycache__ is skipped.
 TEXT_DIRS = ["app", "src"]
-TEXT_FILES = ["configs/config.ini"]
+TEXT_FILES = ["configs/config_2019.ini", "configs/config_2022.ini", "configs/config_2025.ini"]
 
 # The ONLY data files the app reads (traced through app/components/data.py:
 # load_processed, load_provinces, load_municipalities, load_sweep). Notably it
 # does NOT read the sweep abundances_ref.parquet, the regions/ shapefile, or the
 # gadm zip. Shapefiles need their whole sidecar set (.shx/.dbf/.prj/...).
 DATA_FILES = [
-    # processed pipeline outputs
-    "data/processed/endmembers.csv",
-    "data/processed/abundances.parquet",
-    "data/processed/meta.json",
     # boundaries
     "data/shapefiles/municipalities.geojson",
     "data/shapefiles/provinces/Provinces.shp",
@@ -67,14 +63,22 @@ DATA_FILES = [
     "data/shapefiles/provinces/Provinces.sbx",
     "data/shapefiles/provinces/Provinces.shp.xml",
 ]
-# endmember-count sweep (per p: everything except the heavy abundances_ref)
-for _p in range(2, 8):
-    DATA_FILES += [
-        f"data/processed/sweep/p{_p}/loadings_mean.csv",
-        f"data/processed/sweep/p{_p}/loadings_std.csv",
-        f"data/processed/sweep/p{_p}/agg_municipality_trials.parquet",
-        f"data/processed/sweep/p{_p}/meta.json",
+
+for year in ["2019", "2022", "2025"]:
+    DATA_FILES = [
+        # processed pipeline outputs
+        f"data/processed/{year}/endmembers.csv",
+        f"data/processed/{year}/abundances.parquet",
+        f"data/processed/{year}/meta.json",
     ]
+    # endmember-count sweep (per p: everything except the heavy abundances_ref)
+    for _p in range(2, 8):
+        DATA_FILES += [
+            f"data/processed/{year}/sweep/p{_p}/loadings_mean.csv",
+            f"data/processed/{year}/sweep/p{_p}/loadings_std.csv",
+            f"data/processed/{year}/sweep/p{_p}/agg_municipality_trials.parquet",
+            f"data/processed/{year}/sweep/p{_p}/meta.json",
+        ]
 
 
 def collect_text_files() -> dict[str, str]:

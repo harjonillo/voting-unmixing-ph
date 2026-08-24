@@ -12,9 +12,9 @@
     "n_precincts_before": 92488
   },
   "hysime_kf": 6,
-  "n_archetypes": 7,
+  "n_archetypes": 6,
   "seed": 42,
-  "rmse": 0.03880164213519694,
+  "rmse": 0.04134640549986334,
   "candidate_labels": [
     "GO, BONG GO (PDPLBN) [1]",
     "AQUINO, BAM (KNP) [2]",

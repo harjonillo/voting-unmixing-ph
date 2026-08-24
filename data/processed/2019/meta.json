@@ -1,0 +1,52 @@
+{
+  "preprocessing": {
+    "excluded_regions": [
+      "OV",
+      "LAV"
+    ],
+    "sen_col_start": 17,
+    "min_candidate_25th_percentile": 10.0,
+    "min_precinct_votes": 10.0,
+    "normalization": "valid_ballots",
+    "n_candidates_before": 61,
+    "n_precincts_before": 85116
+  },
+  "hysime_kf": 5,
+  "n_archetypes": 5,
+  "seed": 42,
+  "rmse": 0.053887223256302914,
+  "candidate_labels": [
+    "VILLAR, CYNTHIA (NP) [1]",
+    "POE, GRACE (IND) [2]",
+    "GO, BONG GO (PDPLBN) [3]",
+    "CAYETANO, PIA (NP) [4]",
+    "DELA ROSA, BATO (PDPLBN) [5]",
+    "ANGARA, EDGARDO SONNY (LDP) [6]",
+    "LAPID, LITO (NPC) [7]",
+    "MARCOS, IMEE (NP) [8]",
+    "TOLENTINO, FRANCIS (PDPLBN) [9]",
+    "BONG REVILLA, RAMON JR (LAKAS) [10]",
+    "PIMENTEL, KOKO (PDPLBN) [11]",
+    "BINAY, NANCY (UNA) [12]",
+    "EJERCITO, ESTRADA JV (NPC) [13]",
+    "AQUINO, BENIGNO BAM (LP) [14]",
+    "ESTRADA, JINGGOY (PMP) [15]",
+    "ROXAS, MAR (LP) [16]",
+    "OSME\u00d1A, SERGE (IND) [17]",
+    "ONG, DOC WILLIE (LAKAS) [18]",
+    "MANGUDADATU, DONG (PDPLBN) [19]",
+    "MANICAD, JIGGY (IND) [20]",
+    "DIOKNO, CHEL (LP) [21]",
+    "ENRILE, JUAN PONCE (PMP) [22]",
+    "ALEJANO, GARY (LP) [23]",
+    "COLMENARES, NERI (MKBYN) [24]",
+    "GUTOC, SAMIRA (LP) [25]",
+    "MACALINTAL, MACAROMY (IND) [26]",
+    "TA\u00d1ADA,LORENZO ERIN TAPAT (LP) [27]",
+    "GADON, LARRY (KBL) [28]",
+    "AGUILAR, FREDDIE (IND) [29]",
+    "CHONG, GLENN (KDP) [30]",
+    "MANGONDATO, FAISAL (IND) [31]",
+    "ESCUDERO, AGNES (IND) [32]"
+  ]
+}
