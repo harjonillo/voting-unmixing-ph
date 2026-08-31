@@ -101,12 +101,11 @@ lighter path, and a normal server deploy
 (`pip install -r requirements.txt && streamlit run app/streamlit_app.py`) is the
 option for a fully dynamic host.
 
-> **One Pages site, two workflows.** Both workflows publish to the same GitHub
-> Pages target, so only one should own `main`. `deploy-static.yml` is scoped to
-> the `fasthtml_site` branch for now; once the static site is the one you want
-> live, switch its `branches` to `[main]` and remove/disable
-> `deploy-stlite.yml`. Set **Settings → Pages → Source = "GitHub Actions"** once.
-> Published at `harjonillo.github.io/voting-unmixing-ph/`.
+> **One Pages site.** The static site (`deploy-static.yml`) is the live GitHub
+> Pages deployment — it publishes on every push to `main`. The stlite workflow
+> (`deploy-stlite.yml`) is manual-only (`workflow_dispatch`); run it from the
+> Actions tab to fall back to the stlite build. Set **Settings → Pages → Source
+> = "GitHub Actions"** once. Published at `harjonillo.github.io/voting-unmixing-ph/`.
 
 ## Notebooks
 

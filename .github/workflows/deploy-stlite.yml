@@ -3,10 +3,14 @@ name: Deploy stlite app to GitHub Pages
 # Streamlit can't run on GitHub Pages (static hosting only), so the app is built
 # with stlite, which runs it entirely in the browser (Pyodide/WebAssembly).
 # scripts/build_stlite.py assembles a static dist/ that this workflow publishes.
+#
+# MANUAL-ONLY BACKUP: the static FastHTML site (deploy-static.yml) is the live
+# Pages deployment. This no longer runs on push — trigger it from the Actions
+# tab ("Run workflow") if you need to publish the stlite build instead. Running
+# it overwrites the Pages site until the next push to main redeploys the static
+# site.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # Required for the Pages deployment.

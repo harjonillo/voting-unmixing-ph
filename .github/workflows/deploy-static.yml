@@ -5,14 +5,13 @@ name: Deploy static site to GitHub Pages
 # renders the FastHTML shell. No server / Pyodide — the browser just loads data
 # and draws with Plotly.js. This publishes site/ to GitHub Pages.
 #
-# NOTE: this and deploy-stlite.yml both publish to the same Pages site, so only
-# one should own `main`. This one is scoped to the fasthtml_site branch for now;
-# once the static site is the one you want live, switch `branches` below to
-# [main] and remove (or disable) deploy-stlite.yml.
+# This is the live GitHub Pages deployment: it publishes site/ on every push to
+# main. deploy-stlite.yml is manual-only (workflow_dispatch) so the two never
+# both publish to the same Pages target.
 
 on:
   push:
-    branches: [fasthtml_site]
+    branches: [main]
   workflow_dispatch:
 
 # Required for the Pages deployment.
