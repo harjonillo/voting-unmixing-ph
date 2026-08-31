@@ -1,0 +1,25 @@
+/* App-specific rules layered on Tailwind + daisyUI (see scripts/build_site.py).
+ *
+ * Layout, colors, and the form/tab/card look come from Tailwind utility classes
+ * and daisyUI components in the markup; the theme is set by `data-theme` on
+ * <html>. Only the few things that are awkward to express as utilities — the
+ * JS-generated plot grids and the map's minimum height — live here. */
+
+/* Use IBM Plex Sans across the UI (loaded from Google Fonts in build_site.py),
+ * overriding daisyUI/Tailwind's default system stack. Set on body so it wins
+ * over Tailwind's html-level default and cascades to the components. */
+body { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+/* Grid of small plots (endmember loadings, histograms) — built in app.js. */
+.plot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.5rem;
+}
+.plot-cell { min-width: 0; }
+
+/* Give the choropleths a sensible minimum height (Plotly fills the width). */
+#map-plot, #cmp-plot { min-height: 600px; }
+
+/* Caption text emitted by app.js (loadings grid header). */
+.muted { font-size: 0.75rem; opacity: 0.6; line-height: 1.4; }

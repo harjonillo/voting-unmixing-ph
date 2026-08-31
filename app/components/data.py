@@ -9,11 +9,15 @@ import streamlit as st
 
 from app.components.constants import BALLOT_COL, REGISTERED_COL, VOTERS_COL
 from app.components.sidebar import Controls
-from src.aggregation import aggregate_abundances, dominant_archetype
+from src.aggregation import LEVEL_COLS, aggregate_abundances, dominant_archetype
 from src.config import REPO_ROOT, load_config
 from src.data.loading import load_processed, load_sweep
-from src.geo import canonical_province, load_municipalities, load_provinces
+from src.geo import load_municipalities, load_provinces
 from src.unmixing.matching import match_to_reference
+
+# Grouping columns present in each per-trial municipality aggregate (written by
+# scripts/run_sweep.py). Used to collapse trials back to one row per municipality.
+MUNI_COLS = ["REGION", "PROVINCE", "CITY_MUNICIPALITY"]
 
 # Election years selectable in the app. Each needs a configs/config_<year>.ini
 # and its processed artifacts under data/processed/<year>/.
@@ -82,27 +86,59 @@ def endmember_loading_std(year: str):
 
 
 @st.cache_data
-def sweep_province_stats(year: str, p: int):
-    """Province-level mean/std across trials for sweep entry p.
+def sweep_level_stats(year: str, p: int, level: str, weighted: bool):
+    """Mean/std across sweep trials at `level`, plus the trial-mean municipality
+    frame, for sweep entry p.
 
-    Municipality aggregates are re-aggregated per trial (ballot-weighted,
-    exact) to province level, then mean/std are taken across trials.
+    Each trial's municipality aggregates are re-aggregated to `level`
+    (ballot-weighted when `weighted`, matching the main tab's weighting), then
+    mean/std are taken across trials. Municipality level needs no
+    re-aggregation — there is already one row per municipality per trial.
+
+    Returns (mean_agg, std_agg, mean_muni):
+      mean_agg / std_agg  one row per unit at `level`, with the level's grouping
+                          columns, arch_* columns (mean / std over trials), and
+                          the count columns; identical structure so either can
+                          feed the map join.
+      mean_muni           one row per municipality (arch means over trials, with
+                          summed ballots / precinct counts) — the "precinct
+                          table" the region-level join dissolves for geometry.
     """
     entry = get_sweep(year)[p]
-    df = entry["agg_trials"].copy()
+    df = entry["agg_trials"]
     arch_cols_p = [c for c in df.columns if c.startswith("arch_")]
-    df["PROV_KEY"] = [
-        canonical_province(pr, rg) for pr, rg in zip(df["PROVINCE"], df["REGION"])
-    ]
-    for c in arch_cols_p:
-        df[c + "_w"] = df[c] * df[BALLOT_COL]
-    g = df.groupby(["trial", "PROV_KEY"], observed=True).sum(numeric_only=True)
-    per_trial = pd.DataFrame(
-        {c: g[c + "_w"] / g[BALLOT_COL] for c in arch_cols_p}
-    ).reset_index()
-    mean = per_trial.groupby("PROV_KEY")[arch_cols_p].mean()
-    std = per_trial.groupby("PROV_KEY")[arch_cols_p].std(ddof=1)
-    return mean, std
+    weight_col = BALLOT_COL if weighted else None
+
+    per_trial = []
+    for t, g in df.groupby("trial", observed=True):
+        a = aggregate_abundances(
+            g, level=level, arch_cols=arch_cols_p, weight_col=weight_col
+        )
+        a["trial"] = t
+        per_trial.append(a)
+    stacked = pd.concat(per_trial, ignore_index=True).drop(columns="trial")
+
+    group_cols = LEVEL_COLS[level]
+    if group_cols:
+        grouped = stacked.groupby(group_cols, observed=True)
+        # mean_agg carries the (trial-invariant) count columns unchanged; std_agg
+        # copies it and overwrites just the arch columns with the trial std.
+        mean_agg = grouped.mean(numeric_only=True).reset_index()
+        std_only = grouped[arch_cols_p].std(ddof=1).reset_index()
+        std_agg = mean_agg.copy()
+        for c in arch_cols_p:
+            std_agg[c] = std_only[c].to_numpy()
+    else:  # national — unused by the sidebar, kept for completeness
+        mean_agg = stacked.mean(numeric_only=True).to_frame().T
+        std_agg = mean_agg.copy()
+        std_agg[arch_cols_p] = stacked[arch_cols_p].std(ddof=1).to_numpy()
+
+    agg_cols = {c: "mean" for c in arch_cols_p}
+    agg_cols.update({BALLOT_COL: "first", "n_precincts": "first"})
+    mean_muni = (
+        df.groupby(MUNI_COLS, observed=True).agg(agg_cols).reset_index()
+    )
+    return mean_agg, std_agg, mean_muni
 
 
 # ---------------------------------------------------------------------------

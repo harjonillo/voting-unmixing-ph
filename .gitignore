@@ -2,9 +2,9 @@
 data/*
 !data/README.md
 
-# ...but the deployed stlite app needs these two trees committed so the
-# GitHub Pages build can bundle them. Re-included here, then the heavy files the
-# app never reads are excluded again below. (See scripts/build_stlite.py.)
+# ...but the static-site build needs these two trees committed so the GitHub
+# Pages build can bake them. Re-included here, then the heavy files the build
+# never reads are excluded again below. (See scripts/build_static.py.)
 !data/processed/
 !data/shapefiles/
 # per-p full-resolution abundances: only used when full_resolution=True, which
@@ -16,8 +16,9 @@ data/shapefiles/regions/
 # unused alternative boundary source
 data/shapefiles/gadm41_PHL_2.json.zip
 
-# generated stlite site
-/dist/
+# generated static FastHTML site (data baked by scripts/build_static.py, shell
+# by scripts/build_site.py — rebuilt in CI from the committed data/ trees)
+/site/
 
 # Python
 __pycache__/
