@@ -2,6 +2,8 @@
 count p. Everything shown here is precomputed by `scripts/run_sweep.py`.
 """
 
+from dataclasses import replace
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -9,9 +11,9 @@ import streamlit as st
 
 from app.components import theme
 from app.components.charts import loadings_bar
-from app.components.constants import arch_label
-from app.components.data import View, get_provinces, get_sweep, sweep_province_stats
-from src.figures.maps import plotly_choropleth
+from app.components.constants import LEVEL_LABELS, arch_label
+from app.components.data import View, get_sweep, sweep_level_stats
+from app.components.map import choropleth_fig, join_to_boundaries, render_unmatched
 from src.unmixing.matching import archetype_lineage
 
 
@@ -37,7 +39,7 @@ def render(view: View) -> None:
 
     # _render_rmse_and_stability(sweep, ps)
     # _render_lineage(sweep, ps)
-    _render_detail(year, sweep, ps)
+    _render_detail(view, sweep, ps)
 
 
 def _render_rmse_and_stability(sweep: dict, ps: list[int]) -> None:
@@ -131,8 +133,14 @@ def _render_lineage(sweep: dict, ps: list[int]) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_detail(year: str, sweep: dict, ps: list[int]) -> None:
-    """Loadings with error bars + province map at a chosen p."""
+def _render_detail(view: View, sweep: dict, ps: list[int]) -> None:
+    """Loadings with error bars + a map at a chosen p.
+
+    The map follows the sidebar aggregation level and weighting and is drawn
+    with the same join/choropleth helpers as the main tab, so the two are
+    consistent; only the values differ (sweep trial mean/std at the chosen p).
+    """
+    year = view.controls.year
 
     st.markdown("#### Detail at a chosen p")
 
@@ -175,26 +183,36 @@ def _render_detail(year: str, sweep: dict, ps: list[int]) -> None:
         key="compare_topn",
     )
 
-    mean_prov, std_prov = sweep_province_stats(year, n_arch)
-    stats = (std_prov if show_std else mean_prov)[[sel_arch_p]].reset_index()
+    level = view.controls.level
+    st.caption(
+        f"Map at the sidebar's **{LEVEL_LABELS[level]}** level "
+        f"({'ballot-weighted' if view.controls.weighted else 'unweighted'} "
+        "mean over municipalities, matching the main tab)."
+    )
 
-    gdf = get_provinces().merge(stats, on="PROV_KEY", how="left")
-    fig = px.choropleth_map(
-        gdf,
-        geojson=gdf.__geo_interface__,
-        locations=gdf.index,
-        color=sel_arch_p,
-        center={"lat": 12.8, "lon": 122.0},
-        zoom=4.6,
-        map_style="white-bg",
-        opacity=0.9,
+    mean_agg, std_agg, mean_muni = sweep_level_stats(
+        year, n_arch, level, view.controls.weighted
     )
-    fig.update_layout(height=800, margin=dict(l=0, r=0, t=0, b=0))
-    fig.update_coloraxes(
-        colorbar_title=("std" if show_std else "mean") + f" ({sel_arch_p})"
+    agg = std_agg if show_std else mean_agg
+
+    # Reuse the main tab's join + choropleth by handing them a view whose
+    # frames are the sweep's trial statistics (df_ab = the trial-mean
+    # municipality frame the region dissolve needs; agg = the level stats).
+    map_view = replace(
+        view,
+        df_ab=mean_muni,
+        agg=agg,
+        value_col=sel_arch_p,
+        colorbar=("std" if show_std else "mean") + f" ({arch_label(sel_arch_p)})",
     )
-    fig.update_layout(height=620)
-    st.plotly_chart(fig, use_container_width=True)
+
+    gdf, hover, unmatched = join_to_boundaries(map_view)
+    if gdf is not None and len(gdf):
+        fig = choropleth_fig(gdf, map_view, hover)
+        fig.update_coloraxes(colorbar_title=map_view.colorbar)
+        fig.update_layout(height=620)
+        st.plotly_chart(fig, use_container_width=True)
+        render_unmatched(unmatched)
 
     # loadings
     arch_cols = st.columns([1] * n_arch)

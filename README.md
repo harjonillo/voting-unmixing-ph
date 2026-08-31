@@ -51,30 +51,62 @@ python scripts/run_sweep.py          # ~5 min: powers the Model-comparison tab
 streamlit run app/streamlit_app.py
 ```
 
-## Web deployment (stlite)
+## Web deployment
 
-The app is also published as a static, in-browser build via
-[stlite](https://github.com/whitphx/stlite) (Streamlit on Pyodide/WASM) — no
-server needed. `scripts/build_stlite.py` bundles the `app/`/`src/` code and the
-data files the app reads into `dist/`; `.github/workflows/deploy-stlite.yml`
-publishes it to GitHub Pages on every push to `main`.
+Because the app does no on-demand computation — the heavy unmixing is
+precomputed by `run_pipeline.py`/`run_sweep.py`, and the app only aggregates,
+matches and draws — it can be served as a **fully static** site.
 
-Test the static build locally:
+### Static site (FastHTML + Plotly.js)
+
+`scripts/build_static.py` pre-computes every selection (year × level ×
+weighting, endmember loadings, and the per-p sweep detail) into JSON +
+simplified GeoJSON under `site/data/`; `scripts/build_site.py` renders the page
+shell (`site/index.html`) with [FastHTML](https://fastht.ml). The browser loads
+only the files for the current view and draws them with Plotly.js — **no server
+and no Pyodide**, so a first visit pulls ~½ MB instead of stlite's ~36 MB + full
+scientific stack. `.github/workflows/deploy-static.yml` builds and publishes
+`site/` to GitHub Pages.
+
+Build and test locally (needs the conda env below plus `python-fasthtml`):
+
+```bash
+pip install python-fasthtml                       # once, into the env
+python scripts/build_static.py --out site/data --verify   # bake JSON + GeoJSON (--verify checks parity with the app)
+python scripts/build_site.py   --out site                 # render the FastHTML shell
+cd site && python -m http.server 8000             # open http://localhost:8000 (needs internet for the Plotly CDN)
+```
+
+Rebuild `site/data` whenever the pipeline/sweep outputs change; rebuild the
+shell whenever `web/app.js`, `web/styles.css`, or `scripts/build_site.py`
+change. `site/` is generated (gitignored) and rebuilt in CI from the committed
+`data/processed/` + `data/shapefiles/` trees.
+
+### stlite (in-browser Streamlit, fallback)
+
+The app is also published as an in-browser build via
+[stlite](https://github.com/whitphx/stlite) (Streamlit on Pyodide/WASM).
+`scripts/build_stlite.py` bundles the `app/`/`src/` code and the data files the
+app reads into `dist/`; `.github/workflows/deploy-stlite.yml` publishes it to
+GitHub Pages on push to `main`.
 
 ```bash
 python scripts/build_stlite.py --out dist
 cd dist && python -m http.server 8000   # open http://localhost:8000 (needs internet for the stlite CDN)
 ```
 
-Deploy: commit the needed data files (the `.gitignore` un-ignores exactly
-`data/processed/` + `data/shapefiles/`, minus the files the app never reads),
-push to `main`, and set **Settings → Pages → Source = "GitHub Actions"** once.
-Published at `harjonillo.github.io/voting-unmixing-ph/`.
-
-The whole scientific stack plus ~36 MB of data loads in each visitor's browser,
-so this is a lightweight dev/backup endpoint; a normal server deploy
+This ships the whole scientific stack plus ~36 MB of data to each visitor's
+browser, so it's the heavier dev/backup endpoint; the static site above is the
+lighter path, and a normal server deploy
 (`pip install -r requirements.txt && streamlit run app/streamlit_app.py`) is the
-path for production.
+option for a fully dynamic host.
+
+> **One Pages site, two workflows.** Both workflows publish to the same GitHub
+> Pages target, so only one should own `main`. `deploy-static.yml` is scoped to
+> the `fasthtml_site` branch for now; once the static site is the one you want
+> live, switch its `branches` to `[main]` and remove/disable
+> `deploy-stlite.yml`. Set **Settings → Pages → Source = "GitHub Actions"** once.
+> Published at `harjonillo.github.io/voting-unmixing-ph/`.
 
 ## Notebooks
 

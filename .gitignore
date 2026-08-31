@@ -19,6 +19,10 @@ data/shapefiles/gadm41_PHL_2.json.zip
 # generated stlite site
 /dist/
 
+# generated static FastHTML site (data baked by scripts/build_static.py, shell
+# by scripts/build_site.py — rebuilt in CI from the committed data/ trees)
+/site/
+
 # Python
 __pycache__/
 *.pyc

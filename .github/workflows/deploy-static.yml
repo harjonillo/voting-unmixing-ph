@@ -1,0 +1,68 @@
+name: Deploy static site to GitHub Pages
+
+# The Streamlit app is baked into a fully static site: scripts/build_static.py
+# pre-computes every selection into JSON + GeoJSON, and scripts/build_site.py
+# renders the FastHTML shell. No server / Pyodide — the browser just loads data
+# and draws with Plotly.js. This publishes site/ to GitHub Pages.
+#
+# NOTE: this and deploy-stlite.yml both publish to the same Pages site, so only
+# one should own `main`. This one is scoped to the fasthtml_site branch for now;
+# once the static site is the one you want live, switch `branches` below to
+# [main] and remove (or disable) deploy-stlite.yml.
+
+on:
+  push:
+    branches: [fasthtml_site]
+  workflow_dispatch:
+
+# Required for the Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one concurrent Pages deploy; don't cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # build_static.py needs the scientific stack (geopandas/pandas/scipy/
+      # scikit-learn/seaborn); build_site.py needs FastHTML. Plotly/Streamlit in
+      # requirements.txt are unused at build time (Plotly runs in the browser)
+      # but harmless.
+      - name: Install build dependencies
+        run: pip install -r requirements.txt python-fasthtml
+
+      # --verify fails the build if the baked tables ever drift from a fresh
+      # in-process aggregation.
+      - name: Bake the dataset
+        run: python scripts/build_static.py --out site/data --verify
+
+      - name: Render the FastHTML shell
+        run: python scripts/build_site.py --out site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
