@@ -49,6 +49,11 @@ function nArchFor(year) {
 function archCols(year) {
   return Array.from({ length: nArchFor(year) }, (_, i) => `arch_${i}`);
 }
+function hexToRgba(hex, alpha) {
+  const h = hex.replace("#", "");
+  const n = parseInt(h.length === 3 ? h.replace(/(.)/g, "$1$1") : h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
 function discreteScale(colors) {
   const n = colors.length, stops = [];
   for (let i = 0; i < n; i++) {
@@ -70,6 +75,7 @@ const wtag = () => (state.weighted ? "w" : "u");
 const valuesURL = (year, level) => `${DATA}/values/${year}_${level}_${wtag()}.json`;
 const loadingsURL = (year) => `${DATA}/loadings/${year}.json`;
 const sweepURL = (year, p) => `${DATA}/sweep/${year}_p${p}.json`;
+const lineageURL = (year) => `${DATA}/lineage/${year}.json`;
 
 // -------------------------------------------------------------- chart helpers
 function choropleth(divId, geo, records, colorFn, colorbarTitle, discrete) {
@@ -176,10 +182,45 @@ async function renderMap() {
     "Candidate weights per endmember (MVSA, national-level). " + cap);
 }
 
+// Sankey of how archetypes split as p grows across the whole sweep (mirror of
+// the Streamlit tab's _render_lineage). Independent of p/level/weighting.
+async function renderLineage(divId) {
+  const host = document.getElementById(divId);
+  const lin = await getJSON(lineageURL(state.year)).catch(() => null);
+  if (!lin) { host.textContent = ""; return; }
+  const hi = MANIFEST.theme.highlight;
+  const trace = {
+    type: "sankey",
+    arrangement: "fixed",
+    node: {
+      label: lin.nodes.map((n) => `p${n.p}·A${n.k} ${n.label}`),
+      x: lin.nodes.map((n) => n.x),
+      y: lin.nodes.map((n) => n.y),
+      pad: 8, thickness: 12,
+      color: lin.nodes.map((n) => hexToRgba(archColor(`arch_${n.k}`, n.p), 0.85)),
+    },
+    link: {
+      source: lin.links.map((l) => l.source),
+      target: lin.links.map((l) => l.target),
+      // clamp so near-zero-similarity links stay visible as thin ribbons
+      value: lin.links.map((l) => Math.max(l.similarity, 0.05)),
+      color: lin.links.map((l) =>
+        l.split ? hexToRgba(hi, 0.55) : "rgba(100,120,160,0.35)"),
+      customdata: lin.links.map((l) => l.similarity),
+      hovertemplate: "similarity %{customdata}<extra></extra>",
+    },
+  };
+  Plotly.react(divId, [trace], {
+    height: 480, margin: { l: 10, r: 10, t: 10, b: 10 },
+    paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
+  }, PLOTLY_CFG);
+}
+
 // ----------------------------------------------------------------- tab: compare
 async function renderCompare() {
   const year = state.year, level = state.level, nArch = nArchFor(year);
   const p = state.cmp.p;
+  await renderLineage("cmp-lineage");
   const [geo, sweep] = await Promise.all([
     getJSON(geoURL(year, level)),
     getJSON(sweepURL(year, p)),
