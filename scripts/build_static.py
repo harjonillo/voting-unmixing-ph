@@ -252,27 +252,34 @@ def theme_payload(arch_counts: set[int]) -> dict:
 
 
 def sweep_level_stats(entry: dict, level: str, weighted: bool):
-    """(mean_agg, std_agg, mean_muni) across trials at `level` for one sweep p."""
+    """(mean_agg, std_agg, mean_muni) across trials at `level` for one sweep p.
+
+    Vectorized: the per-trial weighted mean per unit is a single groupby-sum
+    (weighted mean = sum(arch*w) / sum(w) per (trial, unit)), then mean/std are
+    taken across trials. Avoids the per-trial ``aggregate_abundances`` apply,
+    which was ~13 s per call at municipality level (one-row groups × 50 trials).
+    """
     df = entry["agg_trials"]
     arch_cols_p = [c for c in df.columns if c.startswith("arch_")]
-    weight_col = BALLOT_COL if weighted else None
-
-    per_trial = []
-    for t, g in df.groupby("trial", observed=True):
-        a = aggregate_abundances(
-            g, level=level, arch_cols=arch_cols_p, weight_col=weight_col
-        )
-        a["trial"] = t
-        per_trial.append(a)
-    stacked = pd.concat(per_trial, ignore_index=True).drop(columns="trial")
-
     group_cols = LEVEL_COLS[level]
-    grouped = stacked.groupby(group_cols, observed=True)
-    mean_agg = grouped.mean(numeric_only=True).reset_index()
-    std_only = grouped[arch_cols_p].std(ddof=1).reset_index()
-    std_agg = mean_agg.copy()
+
+    w = df[BALLOT_COL].to_numpy(dtype=float) if weighted else np.ones(len(df))
+    work = df[["trial"] + group_cols].copy()
     for c in arch_cols_p:
-        std_agg[c] = std_only[c].to_numpy()
+        work[c] = df[c].to_numpy() * w
+    work["_w"] = w
+    g = work.groupby(["trial"] + group_cols, observed=True).sum()
+    per_trial = g[arch_cols_p].div(g["_w"], axis=0).reset_index()  # weighted mean per (trial, unit)
+
+    grouped = per_trial.groupby(group_cols, observed=True)[arch_cols_p]
+    # count columns are trial-invariant (same geography every trial): n_precincts
+    # = number of municipalities in the unit, ballots = their sum.
+    base = df[df["trial"] == df["trial"].iloc[0]]
+    counts = base.groupby(group_cols, observed=True).agg(
+        n_precincts=(arch_cols_p[0], "size"), **{BALLOT_COL: (BALLOT_COL, "sum")}
+    )
+    mean_agg = grouped.mean().join(counts).reset_index()
+    std_agg = grouped.std(ddof=1).join(counts).reset_index()
 
     agg_cols = {c: "mean" for c in arch_cols_p}
     agg_cols.update({BALLOT_COL: "first", "n_precincts": "first"})
