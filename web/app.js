@@ -8,6 +8,8 @@
 
 const DATA = "./data";
 const PLOTLY_CFG = { displayModeBar: false, responsive: true };
+// Match the UI font (IBM Plex Sans, loaded via Google Fonts in build_site.py).
+const FONT = { family: "'IBM Plex Sans', system-ui, sans-serif", size: 12 };
 const MAP_VIEW = { style: "white-bg", center: { lon: 122.0, lat: 12.8 }, zoom: 4.6 };
 
 // ---------------------------------------------------------------- data cache
@@ -86,7 +88,7 @@ function choropleth(divId, geo, records, colorFn, colorbarTitle, discrete) {
   };
   const layout = {
     map: MAP_VIEW, height: 640, margin: { l: 0, r: 0, t: 0, b: 0 },
-    paper_bgcolor: "#fcfcfb",
+    paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
     coloraxis: {},
   };
   if (colorbarTitle) trace.colorbar = { title: { text: colorbarTitle } };
@@ -122,8 +124,8 @@ function loadingsGrid(divId, payload, arch_cols, nArch, topN, title) {
     if (std) trace.error_x = { type: "data", array: order.map((o) => std[o[2]]), visible: true };
     Plotly.react(cell, [trace], {
       title: { text: archLabel(c) }, height: Math.max(300, 24 * topN),
-      margin: { l: 4, r: 4, t: 34, b: 24 }, paper_bgcolor: "#fcfcfb",
-      plot_bgcolor: "#fcfcfb", xaxis: { title: { text: "loading" } },
+      margin: { l: 4, r: 4, t: 34, b: 24 }, paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)", font: FONT, xaxis: { title: { text: "loading" } },
       yaxis: { automargin: true },
     }, PLOTLY_CFG);
   }
@@ -216,8 +218,8 @@ async function renderDist() {
       type: "histogram", x, nbinsx: 40, marker: { color: archColor(c, nArch) },
     }], {
       title: { text: archLabel(c) }, height: 280,
-      margin: { l: 40, r: 8, t: 34, b: 30 }, paper_bgcolor: "#fcfcfb",
-      plot_bgcolor: "#fcfcfb", xaxis: { title: { text: "abundance" } },
+      margin: { l: 40, r: 8, t: 34, b: 30 }, paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)", font: FONT, xaxis: { title: { text: "abundance" } },
       yaxis: { title: { text: `# ${unit}s` } },
     }, PLOTLY_CFG);
   }
@@ -263,7 +265,7 @@ function switchTab(tab) {
   state.tab = tab;
   for (const t of ["map", "compare", "dist"]) {
     document.getElementById(`tab-${t}`).hidden = t !== tab;
-    document.getElementById(`tabbtn-${t}`).classList.toggle("active", t === tab);
+    document.getElementById(`tabbtn-${t}`).classList.toggle("tab-active", t === tab);
   }
   // compare uses the internal name "compare"; button/section id is "compare"
   renderActive();
@@ -282,12 +284,14 @@ async function init() {
   levels.innerHTML = "";
   for (const lvl of MANIFEST.levels) {
     const lab = document.createElement("label");
+    lab.className = "flex items-center gap-2 cursor-pointer text-sm";
     const r = document.createElement("input");
     r.type = "radio"; r.name = "level"; r.value = lvl;
+    r.className = "radio radio-xs";
     r.checked = lvl === state.level;
     r.addEventListener("change", () => { state.level = lvl; renderActive(); });
     lab.appendChild(r);
-    lab.appendChild(document.createTextNode(" " + MANIFEST.level_labels[lvl]));
+    lab.appendChild(document.createTextNode(MANIFEST.level_labels[lvl]));
     levels.appendChild(lab);
   }
 
