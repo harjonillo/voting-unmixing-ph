@@ -41,6 +41,7 @@ class PreprocessedData:
     Column j of ``Y`` corresponds to row j of ``df_geo``.
     """
 
+    Y_raw: np.ndarray                  # (L candidates, N precincts)
     Y: np.ndarray                      # (L candidates, N precincts)
     df_geo: pd.DataFrame               # N rows: GEO_COLS + INFO_COLS
     ranked_columns: List[str]          # original CSV column names, by national rank
@@ -122,7 +123,7 @@ def preprocess(
         print(f"Y: {Y.shape[0]} candidates x {Y.shape[1]:,} precincts "
               f"({normalization} normalization)")
 
-    return PreprocessedData(Y=Y, df_geo=df_geo, ranked_columns=ranked_columns,
+    return PreprocessedData(Y_raw=vote_raw.T, Y=Y, df_geo=df_geo, ranked_columns=ranked_columns,
                             candidate_labels=labels, params=params)
 
 
