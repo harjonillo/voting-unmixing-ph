@@ -109,6 +109,18 @@ def tab_compare() -> Section:
         H2("Endmember-count comparison", cls="text-base font-semibold mb-2"),
         P("Trial mean/std at a chosen archetype count p (precomputed by the sweep). "
           "The map follows the sidebar level and weighting.", cls="text-sm opacity-60 mb-3"),
+        card(
+            H2("Archetype lineage", cls="text-sm font-semibold mb-1"),
+            P("How archetypes split as the endmember count p grows (2 → 3 → "
+              "…). Consecutive p are cosine-matched; a highlighted link marks the "
+              "archetype that splits off when p increases by one. Each node is labelled "
+              "with its top-loading candidate; ribbon width ≈ match similarity.",
+              cls="text-sm opacity-60 mb-2"),
+            Div(id="cmp-lineage"),
+            span="mb-4",
+        ),
+        # Controls below drive the succeeding per-p map and loadings, not the
+        # sweep-wide lineage above.
         Div(
             labeled("Archetypes p", Select(id="cmp-p", cls=SELECT)),
             labeled("Archetype", Select(id="cmp-arch", cls=SELECT)),

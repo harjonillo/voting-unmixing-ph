@@ -21,6 +21,8 @@ What it writes under ``--out`` (default ``site/data``)::
     loadings/{year}.json               endmember loadings (mean) + sweep-trial std.
     sweep/{year}_p{p}.json             per-p loadings mean/std + level stats
                                        (trial mean/std) for the comparison tab.
+    lineage/{year}.json                Sankey nodes/links tracing how archetypes
+                                       split as p grows across the sweep.
 
 Everything mirrors the app's own code paths (``src.aggregation``, ``src.geo``,
 ``src.unmixing.matching``) so the baked numbers match what Streamlit shows;
@@ -55,7 +57,7 @@ from src.geo import (
     load_municipalities,
     load_provinces,
 )
-from src.unmixing.matching import match_to_reference
+from src.unmixing.matching import archetype_lineage, match_to_reference
 
 # ---------------------------------------------------------------------------
 # What to bake (kept in sync with app/components/{data,constants,sidebar}.py).
@@ -322,6 +324,55 @@ def _rec(key: str, row, arch_cols) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Archetype lineage — the comparison-tab Sankey. For each consecutive p in the
+# sweep, Hungarian-matches the p+1 columns to p by cosine similarity; the extra
+# child is linked to its best parent and flagged as a split (mirror of the
+# Streamlit tab's _render_lineage). Nodes carry their top-loading candidate so
+# the client can label each archetype, plus a fixed (x, y) column layout.
+# ---------------------------------------------------------------------------
+
+
+def _top_candidate(loadings_mean: pd.DataFrame, k: int) -> str:
+    """The candidate with the largest loading in archetype column k, cleaned up
+    for a short node label (matches the Streamlit lineage node labels)."""
+    top = str(loadings_mean.iloc[:, k].idxmax())
+    return top.split(" [")[0].split(",")[0].title()
+
+
+def build_lineage(year: str, sweep: dict) -> dict:
+    """Sankey nodes/links tracing how archetypes split as p grows across the
+    sweep. Independent of level/weighting — driven only by loadings_mean."""
+    ps = sorted(sweep)
+    edges = archetype_lineage({p: sweep[p]["loadings_mean"].to_numpy() for p in ps})
+
+    node_index: dict[tuple[int, int], int] = {}
+    nodes: list[dict] = []
+    span = max(len(ps) - 1, 1)
+    for pi, p in enumerate(ps):
+        lm = sweep[p]["loadings_mean"]
+        for k in range(p):
+            node_index[(p, k)] = len(nodes)
+            nodes.append({
+                "p": p,
+                "k": k,
+                "label": _top_candidate(lm, k),
+                # Nudge columns inside (0, 1) so Plotly's fixed arrangement does
+                # not clip the first/last columns against the plot edges.
+                "x": round(0.04 + 0.92 * (pi / span), 4),
+                "y": round((k + 0.5) / p, 4),
+            })
+
+    links = [{
+        "source": node_index[(e["p_from"], e["k_from"])],
+        "target": node_index[(e["p_to"], e["k_to"])],
+        "similarity": round(e["similarity"], 3),
+        "split": bool(e["split"]),
+    } for e in edges]
+
+    return {"year": year, "ps": ps, "nodes": nodes, "links": links}
+
+
+# ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 
@@ -430,6 +481,12 @@ def build(out: Path, verify: bool) -> None:
                 sw["levels"][level] = lvl
             rel = f"sweep/{year}_p{p}.json"
             sizes[rel] = dump_json(sw, out / rel)
+
+        # --- archetype lineage across the whole sweep (comparison Sankey) ---
+        if len(sweep) > 1:
+            sizes[f"lineage/{year}.json"] = dump_json(
+                build_lineage(year, sweep), out / "lineage" / f"{year}.json"
+            )
 
         years_meta[year] = {
             "n_archetypes": n_arch,
