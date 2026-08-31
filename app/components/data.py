@@ -4,6 +4,7 @@ the sidebar selections that every tab reads.
 
 from dataclasses import dataclass, replace
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -90,10 +91,10 @@ def sweep_level_stats(year: str, p: int, level: str, weighted: bool):
     """Mean/std across sweep trials at `level`, plus the trial-mean municipality
     frame, for sweep entry p.
 
-    Each trial's municipality aggregates are re-aggregated to `level`
-    (ballot-weighted when `weighted`, matching the main tab's weighting), then
-    mean/std are taken across trials. Municipality level needs no
-    re-aggregation — there is already one row per municipality per trial.
+    Vectorized: the per-trial weighted mean per unit is a single groupby-sum
+    (weighted mean = sum(arch*w) / sum(w) per (trial, unit)), then mean/std are
+    taken across trials. Municipality level needs no real re-aggregation — there
+    is already one row per municipality per trial.
 
     Returns (mean_agg, std_agg, mean_muni):
       mean_agg / std_agg  one row per unit at `level`, with the level's grouping
@@ -107,37 +108,29 @@ def sweep_level_stats(year: str, p: int, level: str, weighted: bool):
     entry = get_sweep(year)[p]
     df = entry["agg_trials"]
     arch_cols_p = [c for c in df.columns if c.startswith("arch_")]
-    weight_col = BALLOT_COL if weighted else None
-
-    per_trial = []
-    for t, g in df.groupby("trial", observed=True):
-        a = aggregate_abundances(
-            g, level=level, arch_cols=arch_cols_p, weight_col=weight_col
-        )
-        a["trial"] = t
-        per_trial.append(a)
-    stacked = pd.concat(per_trial, ignore_index=True).drop(columns="trial")
-
     group_cols = LEVEL_COLS[level]
-    if group_cols:
-        grouped = stacked.groupby(group_cols, observed=True)
-        # mean_agg carries the (trial-invariant) count columns unchanged; std_agg
-        # copies it and overwrites just the arch columns with the trial std.
-        mean_agg = grouped.mean(numeric_only=True).reset_index()
-        std_only = grouped[arch_cols_p].std(ddof=1).reset_index()
-        std_agg = mean_agg.copy()
-        for c in arch_cols_p:
-            std_agg[c] = std_only[c].to_numpy()
-    else:  # national — unused by the sidebar, kept for completeness
-        mean_agg = stacked.mean(numeric_only=True).to_frame().T
-        std_agg = mean_agg.copy()
-        std_agg[arch_cols_p] = stacked[arch_cols_p].std(ddof=1).to_numpy()
+
+    w = df[BALLOT_COL].to_numpy(dtype=float) if weighted else np.ones(len(df))
+    work = df[["trial"] + group_cols].copy()
+    for c in arch_cols_p:
+        work[c] = df[c].to_numpy() * w
+    work["_w"] = w
+    g = work.groupby(["trial"] + group_cols, observed=True).sum()
+    per_trial = g[arch_cols_p].div(g["_w"], axis=0).reset_index()  # weighted mean per (trial, unit)
+
+    grouped = per_trial.groupby(group_cols, observed=True)[arch_cols_p]
+    # count columns are trial-invariant: n_precincts = number of municipalities
+    # in the unit, ballots = their sum (taken from one trial).
+    base = df[df["trial"] == df["trial"].iloc[0]]
+    counts = base.groupby(group_cols, observed=True).agg(
+        n_precincts=(arch_cols_p[0], "size"), **{BALLOT_COL: (BALLOT_COL, "sum")}
+    )
+    mean_agg = grouped.mean().join(counts).reset_index()
+    std_agg = grouped.std(ddof=1).join(counts).reset_index()
 
     agg_cols = {c: "mean" for c in arch_cols_p}
     agg_cols.update({BALLOT_COL: "first", "n_precincts": "first"})
-    mean_muni = (
-        df.groupby(MUNI_COLS, observed=True).agg(agg_cols).reset_index()
-    )
+    mean_muni = df.groupby(MUNI_COLS, observed=True).agg(agg_cols).reset_index()
     return mean_agg, std_agg, mean_muni
 
 

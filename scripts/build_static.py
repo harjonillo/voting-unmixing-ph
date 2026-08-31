@@ -74,7 +74,6 @@ WEIGHTINGS = [True, False]  # ballot-weighted / plain mean
 BALLOT_COL = "information.numberOfValidBallot"
 VOTERS_COL = "information.numberOfActuallyVoters"
 REGISTERED_COL = "information.numberOfRegisteredVoters"
-MUNI_COLS = ["REGION", "PROVINCE", "CITY_MUNICIPALITY"]
 
 # Display simplification, matching app/components/map.py.
 SIMPLIFY_TOLERANCE = {"municipality": 0.001}
@@ -247,61 +246,62 @@ def theme_payload(arch_counts: set[int]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Sweep baking (mirror of app.components.data.sweep_level_stats).
+# Sweep baking — reads the per-level trial stats precomputed by run_sweep.py
+# (level_stats.parquet) and serializes them; no aggregation happens here.
 # ---------------------------------------------------------------------------
 
 
-def sweep_level_stats(entry: dict, level: str, weighted: bool):
-    """(mean_agg, std_agg, mean_muni) across trials at `level` for one sweep p."""
-    df = entry["agg_trials"]
-    arch_cols_p = [c for c in df.columns if c.startswith("arch_")]
-    weight_col = BALLOT_COL if weighted else None
+def load_level_stats(cfg, p: int) -> pd.DataFrame:
+    """The long-format per-level trial mean/std for sweep p, written by
+    scripts/run_sweep.py:level_stats_from_trials."""
+    from src.config import processed_path
 
-    per_trial = []
-    for t, g in df.groupby("trial", observed=True):
-        a = aggregate_abundances(
-            g, level=level, arch_cols=arch_cols_p, weight_col=weight_col
+    path = processed_path(cfg, "sweep", f"p{p}", "level_stats.parquet")
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Missing {path}. Re-run `python scripts/run_sweep.py "
+            "--config configs/config_<year>.ini` — it now writes the per-level "
+            "trial stats the site build serializes."
         )
-        a["trial"] = t
-        per_trial.append(a)
-    stacked = pd.concat(per_trial, ignore_index=True).drop(columns="trial")
+    return pd.read_parquet(path)
 
+
+def _level_frame(level_stats: pd.DataFrame, level: str, weighted: bool, stat: str,
+                 arch_cols: list[str], keep_counts: bool) -> pd.DataFrame:
+    """Slice one (level, weighting, stat) table out of the long-format stats,
+    keeping only that level's key columns (and, optionally, the count columns)."""
     group_cols = LEVEL_COLS[level]
-    grouped = stacked.groupby(group_cols, observed=True)
-    mean_agg = grouped.mean(numeric_only=True).reset_index()
-    std_only = grouped[arch_cols_p].std(ddof=1).reset_index()
-    std_agg = mean_agg.copy()
-    for c in arch_cols_p:
-        std_agg[c] = std_only[c].to_numpy()
-
-    agg_cols = {c: "mean" for c in arch_cols_p}
-    agg_cols.update({BALLOT_COL: "first", "n_precincts": "first"})
-    mean_muni = df.groupby(MUNI_COLS, observed=True).agg(agg_cols).reset_index()
-    return mean_agg, std_agg, mean_muni
+    cols = group_cols + (["n_precincts", BALLOT_COL] if keep_counts else []) + arch_cols
+    sel = level_stats[
+        (level_stats["level"] == level)
+        & (level_stats["weighted"] == weighted)
+        & (level_stats["stat"] == stat)
+    ]
+    return sel[cols].reset_index(drop=True)
 
 
-def sweep_records(mean_agg, std_agg, arch_cols, level, weighted,
-                  provinces, municipalities, mean_muni):
-    """(mean_records, std_records) for one sweep (p, level, weighting).
+def sweep_records(level_stats, arch_cols, level, weighted, provinces, municipalities):
+    """(mean_records, std_records) for one sweep (p, level, weighting), keyed to
+    the GeoJSON feature ids.
 
-    Mean and std share identical units/geometry, so the boundary join — the
-    expensive part at municipality level — is done once on a frame carrying
-    both, then split.
-    """
+    Region stats are already keyed by REGION (= the region GeoJSON feature id),
+    so they need no geometry join. Province/municipality stats are joined to the
+    boundaries to canonicalize / name-match their key; mean and std ride one
+    join together (split afterward)."""
+    mean_agg = _level_frame(level_stats, level, weighted, "mean", arch_cols, keep_counts=True)
+    std_agg = _level_frame(level_stats, level, weighted, "std", arch_cols, keep_counts=False)
+
+    if level == "region":
+        mean_recs = [_rec(str(r["REGION"]), r, arch_cols) for _, r in mean_agg.iterrows()]
+        std_recs = [_rec(str(r["REGION"]), r, arch_cols) for _, r in std_agg.iterrows()]
+        return mean_recs, std_recs
+
     group_cols = LEVEL_COLS[level]
     std_cols = {c: c + "__std" for c in arch_cols}
     combined = mean_agg.merge(
         std_agg[group_cols + arch_cols].rename(columns=std_cols), on=group_cols
     )
-
-    if level == "region":
-        agg_prov = aggregate_abundances(
-            mean_muni, level="province", arch_cols=arch_cols,
-            weight_col=(BALLOT_COL if weighted else None),
-        )
-        gdf, _ = join_regions(agg_prov, provinces, combined)
-        key_col = "REGION"
-    elif level == "province":
+    if level == "province":
         gdf, _ = join_provinces(combined, provinces)
         key_col = "PROV_KEY"
     else:
@@ -311,14 +311,14 @@ def sweep_records(mean_agg, std_agg, arch_cols, level, weighted,
     keys = feature_key(gdf, key_col).tolist()
     mean_recs, std_recs = [], []
     for i, (_, row) in enumerate(gdf.iterrows()):
-        mrec = {"id": keys[i]}
-        srec = {"id": keys[i]}
-        for c in arch_cols:
-            mrec[c] = _round(row.get(c), ARCH_ROUND)
-            srec[c] = _round(row.get(c + "__std"), ARCH_ROUND)
-        mean_recs.append(mrec)
-        std_recs.append(srec)
+        keys_i = keys[i]
+        mean_recs.append({"id": keys_i, **{c: _round(row.get(c), ARCH_ROUND) for c in arch_cols}})
+        std_recs.append({"id": keys_i, **{c: _round(row.get(c + "__std"), ARCH_ROUND) for c in arch_cols}})
     return mean_recs, std_recs
+
+
+def _rec(key: str, row, arch_cols) -> dict:
+    return {"id": key, **{c: _round(row[c], ARCH_ROUND) for c in arch_cols}}
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +410,7 @@ def build(out: Path, verify: bool) -> None:
             arch_counts.add(p)  # the comparison tab colors p-archetype loadings
             arch_cols_p = [f"arch_{j}" for j in range(p)]
             lm, ls = entry["loadings_mean"], entry["loadings_std"]
+            level_stats = load_level_stats(cfg, p)  # precomputed by run_sweep.py
             sw = {
                 "year": year,
                 "p": p,
@@ -422,10 +423,8 @@ def build(out: Path, verify: bool) -> None:
             for level in LEVELS:
                 lvl = {}
                 for weighted in WEIGHTINGS:
-                    mean_agg, std_agg, mean_muni = sweep_level_stats(entry, level, weighted)
                     mean_recs, std_recs = sweep_records(
-                        mean_agg, std_agg, arch_cols_p, level, weighted,
-                        provinces, municipalities, mean_muni,
+                        level_stats, arch_cols_p, level, weighted, provinces, municipalities
                     )
                     lvl[w_tag(weighted)] = {"mean": mean_recs, "std": std_recs}
                 sw["levels"][level] = lvl

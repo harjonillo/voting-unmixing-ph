@@ -43,6 +43,54 @@ from src.unmixing import mvsa, sunsal_mod, match_to_reference
 MUNI_COLS = ["REGION", "PROVINCE", "CITY_MUNICIPALITY"]
 WEIGHT_COL = "information.numberOfValidBallot"
 
+# Grouping columns for each aggregation level the app exposes (a prefix of
+# MUNI_COLS). The site build reads the per-level stats written below instead of
+# re-deriving them from the per-trial municipality table.
+LEVEL_COLS = {
+    "region": ["REGION"],
+    "province": ["REGION", "PROVINCE"],
+    "municipality": ["REGION", "PROVINCE", "CITY_MUNICIPALITY"],
+}
+
+
+def level_stats_from_trials(agg_trials: pd.DataFrame, arch_cols: list[str]) -> pd.DataFrame:
+    """Trial mean/std of abundances at each aggregation level and weighting.
+
+    From the per-trial municipality table, re-aggregate to region / province /
+    municipality (ballot-weighted and unweighted) per trial — weighted mean =
+    sum(arch*w) / sum(w) per (trial, unit) — then take mean and std across
+    trials. Vectorized. Returns one long-format frame the site build reads:
+
+        columns: level, weighted, stat, REGION, PROVINCE, CITY_MUNICIPALITY,
+                 n_precincts, <WEIGHT_COL>, arch_0 ... arch_{p-1}
+
+    Rows carry only the key columns their level uses (finer ones are NaN);
+    ``n_precincts`` is the number of municipalities in the unit and the weight
+    column their summed ballots (both trial-invariant).
+    """
+    frames = []
+    for level, gcols in LEVEL_COLS.items():
+        base = agg_trials[agg_trials["trial"] == agg_trials["trial"].iloc[0]]
+        counts = base.groupby(gcols, observed=True).agg(
+            n_precincts=(arch_cols[0], "size"), **{WEIGHT_COL: (WEIGHT_COL, "sum")}
+        )
+        for weighted in (True, False):
+            w = agg_trials[WEIGHT_COL].to_numpy(float) if weighted else np.ones(len(agg_trials))
+            work = agg_trials[["trial"] + gcols].copy()
+            for c in arch_cols:
+                work[c] = agg_trials[c].to_numpy() * w
+            work["_w"] = w
+            g = work.groupby(["trial"] + gcols, observed=True).sum()
+            per_trial = g[arch_cols].div(g["_w"], axis=0).reset_index()
+            grouped = per_trial.groupby(gcols, observed=True)[arch_cols]
+            for stat, values in (("mean", grouped.mean()), ("std", grouped.std(ddof=1))):
+                out = values.join(counts).reset_index()
+                out.insert(0, "stat", stat)
+                out.insert(0, "weighted", weighted)
+                out.insert(0, "level", level)
+                frames.append(out)
+    return pd.concat(frames, ignore_index=True)
+
 
 def run_one_trial(Y, p, seed, mvsa_mm_iters, sunsal_al_iters, sunsal_tol):
     np.random.seed(seed)
@@ -161,6 +209,11 @@ def main():
             columns=arch_cols
         ).rename_axis("candidate").to_csv(out / "loadings_std.csv")
         agg_trials.to_parquet(out / "agg_municipality_trials.parquet", index=False)
+        # Per-level trial mean/std the site build serializes (so build_static.py
+        # reads these instead of re-aggregating the trials itself).
+        level_stats_from_trials(agg_trials, arch_cols).to_parquet(
+            out / "level_stats.parquet", index=False
+        )
         df_ref.to_parquet(out / "abundances_ref.parquet", index=False)
         with open(out / "meta.json", "w") as f:
             json.dump({
