@@ -1,8 +1,9 @@
 # Runtime dependencies for the Streamlit app.
 #
-# Used both by the stlite build (mirrored in scripts/build_stlite.py's
-# REQUIREMENTS) and as a ready-made file if the app is ever hosted on a server
-# (e.g. Streamlit Community Cloud), where `streamlit` must be listed too.
+# Also the build-time deps for the static site: the deploy-static.yml workflow
+# installs this file (plus python-fasthtml) to run scripts/build_static.py and
+# scripts/build_site.py. `streamlit` is only needed to run app/streamlit_app.py
+# directly (e.g. a server host); the static build does not import it.
 streamlit
 geopandas
 pyarrow

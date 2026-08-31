@@ -1,6 +1,6 @@
 """Bake the voting-archetype explorer into a fully static dataset.
 
-The Streamlit / stlite app does no on-demand computation beyond cheap pandas
+The Streamlit app does no on-demand computation beyond cheap pandas
 aggregation, argmax, a tiny Hungarian match, a geo-join and Plotly rendering
 (see the migration plan). The user's input space is small and enumerable, so
 this script pre-computes every combination offline and writes plain JSON +
