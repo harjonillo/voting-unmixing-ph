@@ -194,15 +194,38 @@ async function renderLineage(divId) {
   const lin = await getJSON(lineageURL(state.year)).catch(() => null);
   if (!lin) { host.textContent = ""; return; }
   const hi = MANIFEST.theme.highlight;
+  // Node label: continuation nodes keep the (usually inherited) top candidate;
+  // split-off children instead show "△<emerging candidate>" — the candidate that
+  // most distinguishes them from the parent — since repeating the parent's leader
+  // there says nothing about the split. Full composition lives in the hover.
+  const nodeLabel = (n) =>
+    n.is_split && n.diff
+      ? `p${n.p}·A${n.k} △${n.diff[0]}`
+      : `p${n.p}·A${n.k} ${n.label}`;
+  const nodeHover = (n) => {
+    const rows = n.top.map(([name, v], i) => `${i + 1}. ${name} — ${v}`).join("<br>");
+    const diff = n.diff ? `<br><b>vs parent:</b> +${n.diff[1]} ${n.diff[0]}` : "";
+    const tag = n.is_split ? " · split-off" : "";
+    return `<b>p=${n.p} · Archetype ${n.k}${tag}</b><br>${rows}${diff}`;
+  };
+  const linkHover = (l) => {
+    const t = lin.nodes[l.target];
+    const kind = l.split && t.diff
+      ? `splits off — emerging: <b>${t.diff[0]}</b>`
+      : "continues";
+    return `${kind}<br>similarity ${l.similarity}`;
+  };
   const trace = {
     type: "sankey",
     arrangement: "fixed",
     node: {
-      label: lin.nodes.map((n) => `p${n.p}·A${n.k} ${n.label}`),
+      label: lin.nodes.map(nodeLabel),
       x: lin.nodes.map((n) => n.x),
       y: lin.nodes.map((n) => n.y),
       pad: 8, thickness: 12,
       color: lin.nodes.map((n) => hexToRgba(archColor(`arch_${n.k}`, n.p), 0.85)),
+      customdata: lin.nodes.map(nodeHover),
+      hovertemplate: "%{customdata}<extra></extra>",
     },
     link: {
       source: lin.links.map((l) => l.source),
@@ -211,8 +234,8 @@ async function renderLineage(divId) {
       value: lin.links.map((l) => Math.max(l.similarity, 0.05)),
       color: lin.links.map((l) =>
         l.split ? hexToRgba(hi, 0.55) : "rgba(100,120,160,0.35)"),
-      customdata: lin.links.map((l) => l.similarity),
-      hovertemplate: "similarity %{customdata}<extra></extra>",
+      customdata: lin.links.map(linkHover),
+      hovertemplate: "%{customdata}<extra></extra>",
     },
   };
   Plotly.react(divId, [trace], {

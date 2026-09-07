@@ -332,11 +332,21 @@ def _rec(key: str, row, arch_cols) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _clean_name(name: object) -> str:
+    """Shorten a candidate label for display (drop party bracket / trailing bits)."""
+    return str(name).split(" [")[0].split(",")[0].title()
+
+
 def _top_candidate(loadings_mean: pd.DataFrame, k: int) -> str:
     """The candidate with the largest loading in archetype column k, cleaned up
     for a short node label (matches the Streamlit lineage node labels)."""
-    top = str(loadings_mean.iloc[:, k].idxmax())
-    return top.split(" [")[0].split(",")[0].title()
+    return _clean_name(loadings_mean.iloc[:, k].idxmax())
+
+
+def _top_candidates(loadings_mean: pd.DataFrame, k: int, n: int = 5) -> list[list]:
+    """Top-n [name, loading] pairs for archetype column k (hover detail)."""
+    col = loadings_mean.iloc[:, k].sort_values(ascending=False).head(n)
+    return [[_clean_name(name), round(float(v), 3)] for name, v in col.items()]
 
 
 def build_lineage(year: str, sweep: dict) -> dict:
@@ -345,6 +355,12 @@ def build_lineage(year: str, sweep: dict) -> dict:
     ps = sorted(sweep)
     edges = archetype_lineage({p: sweep[p]["loadings_mean"].to_numpy() for p in ps})
 
+    # Each p+1 node has exactly one parent (Hungarian match, or best-similarity
+    # parent for the split-off child), so we can describe every node by what
+    # distinguishes it from that parent — the candidate whose loading grew most.
+    parent_of = {(e["p_to"], e["k_to"]): (e["p_from"], e["k_from"]) for e in edges}
+    split_targets = {(e["p_to"], e["k_to"]) for e in edges if e["split"]}
+
     node_index: dict[tuple[int, int], int] = {}
     nodes: list[dict] = []
     span = max(len(ps) - 1, 1)
@@ -352,10 +368,21 @@ def build_lineage(year: str, sweep: dict) -> dict:
         lm = sweep[p]["loadings_mean"]
         for k in range(p):
             node_index[(p, k)] = len(nodes)
+            # Distinguishing candidate: largest loading gain vs the parent column
+            # (None for the p=2 roots, which have no parent). Candidate index is
+            # shared across p, so the subtraction aligns by name.
+            diff = None
+            par = parent_of.get((p, k))
+            if par is not None:
+                gain = lm.iloc[:, k].sub(sweep[par[0]]["loadings_mean"].iloc[:, par[1]])
+                diff = [_clean_name(gain.idxmax()), round(float(gain.max()), 3)]
             nodes.append({
                 "p": p,
                 "k": k,
                 "label": _top_candidate(lm, k),
+                "top": _top_candidates(lm, k),
+                "diff": diff,
+                "is_split": (p, k) in split_targets,
                 # Nudge columns inside (0, 1) so Plotly's fixed arrangement does
                 # not clip the first/last columns against the plot edges.
                 "x": round(0.04 + 0.92 * (pi / span), 4),
