@@ -332,44 +332,112 @@ def _rec(key: str, row, arch_cols) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _clean_name(name: object) -> str:
+    """Shorten a candidate label for display (drop party bracket / trailing bits)."""
+    return str(name).split(" [")[0].split(",")[0].title()
+
+
 def _top_candidate(loadings_mean: pd.DataFrame, k: int) -> str:
     """The candidate with the largest loading in archetype column k, cleaned up
     for a short node label (matches the Streamlit lineage node labels)."""
-    top = str(loadings_mean.iloc[:, k].idxmax())
-    return top.split(" [")[0].split(",")[0].title()
+    return _clean_name(loadings_mean.iloc[:, k].idxmax())
+
+
+def _emerging_candidate(sweep: dict, child: tuple, parent: tuple) -> str:
+    """Candidate whose loading grows the most from ``parent`` to ``child`` — what
+    the split-off branch is about. Candidate index is shared across p, so the
+    subtraction aligns by name."""
+    c = sweep[child[0]]["loadings_mean"].iloc[:, child[1]]
+    p = sweep[parent[0]]["loadings_mean"].iloc[:, parent[1]]
+    return _clean_name(c.sub(p).idxmax())
 
 
 def build_lineage(year: str, sweep: dict) -> dict:
-    """Sankey nodes/links tracing how archetypes split as p grows across the
-    sweep. Independent of level/weighting — driven only by loadings_mean."""
+    """Dendrogram of how archetypes split as p grows across the sweep. The
+    lineage is a growing binary tree (Hungarian-matched continuations plus one
+    split-off child per step), so we lay it out as a rectangular tree: x = p,
+    y = leaf-ordered tree position. Independent of level/weighting."""
     ps = sorted(sweep)
     edges = archetype_lineage({p: sweep[p]["loadings_mean"].to_numpy() for p in ps})
+    min_p, max_p = ps[0], ps[-1]
 
     node_index: dict[tuple[int, int], int] = {}
     nodes: list[dict] = []
-    span = max(len(ps) - 1, 1)
-    for pi, p in enumerate(ps):
+    for p in ps:
         lm = sweep[p]["loadings_mean"]
+        # Assign each candidate to its argmax archetype (its "home" at this p) so
+        # every senator has exactly one position per column — the basis for the
+        # flow lines. Each node lists its home members, ranked by loading.
+        home = np.asarray(lm.values).argmax(axis=1)
         for k in range(p):
             node_index[(p, k)] = len(nodes)
+            col = lm.iloc[:, k]
+            members = sorted(
+                ((lm.index[i], float(col.iloc[i]))
+                 for i in range(len(lm.index)) if home[i] == k),
+                key=lambda t: -t[1],
+            )[:10]
             nodes.append({
-                "p": p,
-                "k": k,
-                "label": _top_candidate(lm, k),
-                # Nudge columns inside (0, 1) so Plotly's fixed arrangement does
-                # not clip the first/last columns against the plot edges.
-                "x": round(0.04 + 0.92 * (pi / span), 4),
-                "y": round((k + 0.5) / p, 4),
+                "p": p, "k": k, "label": _top_candidate(lm, k),
+                "members": [[_clean_name(nm), round(v, 3)] for nm, v in members],
             })
 
-    links = [{
-        "source": node_index[(e["p_from"], e["k_from"])],
-        "target": node_index[(e["p_to"], e["k_to"])],
-        "similarity": round(e["similarity"], 3),
-        "split": bool(e["split"]),
-    } for e in edges]
+    # Tree structure keyed by (p, k): every node has one continuation child, and
+    # one node per step also gains the split-off child.
+    children: dict[tuple, list[tuple]] = {(n["p"], n["k"]): [] for n in nodes}
+    for e in edges:
+        children[(e["p_from"], e["k_from"])].append(
+            ((e["p_to"], e["k_to"]), bool(e["split"])))
 
-    return {"year": year, "ps": ps, "nodes": nodes, "links": links}
+    # Leaf order via DFS from the p=min_p roots, continuation child before the
+    # split-off child, so sibling subtrees stay contiguous (no crossings).
+    leaf_order: list[tuple] = []
+
+    def dfs(node: tuple) -> None:
+        ch = sorted(children[node], key=lambda c: c[1])  # continuations first
+        if not ch:
+            leaf_order.append(node)
+            return
+        for cnode, _ in ch:
+            dfs(cnode)
+
+    for k in range(min_p):
+        dfs((min_p, k))
+    leaf_y = {leaf: i for i, leaf in enumerate(leaf_order)}
+
+    # y = mean of children's y (post-order); a leaf takes its slot index. Pure
+    # continuation chains therefore inherit their leaf's y and stay horizontal.
+    y_of: dict[tuple, float] = {}
+
+    def compute_y(node: tuple) -> float:
+        if node in y_of:
+            return y_of[node]
+        ch = children[node]
+        y = float(leaf_y[node]) if not ch else \
+            sum(compute_y(c[0]) for c in ch) / len(ch)
+        y_of[node] = y
+        return y
+
+    for n in nodes:
+        node = (n["p"], n["k"])
+        n["x"] = n["p"]
+        n["y"] = round(compute_y(node), 4)
+        n["is_leaf"] = n["p"] == max_p
+        n["is_root"] = n["p"] == min_p
+
+    links = []
+    for e in edges:
+        src, dst = (e["p_from"], e["k_from"]), (e["p_to"], e["k_to"])
+        link = {
+            "source": node_index[src], "target": node_index[dst],
+            "similarity": round(e["similarity"], 3), "split": bool(e["split"]),
+        }
+        if e["split"]:
+            link["emerging"] = _emerging_candidate(sweep, dst, src)
+        links.append(link)
+
+    return {"year": year, "ps": ps, "min_p": min_p, "max_p": max_p,
+            "nodes": nodes, "links": links}
 
 
 # ---------------------------------------------------------------------------

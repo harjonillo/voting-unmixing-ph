@@ -29,7 +29,7 @@ let MANIFEST = null;
 const state = {
   year: null, level: "province", weighted: true, topN: 5, tab: "map",
   map: { quantity: "Archetype abundance", arch: "arch_0" },
-  cmp: { p: 5, arch: "arch_0", stat: "mean", topN: 15 },
+  cmp: { p: 5, arch: "arch_0", stat: "mean", topN: 15, linTopN: 8, linFlows: true },
 };
 
 // --------------------------------------------------------------------- theme
@@ -187,38 +187,146 @@ async function renderMap() {
     "Candidate weights per endmember (MVSA, national-level). " + cap);
 }
 
-// Sankey of how archetypes split as p grows across the whole sweep (mirror of
-// the Streamlit tab's _render_lineage). Independent of p/level/weighting.
+// d3.cluster tree of how archetypes split as the endmember count p grows, drawn
+// left→right (depth = p). Each node lists its top-N senators (by loading, home =
+// argmax archetype), coloured by archetype; a senator new to a node vs its parent
+// is bold with a "+", so the exchange reads down each branch. Split-off nodes get
+// a "△ <candidate>" header. Rendered with D3/SVG, not Plotly. Independent of
+// p/level/weighting.
 async function renderLineage(divId) {
   const host = document.getElementById(divId);
   const lin = await getJSON(lineageURL(state.year)).catch(() => null);
   if (!lin) { host.textContent = ""; return; }
   const hi = MANIFEST.theme.highlight;
-  const trace = {
-    type: "sankey",
-    arrangement: "fixed",
-    node: {
-      label: lin.nodes.map((n) => `p${n.p}·A${n.k} ${n.label}`),
-      x: lin.nodes.map((n) => n.x),
-      y: lin.nodes.map((n) => n.y),
-      pad: 8, thickness: 12,
-      color: lin.nodes.map((n) => hexToRgba(archColor(`arch_${n.k}`, n.p), 0.85)),
-    },
-    link: {
-      source: lin.links.map((l) => l.source),
-      target: lin.links.map((l) => l.target),
-      // clamp so near-zero-similarity links stay visible as thin ribbons
-      value: lin.links.map((l) => Math.max(l.similarity, 0.05)),
-      color: lin.links.map((l) =>
-        l.split ? hexToRgba(hi, 0.55) : "rgba(100,120,160,0.35)"),
-      customdata: lin.links.map((l) => l.similarity),
-      hovertemplate: "similarity %{customdata}<extra></extra>",
-    },
-  };
-  Plotly.react(divId, [trace], {
-    height: 480, margin: { l: 10, r: 10, t: 10, b: 10 },
-    paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
-  }, PLOTLY_CFG);
+  const nodes = lin.nodes;
+  const N = Math.max(5, Math.min(10, state.cmp.linTopN || 8));
+
+  // Lineage tree from the links: parent/children, plus split targets + their
+  // emerging candidate. Roots (p = min_p) have no parent.
+  const childrenOf = new Map(), parentOf = new Map();
+  const isSplit = new Set(), emergingOf = new Map();
+  for (const l of lin.links) {
+    if (!childrenOf.has(l.source)) childrenOf.set(l.source, []);
+    childrenOf.get(l.source).push(l.target);
+    parentOf.set(l.target, l.source);
+    if (l.split) { isSplit.add(l.target); emergingOf.set(l.target, l.emerging); }
+  }
+  const rootIdxs = nodes.map((_, i) => i).filter((i) => !parentOf.has(i));
+  const toTree = (i) => ({ idx: i, children: (childrenOf.get(i) || []).map(toTree) });
+  // Synthetic root ties the (usually two) p=min_p roots into one hierarchy.
+  const root = d3.hierarchy({ idx: -1, children: rootIdxs.map(toTree) });
+
+  // Layout: each node gets a vertical block of N rows; depth spreads horizontally.
+  const rowPx = 15, colPx = 210, half = ((N - 1) / 2) * rowPx;
+  const blockPx = (N + 1.5) * rowPx;
+  d3.cluster().nodeSize([blockPx, colPx]).separation(() => 1)(root);
+
+  const reals = root.descendants().filter((d) => d.data.idx >= 0);
+  const xs = reals.map((d) => d.x);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const margin = { top: 42, right: 170, bottom: 20, left: 30 };
+  const offsetY = margin.top + half + rowPx - minX;      // header room above top block
+  const SX = (d) => margin.left + (d.y - colPx);         // real roots (depth 1) → left
+  const SY = (d) => d.x + offsetY;
+  const width = margin.left + (lin.max_p - lin.min_p) * colPx + margin.right;
+  const height = maxX + offsetY + half + margin.bottom;
+
+  host.innerHTML = "";
+  host.style.overflowX = "auto";
+  const svg = d3.select(host).append("svg")
+    .attr("width", width).attr("height", height)
+    .style("font-family", "'IBM Plex Sans', system-ui, sans-serif");
+
+  // parent→child links (skip the synthetic-root links); split arms highlighted.
+  const linkGen = d3.linkHorizontal().x(SX).y(SY);
+  svg.append("g").attr("fill", "none")
+    .selectAll("path")
+    .data(root.links().filter((l) => l.source.data.idx >= 0))
+    .join("path")
+    .attr("d", linkGen)
+    .attr("stroke", (l) => (isSplit.has(l.target.data.idx) ? hi : "rgba(120,130,150,0.45)"))
+    .attr("stroke-width", (l) => (isSplit.has(l.target.data.idx) ? 2 : 1.2));
+
+  // Senator flows (toggle): thread each senator from its row in column p to its
+  // row in p+1. Threads that follow a tree edge (parent→child) bundle along the
+  // branch; cross-lineage jumps — which the tree cannot represent — peel off as
+  // highlighted crossing lines.
+  if (state.cmp.linFlows) {
+    const hnode = new Map();
+    reals.forEach((d) => hnode.set(d.data.idx, d));
+    const memCountOf = (i) => Math.min(nodes[i].members.length, N);
+    const rowAbs = (i, r) => {                       // absolute (x,y) of member row r
+      const d = hnode.get(i);
+      return { x: SX(d), y: SY(d) - ((memCountOf(i) - 1) / 2) * rowPx + r * rowPx };
+    };
+    const childSet = new Map();
+    for (const [s, cs] of childrenOf) childSet.set(s, new Set(cs));
+    const posCol = new Map();                        // p -> Map(name -> {idx, r})
+    nodes.forEach((n, i) => {
+      if (!posCol.has(n.p)) posCol.set(n.p, new Map());
+      const m = posCol.get(n.p);
+      n.members.slice(0, N).forEach(([name], r) => m.set(name, { idx: i, r }));
+    });
+
+    const OUT = 95;                                  // start x past the name text
+    const along = [], jump = [];
+    for (let pi = 0; pi < lin.ps.length - 1; pi++) {
+      const A = posCol.get(lin.ps[pi]), B = posCol.get(lin.ps[pi + 1]);
+      if (!A || !B) continue;
+      for (const [name, a] of A) {
+        const b = B.get(name);
+        if (!b) continue;
+        const s = rowAbs(a.idx, a.r), t = rowAbs(b.idx, b.r);
+        const sx = s.x + OUT, tx = t.x - 4, c = (tx - sx) * 0.5;
+        const rec = {
+          d: `M${sx},${s.y}C${sx + c},${s.y} ${tx - c},${t.y} ${tx},${t.y}`,
+          color: archColor(`arch_${nodes[a.idx].k}`, nodes[a.idx].p),
+        };
+        ((childSet.get(a.idx) || new Set()).has(b.idx) ? along : jump).push(rec);
+      }
+    }
+    const tg = svg.append("g").attr("fill", "none");
+    tg.selectAll("path.along").data(along).join("path")
+      .attr("d", (r) => r.d).attr("stroke", (r) => hexToRgba(r.color, 0.28))
+      .attr("stroke-width", 1);
+    tg.selectAll("path.jump").data(jump).join("path")   // drawn on top
+      .attr("d", (r) => r.d).attr("stroke", hexToRgba(hi, 0.9))
+      .attr("stroke-width", 1.6);
+  }
+
+  // p-axis labels aligned to each column.
+  const axis = svg.append("g")
+    .attr("fill", "#888").attr("font-size", 11).attr("text-anchor", "start");
+  for (let p = lin.min_p; p <= lin.max_p; p++) {
+    axis.append("text").attr("x", margin.left + (p - lin.min_p) * colPx)
+      .attr("y", 18).text(`p = ${p}`);
+  }
+
+  // nodes: marker + ranked senator list, new-vs-inherited marked.
+  svg.append("g").selectAll("g").data(reals).join("g")
+    .attr("transform", (d) => `translate(${SX(d)},${SY(d)})`)
+    .each(function (d) {
+      const g = d3.select(this), idx = d.data.idx, nd = nodes[idx];
+      const color = archColor(`arch_${nd.k}`, nd.p);
+      const parentNames = parentOf.has(idx)
+        ? new Set(nodes[parentOf.get(idx)].members.slice(0, N).map((m) => m[0]))
+        : null;
+      const mem = nd.members.slice(0, N);
+      const startY = -((mem.length - 1) / 2) * rowPx;
+      g.append("circle").attr("r", 3).attr("fill", color);
+      if (isSplit.has(idx)) {
+        g.append("text").attr("x", 8).attr("y", startY - rowPx)
+          .attr("fill", hi).attr("font-size", 11).attr("font-weight", 600)
+          .text(`△ ${emergingOf.get(idx)}`);
+      }
+      mem.forEach(([name], r) => {
+        const isNew = parentNames && !parentNames.has(name);
+        g.append("text").attr("x", 8).attr("y", startY + r * rowPx).attr("dy", "0.32em")
+          .attr("fill", color).attr("font-size", 10)
+          .attr("font-weight", isNew ? 700 : 400)
+          .text(isNew ? `+ ${name}` : name);
+      });
+    });
 }
 
 // ----------------------------------------------------------------- tab: compare
@@ -371,6 +479,12 @@ async function init() {
   });
   document.getElementById("cmp-topN").addEventListener("change", (e) => {
     state.cmp.topN = +e.target.value; renderActive();
+  });
+  document.getElementById("lineage-topN").addEventListener("change", (e) => {
+    state.cmp.linTopN = +e.target.value; renderLineage("cmp-lineage");
+  });
+  document.getElementById("lineage-flows").addEventListener("change", (e) => {
+    state.cmp.linFlows = e.target.checked; renderLineage("cmp-lineage");
   });
   for (const [t, id] of [["map", "tabbtn-map"], ["compare", "tabbtn-compare"], ["dist", "tabbtn-dist"]]) {
     document.getElementById(id).addEventListener("click", () => switchTab(t));

@@ -37,6 +37,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WEB = REPO_ROOT / "web"
 
 PLOTLY_CDN = "https://cdn.plot.ly/plotly-3.0.1.min.js"
+D3_CDN = "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"
 TAILWIND_CDN = "https://cdn.tailwindcss.com"
 DAISYUI_CDN = "https://cdn.jsdelivr.net/npm/daisyui@4/dist/full.min.css"
 DAISY_THEME = "light"  # any daisyUI theme name (light = the daisyUI-site default)
@@ -111,11 +112,24 @@ def tab_compare() -> Section:
           "The map follows the sidebar level and weighting.", cls="text-sm opacity-60 mb-3"),
         card(
             H2("Archetype lineage", cls="text-sm font-semibold mb-1"),
-            P("How archetypes split as the endmember count p grows (2 → 3 → "
-              "…). Consecutive p are cosine-matched; a highlighted link marks the "
-              "archetype that splits off when p increases by one. Each node is labelled "
-              "with its top-loading candidate; ribbon width ≈ match similarity.",
+            P("A cluster tree of how archetypes split as the endmember count p grows "
+              "(2 → 3 → …), left to right. Each node lists its top senators (by loading); "
+              "a senator new to that node vs its parent is bold with a “+”, so you read "
+              "the exchange down each branch. A “△ name” header marks the candidate a "
+              "newly split-off archetype is built around.",
               cls="text-sm opacity-60 mb-2"),
+            Div(
+                labeled("Senators per node",
+                        Input(type="number", id="lineage-topN", min=5, max=10,
+                              value=8, step=1, cls=f"{INPUT} w-24")),
+                Label(
+                    Input(type="checkbox", id="lineage-flows", checked=True,
+                          cls="checkbox checkbox-sm"),
+                    Span("Senator flows", cls="text-sm"),
+                    cls="flex items-center gap-2 cursor-pointer",
+                ),
+                cls="flex flex-wrap gap-4 items-end mb-2",
+            ),
             Div(id="cmp-lineage"),
             span="mb-4",
         ),
@@ -162,6 +176,7 @@ def page() -> Html:
             Script(src=TAILWIND_CDN),
             Link(rel="stylesheet", href="./styles.css"),  # our overrides, after Tailwind/daisyUI
             Script(src=PLOTLY_CDN),
+            Script(src=D3_CDN),  # lineage tab renders a d3.cluster tree
         ),
         Body(
             Div(
