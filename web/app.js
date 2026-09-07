@@ -78,7 +78,7 @@ const sweepURL = (year, p) => `${DATA}/sweep/${year}_p${p}.json`;
 const lineageURL = (year) => `${DATA}/lineage/${year}.json`;
 
 // -------------------------------------------------------------- chart helpers
-function choropleth(divId, geo, records, colorFn, colorbarTitle, discrete) {
+function choropleth(divId, geo, records, colorFn, discrete) {
   // colorFn: record -> number|null (null = leave unit uncolored)
   const ids = [], z = [], text = [];
   for (const rec of records) {
@@ -86,18 +86,25 @@ function choropleth(divId, geo, records, colorFn, colorbarTitle, discrete) {
     if (v === null || v === undefined || Number.isNaN(v)) continue;
     ids.push(rec.id); z.push(v); text.push(rec.id);
   }
+  // Shared compact colorbar (no title, thin, pulled to the right edge so it
+  // overlays the ocean rather than reserving a white strip the map could use).
+  // The dominant-archetype case passes its own tick config in discrete.colorbar,
+  // which merges on top; everything else inherits these defaults.
+  const { colorbar: cbOverrides, ...traceProps } = discrete;
+  const colorbar = {
+    thickness: 12, len: 0.85, x: 1, xanchor: "right", y: 0.5, yanchor: "middle",
+    ...(cbOverrides || {}),
+  };
   const trace = {
     type: "choroplethmap", geojson: geo, featureidkey: "id",
     locations: ids, z, text, marker: { opacity: 0.9 },
     hovertemplate: "%{text}<br>%{z}<extra></extra>",
-    ...discrete,
+    colorbar, ...traceProps,
   };
   const layout = {
     map: MAP_VIEW, height: 640, margin: { l: 0, r: 0, t: 0, b: 0 },
     paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
-    coloraxis: {},
   };
-  if (colorbarTitle) trace.colorbar = { title: { text: colorbarTitle } };
   Plotly.react(divId, [trace], layout, PLOTLY_CFG);
 }
 
@@ -130,8 +137,9 @@ function loadingsGrid(divId, payload, arch_cols, nArch, topN, title) {
     if (std) trace.error_x = { type: "data", array: order.map((o) => std[o[2]]), visible: true };
     Plotly.react(cell, [trace], {
       title: { text: archLabel(c) }, height: Math.max(300, 24 * topN),
-      margin: { l: 4, r: 4, t: 34, b: 24 }, paper_bgcolor: "rgba(0,0,0,0)",
-      plot_bgcolor: "rgba(0,0,0,0)", font: FONT, xaxis: { title: { text: "loading" } },
+      margin: { l: 4, r: 4, t: 34, b: 40 }, paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+      xaxis: { title: { text: "loading", standoff: 8 }, automargin: true },
       yaxis: { automargin: true },
     }, PLOTLY_CFG);
   }
@@ -152,28 +160,25 @@ async function renderMap() {
   fillArchSelect("map-arch", cols, state.map.arch, nArch);
 
   const kind = state.map.quantity, sel = state.map.arch;
-  let colorFn, title, discrete;
+  let colorFn, discrete;
   if (kind === "Dominant archetype") {
     const colors = palette(nArch);
     colorFn = (r) => (r.dominant == null ? null : parseInt(r.dominant, 10) + 0.5);
     discrete = {
       colorscale: discreteScale(colors), zmin: 0, zmax: nArch,
       colorbar: {
-        title: { text: "dominant" }, tickmode: "array",
+        tickmode: "array",
         tickvals: cols.map((_, i) => i + 0.5), ticktext: cols.map(archLabel),
       },
     };
-    title = null;
   } else if (kind === "Turnout") {
     colorFn = (r) => (r.turnout == null ? null : r.turnout);
     discrete = { colorscale: MANIFEST.theme.sequential };
-    title = "turnout (%)";
   } else {
     colorFn = (r) => (r[sel] == null ? null : r[sel]);
     discrete = { colorscale: MANIFEST.theme.sequential };
-    title = `mean abundance (${archLabel(sel)})`;
   }
-  choropleth("map-plot", geo, vals.records, colorFn, title, discrete);
+  choropleth("map-plot", geo, vals.records, colorFn, discrete);
 
   const cap = loadings.std
     ? "Error bars: std across the sweep's trials at this archetype count."
@@ -232,9 +237,8 @@ async function renderCompare() {
   const showStd = state.cmp.stat === "std";
   const recs = sweep.levels[level][wtag()][showStd ? "std" : "mean"];
   const sel = state.cmp.arch;
-  const stat = showStd ? "std" : "mean";
   choropleth("cmp-plot", geo, recs, (r) => (r[sel] == null ? null : r[sel]),
-    `${stat} (${archLabel(sel)})`, { colorscale: MANIFEST.theme.sequential });
+    { colorscale: MANIFEST.theme.sequential });
 
   loadingsGrid("cmp-loadings",
     { candidates: sweep.candidates, mean: sweep.loadings_mean, std: sweep.loadings_std },
