@@ -62,7 +62,7 @@ from src.unmixing.matching import archetype_lineage, match_to_reference
 # ---------------------------------------------------------------------------
 # What to bake (kept in sync with app/components/{data,constants,sidebar}.py).
 # ---------------------------------------------------------------------------
-YEARS = ["2025", "2022", "2019"]
+YEARS = ["2025", "2022", "2019", "2013"]
 DEFAULT_YEAR = YEARS[0]
 LEVELS = ["region", "province", "municipality"]  # sidebar excludes "national"
 LEVEL_LABELS = {

@@ -140,7 +140,14 @@ def main():
     # municipality grouping, shared by all trials
     muni_index = pd.MultiIndex.from_frame(pre.df_geo[MUNI_COLS])
     codes, uniques = pd.factorize(muni_index)
-    w = pre.df_geo[WEIGHT_COL].to_numpy(dtype=float)
+    # Ballot-weighted means where valid-ballot counts exist; uniform weights
+    # otherwise (e.g. 2013, whose source has no valid-ballot column) — so the
+    # weighted view collapses to the unweighted one, matching build_static's
+    # own fallback for the main tables rather than crashing.
+    if WEIGHT_COL in pre.df_geo.columns:
+        w = pre.df_geo[WEIGHT_COL].to_numpy(dtype=float)
+    else:
+        w = np.ones(len(pre.df_geo), dtype=float)
     muni_table = pd.DataFrame(list(uniques), columns=MUNI_COLS)
     muni_table["n_precincts"] = np.bincount(codes)
     muni_table[WEIGHT_COL] = np.bincount(codes, weights=w)

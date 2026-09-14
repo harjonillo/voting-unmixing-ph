@@ -114,7 +114,8 @@ gives one national table. Precinct-level granularity (not clustered precincts).
 - 33 candidate columns — the full 2013 senatorial slate (`ALCANTARA, SAMSON
   (SJS)` … `ZUBIRI, MIGZ (UNA)`), header format `SURNAME, NAME (PARTY)`.
 - Combined: **77,830 precinct rows**; precinct codes essentially unique
-  (77,829/77,830 — the one dup is a stray total row).
+  (77,829/77,830, one duplicate). No subtotal/total rows — an earlier count of
+  "98 TOTAL-like rows" was a false positive from barangays named "… GRANDE".
 
 ### How it compares to `2019/2022/2025_senators_complete.csv`
 | aspect | `*_senators_complete.csv` | this 2013 file |
@@ -128,29 +129,81 @@ gives one national table. Precinct-level granularity (not clustered precincts).
 | turnout / valid-votes stats | present | **absent** |
 | granularity | clustered precincts | individual precincts |
 
-### Data-quality issues to clean before use
-- **`Total Registered Voters` is 23% missing** (18,156 NaN, 1 zero). This is the
-  only normalization denominator available, and it's registered voters, not
-  valid ballots — so `normalization = valid_ballots` has no exact analog here.
-- **~13% of candidate vote cells are blank/non-numeric** (331,915 / 2,568,390);
-  coerce to numeric and decide fill-vs-drop.
-- **98 rows contain "TOTAL"-like text** (region/municipal subtotals mixed into
-  the data) — must be dropped.
-- Vote values range 0–975, all non-negative; per-precinct senator-vote sum ÷
-  registered voters has median ≈ 7.65 (each ballot allows up to 12 senator
-  votes) — consistent with real per-precinct senator votes.
+### Data-quality notes
+- **~18,150 rows (23%) are empty placeholder precincts** — no votes *and* no
+  registered voters (the two blanks overlap on 18,149 rows). These are not
+  precincts with missing data; among the ~59,700 vote-bearing precincts,
+  registered voters is essentially complete (only 8 zeros). So the earlier
+  framing of "23% missing registration" was really just these empty rows, which
+  the pipeline drops on its own (total votes < 1). They ARE geographically
+  skewed — as a share of each region's rows: ARMM ~65%, Region IX / CAR ~38%,
+  Region II / X ~30%, down to NCR ~9%. That skew is why a registration-based
+  normalization was rejected (it would have thinned ARMM/Mindanao/CAR); `row_max`
+  sidesteps it, and because the skew lives entirely in dropped empty rows the
+  retained precincts and their maps are not biased by it.
+- Blank candidate cells = 0 votes (filled with 0 when building the CSV).
+- Only `Total Registered Voters` is available as a size/denominator — no
+  valid-ballot or turnout stats — so `normalization = valid_ballots` has no
+  analog; the build uses `row_max` (self-contained, keeps every real precinct).
+- Vote values range 0–975; per-precinct senator-vote sum ÷ registered voters has
+  median ≈ 7.65 (a ballot allows up to 12 senator votes) — consistent with real
+  per-precinct senator votes.
 
-### To make it usable in this pipeline
-1. Read all 17 sheets (needs `xlrd>=2.0.1`; not currently in
-   `voting_unmixing_ph_env`) and concatenate.
-2. Drop the ~98 subtotal/total rows; coerce vote cells to numeric.
-3. Rename geography columns to the `REGION/PROVINCE/CITY_MUNICIPALITY/BARANGAY`
-   convention and reformat candidate headers if matching the other years.
-4. Choose a normalization denominator — only `Total Registered Voters` exists
-   (23% missing); either impute, drop those precincts, or use `row_max`/`none`
-   normalization instead of `valid_ballots`.
+### Region/province naming vs the newer years
+2013's geography strings do not match the 2019/2022/2025 conventions, which
+matters because `src/geo.py` matches on normalized names and the site derives
+region polygons from the data's own province→region map. What differs and how
+`scripts/prepare_2013_csv.py` reconciles it:
 
-**Verdict:** a solid, near-complete national per-precinct senator dataset —
-recommended as the 2013 source once cleaned. The main compromises are the
-missing valid-ballot/turnout fields (registered-voter proxy only) and the 23%
-gap in that proxy.
+- **Region codes are dotted / spaced**: `N.C.R.`, `C.A.R`, `A.R.M.M`,
+  `Region IV - A`. The other years use `NCR`, `CAR`, `BARMM`, `REGION IV-A`.
+  The builder upper-cases, strips periods, and tightens `" - "`→`"-"`, giving
+  `NCR / CAR / ARMM / REGION IV-A / …`.
+- **NCR is the load-bearing one**: `src/geo.py:canonical_province` maps a
+  province to `METROPOLITAN MANILA` *only when the region normalizes to `NCR`*.
+  Raw `N.C.R.` normalizes to `N C R` (≠ `NCR`), which would silently drop all of
+  Metro Manila from the province/region maps — hence the explicit fix.
+- **NCR province strings**: 2013 uses the long `NATIONAL CAPITAL REGION - MANILA`
+  form (same as 2019); 2025 uses `NCR - MANILA`. Both resolve via the region-based
+  NCR rule, so no per-string mapping is needed, but the municipality-level
+  Manila-district dissolve (keyed on `PROVINCE == "NCR - MANILA"`) doesn't fire
+  for 2013 — same behavior as 2019.
+- **Region set differs by era**: 2013 has `ARMM` (not `BARMM`) and labels Caraga
+  `CARAGA` (the others use `REGION XIII`), and it has no Negros Island Region.
+  Region geometry is dissolved per year from that year's province→region map, so
+  these labels stay internally consistent and need no cross-year alignment beyond
+  NCR.
+- **Provinces/municipalities** are already upper-case and match by name through
+  the existing `src/geo.py` alias/variant logic (2013-era names like
+  `COMPOSTELA VALLEY` are handled by the same `PROVINCE_ALIASES`).
+- **Match outcome**: 17 regions, 81 provinces, 1,497 municipalities join to the
+  shared shapefiles — comparable to the other years.
+
+### DONE — `2013_senators_complete.csv` built and wired into the site
+`scripts/prepare_2013_csv.py` + `configs/config_2013.ini` now produce and
+consume a 2013 dataset (reading the `.xls` needs `xlrd>=2.0.1`, now in
+`requirements.txt`):
+
+- **CSV** (`data/elections/2013_senators_complete.csv`, 77,830 rows), built by
+  `scripts/prepare_2013_csv.py`: columns `REGION, PROVINCE, CITY_MUNICIPALITY,
+  BARANGAY, CLUSTERED_PRECINCT, information.numberOfRegisteredVoters`, then 33
+  candidate columns prefixed `N. ` (so `candidate_label`'s `.`-split keeps names
+  like `ENRILE, JUAN PONCE JR.(NPC)`). `REGION` canonicalized to the other
+  years' scheme (`N.C.R.`→`NCR`, `Region IV - A`→`REGION IV-A`, …).
+- **Pipeline** (`config_2013.ini`, `sen_col_start = 6`, `normalization =
+  row_max`, `n_archetypes = 4`): filters to 31 candidates × 59,679 precincts
+  (2 fringe candidates below the 25th-pctile cut; empty rows dropped),
+  reconstruction RMSE ≈ 0.094 (row_max scale — not comparable to the
+  valid-ballot years). Top archetype loads on **POE, GRACE** (the 2013
+  topnotcher). `n_archetypes = 4` chosen over HySime's kf(=4)/2019-matching 5
+  because the sweep is far more stable at p=4 (~0.97 vs ~0.78 mean cosine).
+- **Sweep** (`run_sweep.py`) run for p2–p7. `run_sweep` now uses uniform weights
+  when no valid-ballot column exists, so 2013's weighted view equals its
+  unweighted view (matching `build_static`'s own fallback) instead of crashing.
+- **Site**: `build_static.py` `YEARS` now includes `2013`; `site/data` rebuilt
+  and the shell regenerated. The year selector picks up 2013 from the manifest.
+
+**Caveats for 2013 on the site:** no turnout layer (no actual-voter counts), and
+the ballot-weighted / unweighted map toggle shows identical maps (uniform
+weighting). Everything else — region/province/municipality maps, loadings, the
+p-sweep comparison and lineage — is populated.

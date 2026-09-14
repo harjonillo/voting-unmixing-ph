@@ -15,3 +15,5 @@ scipy
 tqdm
 pandas
 numpy
+# reading legacy .xls sources (e.g. 2013_per_precincts_senators.xls)
+xlrd>=2.0.1

@@ -82,7 +82,11 @@ def sidebar() -> Aside:
             ),
             cls="mb-4",
         ),
-        cls="w-72 shrink-0 bg-base-100 border-r border-base-300 p-4 min-h-screen",
+        # sticky/self-start so the inputs stay in view while the main column
+        # scrolls; max-h-screen + overflow-y-auto lets a tall sidebar scroll on
+        # its own instead of being clipped.
+        cls="w-72 shrink-0 bg-base-100 border-r border-base-300 p-4 "
+            "sticky top-0 self-start max-h-screen overflow-y-auto",
     )
 
 
