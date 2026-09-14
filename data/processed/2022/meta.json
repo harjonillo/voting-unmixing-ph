@@ -2,19 +2,20 @@
   "preprocessing": {
     "excluded_regions": [
       "OV",
-      "LAV"
+      "LAV",
+      "OAV"
     ],
     "sen_col_start": 17,
     "min_candidate_25th_percentile": 10.0,
     "min_precinct_votes": 10.0,
     "normalization": "valid_ballots",
     "n_candidates_before": 64,
-    "n_precincts_before": 106024
+    "n_precincts_before": 105033
   },
   "hysime_kf": 6,
   "n_archetypes": 6,
   "seed": 42,
-  "rmse": 0.05276949157837124,
+  "rmse": 0.052590678035930226,
   "candidate_labels": [
     "PADILLA, ROBIN (PDPLBN) [1]",
     "LEGARDA, LOREN (NPC) [2]",
@@ -47,8 +48,8 @@
     "DEL ROSARIO, MONSOUR (PDR) [29]",
     "BALITA, CARL (AKSYON) [30]",
     "PADILLA, DRA. MINGUITA (PDR) [31]",
-    "MARCOLETA, RODANTE (PDPLBN) [32]",
-    "PI\u00d1OL, MANNY (NPC) [33]",
+    "PI\u00d1OL, MANNY (NPC) [32]",
+    "MARCOLETA, RODANTE (PDPLBN) [33]",
     "PIMENTEL, ASTRA (PDPLBN) [34]"
   ]
 }
