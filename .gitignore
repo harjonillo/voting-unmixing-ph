@@ -20,6 +20,10 @@ data/shapefiles/gadm41_PHL_2.json.zip
 # by scripts/build_site.py — rebuilt in CI from the committed data/ trees)
 /site/
 
+# on-disk cache of the scraped 2016 COMELEC Project of Precincts
+# (scripts/scrape_2016_pop.py; re-fetched on demand, not committed)
+/.pop_cache_2016/
+
 # Python
 __pycache__/
 *.pyc

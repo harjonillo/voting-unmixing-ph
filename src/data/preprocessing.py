@@ -66,7 +66,7 @@ def candidate_label(column: str, rank: int) -> str:
 
 def preprocess(
     df: pd.DataFrame,
-    excluded_regions=("OV", "LAV"),
+    excluded_regions=("OV", "LAV", "OAV"),
     sen_col_start: int = 17,
     min_candidate_25th_percentile: float = 10,
     min_precinct_votes: float = 10,
