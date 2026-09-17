@@ -4,8 +4,7 @@ Spectral-unmixing analysis of Philippine election results: voting archetypes
 (endmembers) and their per-precinct abundances, with maps and plots at
 national / region / province / municipality / clustered-precinct level.
 
-Cleaned-up successor to the exploratory `2025-PH-elections` notebooks and the
-curated `voting-archetypes-ph` modules.
+Dashboard: https://harjonillo.github.io/voting-unmixing-ph/
 
 ## Layout
 
