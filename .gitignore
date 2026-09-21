@@ -1,6 +1,7 @@
 # Data (copied from 2025-PH-elections / BSthesis-main-2; see data/README.md)
 data/*
 !data/README.md
+!data/README_2016_data_recovery.md
 
 # ...but the static-site build needs these two trees committed so the GitHub
 # Pages build can bake them. Re-included here, then the heavy files the build
