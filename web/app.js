@@ -145,6 +145,113 @@ function loadingsGrid(divId, payload, arch_cols, nArch, topN, title) {
   }
 }
 
+// ------------------------------------------------------ partylist mixing chart
+// Mirror of notebook 03's "Partylist mixing": parse each candidate's party from
+// its label and sum the endmember loadings per party, so you can see how each
+// party's candidates spread across the voting archetypes.
+function extractParty(label) {
+  // "LEGARDA, LOREN (NPC) [2]" -> "NPC"; no parenthesised party -> "X".
+  const m = label.match(/\(([^)]*)\)/);
+  return m ? m[1].trim() : "X";
+}
+
+// Election-result rank encoded as the trailing "[N]" in a candidate label.
+const candRank = (label) => {
+  const m = label.match(/\[(\d+)\]/);
+  return m ? parseInt(m[1], 10) : Infinity;
+};
+// Drop the "(PARTY)" and "[N]" decorations for the side table.
+const cleanCandidate = (label) =>
+  label.replace(/\s*\([^)]*\)/, "").replace(/\s*\[\d+\]\s*$/, "").trim();
+
+function partylistMixing(plotId, tableId, payload, arch_cols, nArch, title) {
+  // payload: {candidates, mean:{arch:[per-candidate loading]}}. Renders the
+  // grouped-bar chart into plotId and the top-candidates table into tableId
+  // (each lives in its own card; see build_site.py).
+  const host = document.getElementById(plotId);
+  host.innerHTML = "";
+  if (title) {
+    const cap = document.createElement("p");
+    cap.className = "muted"; cap.textContent = title;
+    host.appendChild(cap);
+  }
+  const plot = document.createElement("div");
+  plot.className = "w-full";
+  host.appendChild(plot);
+
+  const order = [];               // parties in first-seen order
+  const sums = new Map();         // party -> {arch_col -> summed loading}
+  const members = new Map();      // party -> [[rank, cleanName], ...]
+  payload.candidates.forEach((name, i) => {
+    const party = extractParty(name);
+    if (!sums.has(party)) { sums.set(party, {}); members.set(party, []); order.push(party); }
+    const s = sums.get(party);
+    for (const c of arch_cols) s[c] = (s[c] || 0) + payload.mean[c][i];
+    members.get(party).push([candRank(name), cleanCandidate(name)]);
+  });
+  // Largest total loading ends up at the top of the horizontal bars (Plotly puts
+  // the first y-entry at the bottom), so sort ascending by total.
+  const total = (p) => arch_cols.reduce((s, c) => s + (sums.get(p)[c] || 0), 0);
+  const parties = order.sort((a, b) => total(a) - total(b));
+
+  const traces = arch_cols.map((c) => ({
+    type: "bar", orientation: "h", name: archLabel(c),
+    y: parties, x: parties.map((p) => sums.get(p)[c] || 0),
+    marker: { color: archColor(c, nArch) },
+  }));
+  // Light-gray separators between adjacent party groups. On a categorical axis
+  // the groups sit at integer indices, so the boundaries fall at the half-steps.
+  const seps = [];
+  for (let i = 0; i < parties.length - 1; i++) {
+    seps.push({
+      type: "line", xref: "paper", yref: "y", layer: "below",
+      x0: 0, x1: 1, y0: i + 0.5, y1: i + 0.5,
+      line: { color: "#d1d5db", width: 1 },
+    });
+  }
+  const height = Math.max(320, parties.length * (nArch * 12 + 10) + 60);
+  Plotly.react(plot, traces, {
+    barmode: "group", shapes: seps, height,
+    margin: { l: 4, r: 8, t: 36, b: 44 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+    legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, xanchor: "left" },
+    xaxis: { title: { text: "summed loading", standoff: 8 }, automargin: true },
+    yaxis: { automargin: true },
+  }, PLOTLY_CFG);
+
+  // Side table (own card): top-5 best-ranked (by election result) candidates per
+  // party, parties ordered by total loading (most prominent first).
+  const tableWrap = document.getElementById(tableId);
+  tableWrap.innerHTML = "";
+  tableWrap.className = "overflow-y-auto";
+  tableWrap.style.maxHeight = height + "px";
+  const tbl = document.createElement("table");
+  tbl.className = "table table-xs";
+  const thead = document.createElement("thead");
+  thead.innerHTML = "<tr><th>Party</th><th>Top candidates (by result rank)</th></tr>";
+  tbl.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const p of [...parties].reverse()) {   // largest total first
+    const top = members.get(p)
+      .sort((a, b) => a[0] - b[0]).slice(0, 5)
+      .map(([rank, name]) => (rank === Infinity ? name : `${rank}. ${name}`));
+    const tr = document.createElement("tr");
+    const tdParty = document.createElement("td");
+    tdParty.className = "font-medium align-top whitespace-nowrap";
+    tdParty.textContent = p;
+    const tdCands = document.createElement("td");
+    for (const c of top) {
+      const div = document.createElement("div");
+      div.textContent = c;
+      tdCands.appendChild(div);
+    }
+    tr.appendChild(tdParty); tr.appendChild(tdCands);
+    tbody.appendChild(tr);
+  }
+  tbl.appendChild(tbody);
+  tableWrap.appendChild(tbl);
+}
+
 // --------------------------------------------------------------------- tab: map
 async function renderMap() {
   const year = state.year, level = state.level, nArch = nArchFor(year);
@@ -185,6 +292,9 @@ async function renderMap() {
     : "Run the sweep for this year to add trial-based error bars.";
   loadingsGrid("map-loadings", loadings, cols, nArch, state.topN,
     "Candidate weights per endmember (MVSA, national-level). " + cap);
+
+  partylistMixing("map-partylist", "map-partylist-table", loadings, cols, nArch,
+    "Summed endmember loading per party, grouped by archetype.");
 }
 
 // Sankey of how archetypes split as p grows across the whole sweep (mirror of
@@ -243,6 +353,10 @@ async function renderCompare() {
   loadingsGrid("cmp-loadings",
     { candidates: sweep.candidates, mean: sweep.loadings_mean, std: sweep.loadings_std },
     cols, p, state.cmp.topN, "Loadings (mean ± std over trials) at p = " + p);
+
+  partylistMixing("cmp-partylist", "cmp-partylist-table",
+    { candidates: sweep.candidates, mean: sweep.loadings_mean },
+    cols, p, "Summed endmember loading per party at p = " + p + ", grouped by archetype.");
 }
 
 // ------------------------------------------------------------- tab: distributions

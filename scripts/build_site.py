@@ -104,6 +104,25 @@ def tab_map() -> Section:
             card(Div(id="map-loadings"), span="lg:col-span-3"),
             cls="grid grid-cols-1 lg:grid-cols-5 gap-4",
         ),
+        Div(
+            card(
+                H2("Partylist mixing", cls="text-sm font-semibold mb-1"),
+                P("Endmember loadings summed by party (parsed from each candidate's "
+                  "party label), showing how each party's candidates distribute across "
+                  "the voting archetypes. National-level MVSA loadings.",
+                  cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                Div(id="map-partylist"),
+                span="lg:col-span-3",
+            ),
+            card(
+                H2("Top candidates per party", cls="text-sm font-semibold mb-1"),
+                P("Best-ranked (by election result) in each party.",
+                  cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                Div(id="map-partylist-table"),
+                span="lg:col-span-2",
+            ),
+            cls="grid grid-cols-1 lg:grid-cols-5 gap-4 mt-4",
+        ),
         id="tab-map",
     )
 
@@ -138,6 +157,24 @@ def tab_compare() -> Section:
             cls="flex flex-wrap gap-3 items-end mb-3",
         ),
         Div(card(Div(id="cmp-plot")), card(Div(id="cmp-loadings")), cls="grid gap-4"),
+        Div(
+            card(
+                H2("Partylist mixing", cls="text-sm font-semibold mb-1"),
+                P("Endmember loadings summed by party at the chosen archetype count p, "
+                  "showing how each party's candidates distribute across the archetypes "
+                  "as p changes.", cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                Div(id="cmp-partylist"),
+                span="lg:col-span-3",
+            ),
+            card(
+                H2("Top candidates per party", cls="text-sm font-semibold mb-1"),
+                P("Best-ranked (by election result) in each party.",
+                  cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                Div(id="cmp-partylist-table"),
+                span="lg:col-span-2",
+            ),
+            cls="grid grid-cols-1 lg:grid-cols-5 gap-4 mt-4",
+        ),
         id="tab-compare", hidden=True,
     )
 
