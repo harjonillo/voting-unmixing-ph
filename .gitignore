@@ -2,6 +2,14 @@
 data/*
 !data/README.md
 !data/README_2016_data_recovery.md
+!data/README_coalitions.md
+
+# ...but this one curated file is hand-built from news sources (not a
+# re-downloadable dump like the vote CSVs), so it is committed. See
+# data/README_coalitions.md. Re-include the dir, ignore its contents, keep the file.
+!data/elections/
+data/elections/*
+!data/elections/coalitions_2013-2025.csv
 
 # ...but the static-site build needs these two trees committed so the GitHub
 # Pages build can bake them. Re-included here, then the heavy files the build

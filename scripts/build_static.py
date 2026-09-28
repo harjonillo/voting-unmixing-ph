@@ -35,7 +35,9 @@ Run from the repo root:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -83,6 +85,70 @@ DEFAULT_TOLERANCE = 0.005
 
 ARCH_ROUND = 4  # decimals for abundances/loadings
 PCT_ROUND = 2   # decimals for turnout / percentages
+
+# Coalition / alliance grouping (the layer *over* parties). Hand-curated from news
+# sources; see data/README_coalitions.md. Baked alongside the loadings so the site
+# can group the "party mixing" barplot by alliance instead of party.
+COALITIONS_CSV = REPO_ROOT / "data" / "elections" / "coalitions_2013-2025.csv"
+NO_ALLIANCE = "Independent / none"
+
+
+def _norm_label(label: str) -> str:
+    """Join key: drop the trailing election-rank "[N]" and collapse whitespace, so
+    the site's candidate labels ("GO, BONG GO (PDPLBN) [3]") match the coalition
+    CSV's ballot_label ("GO, BONG GO    (PDPLBN)")."""
+    return re.sub(r"\s+", " ", re.sub(r"\s*\[\d+\]\s*$", "", label)).strip()
+
+
+def _primary_and_detail(rows: list[dict]) -> tuple[str, str]:
+    """Reduce a candidate's coalition rows to one grouping label + a detail string.
+
+    A candidate can sit on several slates (guest / cross-endorsement). For the
+    grouped barplot we need a single bucket: use the lone real coalition, else the
+    lone `core` one, else "Multiple slates". `detail` keeps the full membership for
+    the side table (core listed first)."""
+    real = [r for r in rows if r["coalition"] != NO_ALLIANCE]
+    if not real:
+        return NO_ALLIANCE, NO_ALLIANCE
+    names = sorted({r["coalition"] for r in real})
+    cores = sorted({r["coalition"] for r in real if r["membership"] == "core"})
+    if len(names) == 1:
+        group = names[0]
+    elif len(cores) == 1:
+        group = cores[0]
+    else:
+        group = "Multiple slates"
+    ordered = sorted(real, key=lambda r: (r["membership"] != "core", r["coalition"]))
+    detail = ", ".join(f'{r["coalition"]} ({r["membership"]})' for r in ordered)
+    return group, detail
+
+
+def load_alliance_map() -> dict[str, dict[str, tuple[str, str]]]:
+    """year -> normalized-ballot-label -> (group, detail). Empty if the CSV is
+    missing (the site then just falls back to party-only grouping)."""
+    if not COALITIONS_CSV.exists():
+        print(f"  (!) {COALITIONS_CSV} not found — alliance grouping will be empty")
+        return {}
+    by_cand: dict[str, dict[str, list[dict]]] = {}
+    with open(COALITIONS_CSV, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            key = _norm_label(r["ballot_label"])
+            by_cand.setdefault(r["year"], {}).setdefault(key, []).append(r)
+    return {
+        year: {key: _primary_and_detail(rows) for key, rows in cands.items()}
+        for year, cands in by_cand.items()
+    }
+
+
+def alliance_arrays(year: str, labels: list[str], amap: dict) -> dict:
+    """Per-candidate `group`/`detail` arrays aligned to `labels` (endmember order)."""
+    ym = amap.get(year, {})
+    groups, details = [], []
+    for lab in labels:
+        group, detail = ym.get(_norm_label(lab), (NO_ALLIANCE, NO_ALLIANCE))
+        groups.append(group)
+        details.append(detail)
+    return {"alliance_group": groups, "alliance_detail": details}
 COORD_ROUND = 5  # decimals for lon/lat in GeoJSON (~1 m; plenty for display)
 
 
@@ -400,6 +466,8 @@ def build(out: Path, verify: bool) -> None:
         out / "geo" / "province.geojson",
     )
 
+    amap = load_alliance_map()
+
     for year in YEARS:
         cfg = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
         endmembers, abundances, meta = load_processed(cfg)
@@ -446,6 +514,7 @@ def build(out: Path, verify: bool) -> None:
             "candidates": list(endmembers.index),
             "arch_cols": arch_cols,
             "mean": {c: [_round(v, ARCH_ROUND) for v in endmembers[c]] for c in arch_cols},
+            **alliance_arrays(year, list(endmembers.index), amap),
         }
         std_df = _loading_std(endmembers, sweep, meta)
         if std_df is not None:
@@ -469,6 +538,7 @@ def build(out: Path, verify: bool) -> None:
                 "arch_cols": arch_cols_p,
                 "loadings_mean": {c: [_round(v, ARCH_ROUND) for v in lm[c]] for c in arch_cols_p},
                 "loadings_std": {c: [_round(v, ARCH_ROUND) for v in ls[c]] for c in arch_cols_p},
+                **alliance_arrays(year, list(lm.index), amap),
                 "levels": {},
             }
             for level in LEVELS:

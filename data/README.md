@@ -2,6 +2,17 @@
 
 Everything in this folder is **gitignored** (except this README). Rebuild it as follows.
 
+## Coalition / alliance dataset (curated, committed)
+
+`elections/coalitions_2013-2025.csv` — each senatorial candidate's **coalition/alliance**
+(the grouping *over* parties: Team PNoy, UNA, Otso Diretso, Hugpong, Alyansa, DuterTen, …)
+for all five Senate cycles, keyed to the exact vote-CSV candidate labels. Unlike the rest of
+this folder it is **hand-built from news sources and committed** (an explicit `.gitignore`
+exception). Full provenance, per-year rosters, sources and caveats:
+**[`README_coalitions.md`](README_coalitions.md)**. Rebuild: `python scripts/build_coalitions.py`.
+The static site reads it (via `scripts/build_static.py`) to offer an alliance grouping
+alongside the party barplots.
+
 ## Copied from `../2025-PH-elections/data/`
 
 | file | description |

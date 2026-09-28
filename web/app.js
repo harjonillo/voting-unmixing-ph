@@ -28,8 +28,8 @@ async function getJSON(url) {
 let MANIFEST = null;
 const state = {
   year: null, level: "province", weighted: true, topN: 5, tab: "map",
-  map: { quantity: "Archetype abundance", arch: "arch_0" },
-  cmp: { p: 5, arch: "arch_0", stat: "mean", topN: 15 },
+  map: { quantity: "Archetype abundance", arch: "arch_0", groupBy: "party" },
+  cmp: { p: 5, arch: "arch_0", stat: "mean", topN: 15, groupBy: "party" },
 };
 
 // --------------------------------------------------------------------- theme
@@ -145,10 +145,13 @@ function loadingsGrid(divId, payload, arch_cols, nArch, topN, title) {
   }
 }
 
-// ------------------------------------------------------ partylist mixing chart
-// Mirror of notebook 03's "Partylist mixing": parse each candidate's party from
-// its label and sum the endmember loadings per party, so you can see how each
-// party's candidates spread across the voting archetypes.
+// ------------------------------------------------------ party / alliance mixing
+// Mirror of notebook 03's "Partylist mixing": sum the endmember loadings per
+// group so you can see how each group's candidates spread across the voting
+// archetypes. The group is either the candidate's PARTY (parsed from the label)
+// or their ALLIANCE / coalition (baked per-candidate by build_static.py from
+// data/elections/coalitions_2013-2025.csv). The side table's extra column shows
+// the *other* dimension per candidate.
 function extractParty(label) {
   // "LEGARDA, LOREN (NPC) [2]" -> "NPC"; no parenthesised party -> "X".
   const m = label.match(/\(([^)]*)\)/);
@@ -164,10 +167,23 @@ const candRank = (label) => {
 const cleanCandidate = (label) =>
   label.replace(/\s*\([^)]*\)/, "").replace(/\s*\[\d+\]\s*$/, "").trim();
 
-function partylistMixing(plotId, tableId, payload, arch_cols, nArch, title) {
-  // payload: {candidates, mean:{arch:[per-candidate loading]}}. Renders the
-  // grouped-bar chart into plotId and the top-candidates table into tableId
-  // (each lives in its own card; see build_site.py).
+function partylistMixing(plotId, tableId, payload, arch_cols, nArch, title, mode) {
+  // payload: {candidates, mean:{arch:[per-candidate loading]},
+  //           alliance_group?:[...], alliance_detail?:[...]}.
+  // mode: "party" (default) | "alliance". Renders the grouped-bar chart into
+  // plotId and the top-candidates table into tableId (each in its own card).
+  mode = mode === "alliance" ? "alliance" : "party";
+  const hasAlliance = Array.isArray(payload.alliance_group);
+  // Per-candidate grouping key, and the value shown in the table's extra column.
+  const groupOf = (i) => mode === "alliance"
+    ? (hasAlliance ? payload.alliance_group[i] : "n/a")
+    : extractParty(payload.candidates[i]);
+  const extraOf = (i) => mode === "alliance"
+    ? extractParty(payload.candidates[i])
+    : (hasAlliance ? payload.alliance_detail[i] : "—");
+  const groupHeader = mode === "alliance" ? "Alliance" : "Party";
+  const extraHeader = mode === "alliance" ? "Party" : "Alliance";
+
   const host = document.getElementById(plotId);
   host.innerHTML = "";
   if (title) {
@@ -179,37 +195,37 @@ function partylistMixing(plotId, tableId, payload, arch_cols, nArch, title) {
   plot.className = "w-full";
   host.appendChild(plot);
 
-  const order = [];               // parties in first-seen order
-  const sums = new Map();         // party -> {arch_col -> summed loading}
-  const members = new Map();      // party -> [[rank, cleanName], ...]
+  const order = [];               // groups in first-seen order
+  const sums = new Map();         // group -> {arch_col -> summed loading}
+  const members = new Map();      // group -> [[rank, cleanName, extra], ...]
   payload.candidates.forEach((name, i) => {
-    const party = extractParty(name);
-    if (!sums.has(party)) { sums.set(party, {}); members.set(party, []); order.push(party); }
-    const s = sums.get(party);
+    const g = groupOf(i);
+    if (!sums.has(g)) { sums.set(g, {}); members.set(g, []); order.push(g); }
+    const s = sums.get(g);
     for (const c of arch_cols) s[c] = (s[c] || 0) + payload.mean[c][i];
-    members.get(party).push([candRank(name), cleanCandidate(name)]);
+    members.get(g).push([candRank(name), cleanCandidate(name), extraOf(i)]);
   });
   // Largest total loading ends up at the top of the horizontal bars (Plotly puts
   // the first y-entry at the bottom), so sort ascending by total.
   const total = (p) => arch_cols.reduce((s, c) => s + (sums.get(p)[c] || 0), 0);
-  const parties = order.sort((a, b) => total(a) - total(b));
+  const groups = order.sort((a, b) => total(a) - total(b));
 
   const traces = arch_cols.map((c) => ({
     type: "bar", orientation: "h", name: archLabel(c),
-    y: parties, x: parties.map((p) => sums.get(p)[c] || 0),
+    y: groups, x: groups.map((p) => sums.get(p)[c] || 0),
     marker: { color: archColor(c, nArch) },
   }));
-  // Light-gray separators between adjacent party groups. On a categorical axis
-  // the groups sit at integer indices, so the boundaries fall at the half-steps.
+  // Light-gray separators between adjacent groups. On a categorical axis the
+  // groups sit at integer indices, so the boundaries fall at the half-steps.
   const seps = [];
-  for (let i = 0; i < parties.length - 1; i++) {
+  for (let i = 0; i < groups.length - 1; i++) {
     seps.push({
       type: "line", xref: "paper", yref: "y", layer: "below",
       x0: 0, x1: 1, y0: i + 0.5, y1: i + 0.5,
       line: { color: "#d1d5db", width: 1 },
     });
   }
-  const height = Math.max(320, parties.length * (nArch * 12 + 10) + 60);
+  const height = Math.max(320, groups.length * (nArch * 12 + 10) + 60);
   Plotly.react(plot, traces, {
     barmode: "group", shapes: seps, height,
     margin: { l: 4, r: 8, t: 36, b: 44 },
@@ -220,7 +236,9 @@ function partylistMixing(plotId, tableId, payload, arch_cols, nArch, title) {
   }, PLOTLY_CFG);
 
   // Side table (own card): top-5 best-ranked (by election result) candidates per
-  // party, parties ordered by total loading (most prominent first).
+  // group, groups ordered by total loading (most prominent first). The extra
+  // column shows the other dimension (alliance when grouping by party, and party
+  // when grouping by alliance), one line per candidate, aligned with the names.
   const tableWrap = document.getElementById(tableId);
   tableWrap.innerHTML = "";
   tableWrap.className = "overflow-y-auto";
@@ -228,24 +246,29 @@ function partylistMixing(plotId, tableId, payload, arch_cols, nArch, title) {
   const tbl = document.createElement("table");
   tbl.className = "table table-xs";
   const thead = document.createElement("thead");
-  thead.innerHTML = "<tr><th>Party</th><th>Top candidates (by result rank)</th></tr>";
+  thead.innerHTML =
+    `<tr><th>${groupHeader}</th><th>Top candidates (by result rank)</th><th>${extraHeader}</th></tr>`;
   tbl.appendChild(thead);
   const tbody = document.createElement("tbody");
-  for (const p of [...parties].reverse()) {   // largest total first
-    const top = members.get(p)
-      .sort((a, b) => a[0] - b[0]).slice(0, 5)
-      .map(([rank, name]) => (rank === Infinity ? name : `${rank}. ${name}`));
+  for (const p of [...groups].reverse()) {   // largest total first
+    const top = members.get(p).sort((a, b) => a[0] - b[0]).slice(0, 5);
     const tr = document.createElement("tr");
-    const tdParty = document.createElement("td");
-    tdParty.className = "font-medium align-top whitespace-nowrap";
-    tdParty.textContent = p;
+    const tdGroup = document.createElement("td");
+    tdGroup.className = "font-medium align-top whitespace-nowrap";
+    tdGroup.textContent = p;
     const tdCands = document.createElement("td");
-    for (const c of top) {
-      const div = document.createElement("div");
-      div.textContent = c;
-      tdCands.appendChild(div);
+    tdCands.className = "align-top";
+    const tdExtra = document.createElement("td");
+    tdExtra.className = "align-top text-xs opacity-70";
+    for (const [rank, name, extra] of top) {
+      const dc = document.createElement("div");
+      dc.textContent = rank === Infinity ? name : `${rank}. ${name}`;
+      tdCands.appendChild(dc);
+      const de = document.createElement("div");
+      de.textContent = extra || "—";
+      tdExtra.appendChild(de);
     }
-    tr.appendChild(tdParty); tr.appendChild(tdCands);
+    tr.appendChild(tdGroup); tr.appendChild(tdCands); tr.appendChild(tdExtra);
     tbody.appendChild(tr);
   }
   tbl.appendChild(tbody);
@@ -293,8 +316,9 @@ async function renderMap() {
   loadingsGrid("map-loadings", loadings, cols, nArch, state.topN,
     "Candidate weights per endmember (MVSA, national-level). " + cap);
 
+  const mgb = state.map.groupBy;
   partylistMixing("map-partylist", "map-partylist-table", loadings, cols, nArch,
-    "Summed endmember loading per party, grouped by archetype.");
+    `Summed endmember loading per ${mgb}, grouped by archetype.`, mgb);
 }
 
 // Sankey of how archetypes split as p grows across the whole sweep (mirror of
@@ -354,9 +378,11 @@ async function renderCompare() {
     { candidates: sweep.candidates, mean: sweep.loadings_mean, std: sweep.loadings_std },
     cols, p, state.cmp.topN, "Loadings (mean ± std over trials) at p = " + p);
 
+  const cgb = state.cmp.groupBy;
   partylistMixing("cmp-partylist", "cmp-partylist-table",
-    { candidates: sweep.candidates, mean: sweep.loadings_mean },
-    cols, p, "Summed endmember loading per party at p = " + p + ", grouped by archetype.");
+    { candidates: sweep.candidates, mean: sweep.loadings_mean,
+      alliance_group: sweep.alliance_group, alliance_detail: sweep.alliance_detail },
+    cols, p, `Summed endmember loading per ${cgb} at p = ${p}, grouped by archetype.`, cgb);
 }
 
 // ------------------------------------------------------------- tab: distributions
@@ -474,6 +500,9 @@ async function init() {
   document.getElementById("map-arch").addEventListener("change", (e) => {
     state.map.arch = e.target.value; renderActive();
   });
+  document.getElementById("map-groupby").addEventListener("change", (e) => {
+    state.map.groupBy = e.target.value; if (state.tab === "map") renderActive();
+  });
   document.getElementById("cmp-p").addEventListener("change", (e) => {
     state.cmp.p = +e.target.value; renderActive();
   });
@@ -482,6 +511,9 @@ async function init() {
   });
   document.getElementById("cmp-stat").addEventListener("change", (e) => {
     state.cmp.stat = e.target.value; renderActive();
+  });
+  document.getElementById("cmp-groupby").addEventListener("change", (e) => {
+    state.cmp.groupBy = e.target.value; if (state.tab === "compare") renderActive();
   });
   document.getElementById("cmp-topN").addEventListener("change", (e) => {
     state.cmp.topN = +e.target.value; renderActive();

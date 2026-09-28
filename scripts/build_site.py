@@ -106,17 +106,25 @@ def tab_map() -> Section:
         ),
         Div(
             card(
-                H2("Partylist mixing", cls="text-sm font-semibold mb-1"),
-                P("Endmember loadings summed by party (parsed from each candidate's "
-                  "party label), showing how each party's candidates distribute across "
-                  "the voting archetypes. National-level MVSA loadings.",
+                Div(
+                    H2("Party / alliance mixing", cls="text-sm font-semibold"),
+                    labeled("Group by", Select(
+                        Option("Party", value="party"),
+                        Option("Alliance", value="alliance"),
+                        id="map-groupby", cls=SELECT)),
+                    cls="flex items-start justify-between gap-3 mb-1",
+                ),
+                P("Endmember loadings summed by party or by alliance/coalition (the "
+                  "grouping over parties), showing how each group's candidates distribute "
+                  "across the voting archetypes. National-level MVSA loadings.",
                   cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
                 Div(id="map-partylist"),
                 span="lg:col-span-3",
             ),
             card(
-                H2("Top candidates per party", cls="text-sm font-semibold mb-1"),
-                P("Best-ranked (by election result) in each party.",
+                H2("Top candidates per group", cls="text-sm font-semibold mb-1"),
+                P("Best-ranked (by election result) in each party/alliance; the extra "
+                  "column shows the other grouping.",
                   cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
                 Div(id="map-partylist-table"),
                 span="lg:col-span-2",
@@ -159,16 +167,25 @@ def tab_compare() -> Section:
         Div(card(Div(id="cmp-plot")), card(Div(id="cmp-loadings")), cls="grid gap-4"),
         Div(
             card(
-                H2("Partylist mixing", cls="text-sm font-semibold mb-1"),
-                P("Endmember loadings summed by party at the chosen archetype count p, "
-                  "showing how each party's candidates distribute across the archetypes "
-                  "as p changes.", cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                Div(
+                    H2("Party / alliance mixing", cls="text-sm font-semibold"),
+                    labeled("Group by", Select(
+                        Option("Party", value="party"),
+                        Option("Alliance", value="alliance"),
+                        id="cmp-groupby", cls=SELECT)),
+                    cls="flex items-start justify-between gap-3 mb-1",
+                ),
+                P("Endmember loadings summed by party or by alliance/coalition at the "
+                  "chosen archetype count p, showing how each group's candidates distribute "
+                  "across the archetypes as p changes.",
+                  cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
                 Div(id="cmp-partylist"),
                 span="lg:col-span-3",
             ),
             card(
-                H2("Top candidates per party", cls="text-sm font-semibold mb-1"),
-                P("Best-ranked (by election result) in each party.",
+                H2("Top candidates per group", cls="text-sm font-semibold mb-1"),
+                P("Best-ranked (by election result) in each party/alliance; the extra "
+                  "column shows the other grouping.",
                   cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
                 Div(id="cmp-partylist-table"),
                 span="lg:col-span-2",
