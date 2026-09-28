@@ -2,10 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
-from typing import List, Union, Optional, Dict, Tuple
+from typing import List, Optional, Dict
 import warnings
-
-from src.unmixing.endmember_extraction import vca
 
 
 def match_endmembers(
@@ -35,43 +33,6 @@ def match_endmembers(
         row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
     return col_ind
-
-
-def plot_elbow(Y_mixed: np.ndarray, endmember_range: Union[List[int], np.ndarray]):
-    """
-    :param Y_mixed: DataFrame of vote fractions (candidates x precincts)
-    :param endmember_range: List of integers representing the range of endmembers to test
-    """
-    # TODO: allow choice of metric (rss, snr)
-    rss_values = []
-    snr_values = []
-
-    for n in endmember_range:
-        endm_vca, indices_vca, Rp_vca, SNR, Ud, x = vca(
-            Y_mixed, Endmembers=int(n), verbose="on"
-        )
-        # TODO: get only the top candidates before computing RSS
-        #  but first the noise floor must be established
-        Y_rec = Rp_vca.copy()
-        rss = np.sum((Y_mixed - Y_rec) ** 2)
-
-        rss_values.append(rss)
-        snr_values.append(SNR)
-
-    fig, axs = plt.subplots(1, 2, figsize=(8, 5))
-    axs[0].plot(endmember_range, rss_values, marker="o")
-    axs[0].set_title("Elbow Plot: RSS vs Number of Endmembers")
-    axs[0].set_xlabel("Number of Endmembers")
-    axs[0].set_ylabel("Residual Sum of Squares (RSS)")
-    axs[0].set_xticks(endmember_range)
-    axs[0].grid(True)
-
-    axs[1].plot(endmember_range, snr_values, marker="o")
-    axs[1].set_title("Elbow Plot: SNR vs Number of Endmembers")
-    axs[1].set_xlabel("Number of Endmembers")
-    axs[1].set_ylabel("Signal-to-noise Ratio (SNR)")
-    axs[1].set_xticks(endmember_range)
-    axs[1].grid(True)
 
 
 # ---------------------------------------------------------------------------

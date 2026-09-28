@@ -1,13 +1,10 @@
-# Runtime dependencies for the Streamlit app.
+# Dependencies for the offline pipeline, the static-site build, and the notebooks.
 #
-# Also the build-time deps for the static site: the deploy-static.yml workflow
-# installs this file (plus python-fasthtml) to run scripts/build_static.py and
-# scripts/build_site.py. `streamlit` is only needed to run app/streamlit_app.py
-# directly (e.g. a server host); the static build does not import it.
-streamlit
+# The deploy-static.yml workflow installs this file (plus python-fasthtml) to run
+# scripts/build_static.py and scripts/build_site.py. `matplotlib`/`seaborn` are
+# only used by the notebooks; the static site renders with Plotly.js in the browser.
 geopandas
 pyarrow
-plotly
 matplotlib
 seaborn
 scikit-learn

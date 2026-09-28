@@ -36,8 +36,8 @@ alongside the party barplots.
 ## Generated
 
 - `processed/` — outputs of `scripts/run_pipeline.py`
-  (`endmembers.csv`, `abundances.parquet`, `meta.json`). The Streamlit app
-  reads only these + the shapefiles.
+  (`endmembers.csv`, `abundances.parquet`, `meta.json`). The static-site build
+  (`scripts/build_static.py`) reads only these + the shapefiles.
 
 ## 2016 — `elections/results_nle2016_05092016_1950.txt`
 
@@ -48,7 +48,9 @@ supersedes the older, truncated `results_nle2016_05122016_1545.csv`. Audited
 2026-09-17. **The senator votes are built into the pipeline and geocoded**
 (below). The feed itself has no place names; geography is recovered separately
 from COMELEC's 2016 Project of Precincts (see *Geography* below). 2016 remains a
-**partial** source (~25% coverage) — not a complete national result.
+**partial** source (~25% coverage) — not a complete national result. For the full
+account of why the complete national feed could not be recovered, see
+[`README_2016_data_recovery.md`](README_2016_data_recovery.md).
 
 ### What it is
 A raw election-night **transmission feed in long/tidy form** — one row per

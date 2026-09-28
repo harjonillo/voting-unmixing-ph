@@ -1,11 +1,11 @@
 """Bake the voting-archetype explorer into a fully static dataset.
 
-The Streamlit app does no on-demand computation beyond cheap pandas
-aggregation, argmax, a tiny Hungarian match, a geo-join and Plotly rendering
-(see the migration plan). The user's input space is small and enumerable, so
-this script pre-computes every combination offline and writes plain JSON +
-simplified GeoJSON. A static front-end (FastHTML shell + Plotly.js) then only
-loads a file and draws — no Pyodide, no scientific stack in the browser.
+The explorer does no on-demand computation beyond cheap pandas aggregation,
+argmax, a tiny Hungarian match, a geo-join and Plotly rendering. The user's
+input space is small and enumerable, so this script pre-computes every
+combination offline and writes plain JSON + simplified GeoJSON. A static
+front-end (FastHTML shell + Plotly.js) then only loads a file and draws — no
+Pyodide, no scientific stack in the browser.
 
 What it writes under ``--out`` (default ``site/data``)::
 
@@ -24,9 +24,10 @@ What it writes under ``--out`` (default ``site/data``)::
     lineage/{year}.json                Sankey nodes/links tracing how archetypes
                                        split as p grows across the sweep.
 
-Everything mirrors the app's own code paths (``src.aggregation``, ``src.geo``,
-``src.unmixing.matching``) so the baked numbers match what Streamlit shows;
-``--verify`` spot-checks a few cells against a fresh in-process aggregation.
+Aggregation, matching and geo-join all go through the shared library
+(``src.aggregation``, ``src.geo``, ``src.unmixing.matching``), so the baked
+numbers match the pipeline; ``--verify`` spot-checks a few cells against a fresh
+in-process aggregation.
 
 Run from the repo root:
     python scripts/build_static.py --out site/data
@@ -62,7 +63,7 @@ from src.geo import (
 from src.unmixing.matching import archetype_lineage, match_to_reference
 
 # ---------------------------------------------------------------------------
-# What to bake (kept in sync with app/components/{data,constants,sidebar}.py).
+# What to bake (this file is the single source of truth for the site data contract).
 # ---------------------------------------------------------------------------
 YEARS = ["2025", "2022", "2019", "2016", "2013"]
 DEFAULT_YEAR = YEARS[0]
@@ -79,7 +80,7 @@ BALLOT_COL = "information.numberOfValidBallot"
 VOTERS_COL = "information.numberOfActuallyVoters"
 REGISTERED_COL = "information.numberOfRegisteredVoters"
 
-# Display simplification, matching app/components/map.py.
+# Display simplification of polygons.
 SIMPLIFY_TOLERANCE = {"municipality": 0.001}
 DEFAULT_TOLERANCE = 0.005
 
@@ -157,13 +158,13 @@ def w_tag(weighted: bool) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Small helpers replicated from the app layer (avoids a Streamlit dependency).
+# Small self-contained aggregation / turnout helpers.
 # ---------------------------------------------------------------------------
 
 
 def add_turnout(df: pd.DataFrame) -> pd.DataFrame:
     """Add ``turnout_pct`` in place when the voter counts are present
-    (mirror of app.components.data.add_turnout)."""
+    (adds a per-unit turnout_pct column)."""
     if VOTERS_COL in df.columns and REGISTERED_COL in df.columns:
         df["turnout_pct"] = 100 * df[VOTERS_COL] / df[REGISTERED_COL]
     return df
@@ -189,8 +190,8 @@ def join_agg_to_boundaries(
     provinces,
     municipalities,
 ):
-    """Merge a level aggregate onto its boundaries, mirroring
-    app/components/map.py:join_to_boundaries. Returns (gdf, key_col)."""
+    """Merge a level aggregate onto its boundaries via the shared geo helpers.
+    Returns (gdf, key_col)."""
     if level == "region":
         agg_prov = aggregate_abundances(
             abundances, level="province", weight_col=(BALLOT_COL if weighted else None)
@@ -213,8 +214,8 @@ def feature_key(gdf, key_col: str) -> pd.Series:
 
 
 def post_join_dominant(gdf, arch_cols: list[str]) -> list[str | None]:
-    """Recompute the dominant archetype after the geometry join, exactly as
-    app/components/map.py:choropleth_fig does (units may have merged)."""
+    """Recompute the dominant archetype after the geometry join (units may have
+    merged)."""
     dom = dominant_archetype(gdf, arch_cols)
     has_data = gdf[arch_cols[0]].notna().to_numpy()
     return [str(int(d)) if ok else None for d, ok in zip(dom, has_data)]
@@ -290,7 +291,7 @@ def dump_json(obj, path: Path) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Colors (ported from app/components/theme.py so JS uses identical palettes).
+# Colors: baked into the manifest so the JS front-end uses identical palettes.
 # ---------------------------------------------------------------------------
 
 
@@ -392,15 +393,15 @@ def _rec(key: str, row, arch_cols) -> dict:
 # ---------------------------------------------------------------------------
 # Archetype lineage — the comparison-tab Sankey. For each consecutive p in the
 # sweep, Hungarian-matches the p+1 columns to p by cosine similarity; the extra
-# child is linked to its best parent and flagged as a split (mirror of the
-# Streamlit tab's _render_lineage). Nodes carry their top-loading candidate so
-# the client can label each archetype, plus a fixed (x, y) column layout.
+# child is linked to its best parent and flagged as a split. Nodes carry their
+# top-loading candidate so the client can label each archetype, plus a fixed
+# (x, y) column layout.
 # ---------------------------------------------------------------------------
 
 
 def _top_candidate(loadings_mean: pd.DataFrame, k: int) -> str:
     """The candidate with the largest loading in archetype column k, cleaned up
-    for a short node label (matches the Streamlit lineage node labels)."""
+    for a short node label on the lineage Sankey."""
     top = str(loadings_mean.iloc[:, k].idxmax())
     return top.split(" [")[0].split(",")[0].title()
 
@@ -602,7 +603,7 @@ def build(out: Path, verify: bool) -> None:
 
 def _loading_std(endmembers, sweep, meta):
     """Per-loading std borrowed from the sweep, aligned to the single fit
-    (mirror of app.components.data.endmember_loading_std)."""
+    (per-candidate std of the loading across the sweep's trials)."""
     entry = sweep.get(meta["n_archetypes"])
     if entry is None:
         return None

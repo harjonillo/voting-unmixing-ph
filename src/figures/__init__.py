@@ -9,7 +9,7 @@ from .archetype_plots import (
     build_abundance_panel,
     plot_total_abundance_bars,
 )
-from .maps import plot_choropleth, plotly_choropleth
+from .maps import plot_choropleth
 
 __all__ = [
     "plot_arr_cols_to_subplots",
@@ -20,5 +20,4 @@ __all__ = [
     "build_abundance_panel",
     "plot_total_abundance_bars",
     "plot_choropleth",
-    "plotly_choropleth",
 ]

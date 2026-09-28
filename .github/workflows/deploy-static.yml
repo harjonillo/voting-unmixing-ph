@@ -1,6 +1,6 @@
 name: Deploy static site to GitHub Pages
 
-# The Streamlit app is baked into a fully static site: scripts/build_static.py
+# The explorer is baked into a fully static site: scripts/build_static.py
 # pre-computes every selection into JSON + GeoJSON, and scripts/build_site.py
 # renders the FastHTML shell. No server / Pyodide — the browser just loads data
 # and draws with Plotly.js. This publishes site/ to GitHub Pages.
@@ -36,9 +36,9 @@ jobs:
           cache-dependency-path: requirements.txt
 
       # build_static.py needs the scientific stack (geopandas/pandas/scipy/
-      # scikit-learn/seaborn); build_site.py needs FastHTML. Plotly/Streamlit in
-      # requirements.txt are unused at build time (Plotly runs in the browser)
-      # but harmless.
+      # scikit-learn/seaborn); build_site.py needs FastHTML. matplotlib/seaborn in
+      # requirements.txt are unused at build time (only the notebooks plot) but
+      # harmless. The site itself renders with Plotly.js in the browser.
       - name: Install build dependencies
         run: pip install -r requirements.txt python-fasthtml
 

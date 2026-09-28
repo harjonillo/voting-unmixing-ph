@@ -2,7 +2,6 @@
  *
  * Loads the JSON/GeoJSON baked by scripts/build_static.py and draws the three
  * tabs with Plotly.js. No server: dropdowns just re-slice already-fetched data.
- * Mirrors the Streamlit app (app/tabs/*, app/components/*).
  */
 "use strict";
 
@@ -321,8 +320,8 @@ async function renderMap() {
     `Summed endmember loading per ${mgb}, grouped by archetype.`, mgb);
 }
 
-// Sankey of how archetypes split as p grows across the whole sweep (mirror of
-// the Streamlit tab's _render_lineage). Independent of p/level/weighting.
+// Sankey of how archetypes split as p grows across the whole sweep.
+// Independent of p/level/weighting.
 async function renderLineage(divId) {
   const host = document.getElementById(divId);
   const lin = await getJSON(lineageURL(state.year)).catch(() => null);
