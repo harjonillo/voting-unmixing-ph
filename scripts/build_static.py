@@ -101,31 +101,25 @@ def _norm_label(label: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"\s*\[\d+\]\s*$", "", label)).strip()
 
 
-def _primary_and_detail(rows: list[dict]) -> tuple[str, str]:
-    """Reduce a candidate's coalition rows to one grouping label + a detail string.
+def _alliance_view(rows: list[dict]) -> tuple[list[str], str]:
+    """Reduce a candidate's coalition rows to (list-of-slates, detail-string).
 
-    A candidate can sit on several slates (guest / cross-endorsement). For the
-    grouped barplot we need a single bucket: use the lone real coalition, else the
-    lone `core` one, else "Multiple slates". `detail` keeps the full membership for
-    the side table (core listed first)."""
+    A candidate can sit on several slates (guest / cross-endorsement). Rather than
+    force them into a single bucket, we return **every** real slate they ran with,
+    so the grouped view can list them under each one (with an "also in …" note).
+    `list` is core-first then alphabetical; `detail` is the full membership string
+    for the party-mode side table. An empty list means independent / no slate."""
     real = [r for r in rows if r["coalition"] != NO_ALLIANCE]
     if not real:
-        return NO_ALLIANCE, NO_ALLIANCE
-    names = sorted({r["coalition"] for r in real})
-    cores = sorted({r["coalition"] for r in real if r["membership"] == "core"})
-    if len(names) == 1:
-        group = names[0]
-    elif len(cores) == 1:
-        group = cores[0]
-    else:
-        group = "Multiple slates"
+        return [], NO_ALLIANCE
     ordered = sorted(real, key=lambda r: (r["membership"] != "core", r["coalition"]))
+    slates = [r["coalition"] for r in ordered]
     detail = ", ".join(f'{r["coalition"]} ({r["membership"]})' for r in ordered)
-    return group, detail
+    return slates, detail
 
 
-def load_alliance_map() -> dict[str, dict[str, tuple[str, str]]]:
-    """year -> normalized-ballot-label -> (group, detail). Empty if the CSV is
+def load_alliance_map() -> dict[str, dict[str, tuple[list[str], str]]]:
+    """year -> normalized-ballot-label -> (slates, detail). Empty if the CSV is
     missing (the site then just falls back to party-only grouping)."""
     if not COALITIONS_CSV.exists():
         print(f"  (!) {COALITIONS_CSV} not found — alliance grouping will be empty")
@@ -136,20 +130,22 @@ def load_alliance_map() -> dict[str, dict[str, tuple[str, str]]]:
             key = _norm_label(r["ballot_label"])
             by_cand.setdefault(r["year"], {}).setdefault(key, []).append(r)
     return {
-        year: {key: _primary_and_detail(rows) for key, rows in cands.items()}
+        year: {key: _alliance_view(rows) for key, rows in cands.items()}
         for year, cands in by_cand.items()
     }
 
 
 def alliance_arrays(year: str, labels: list[str], amap: dict) -> dict:
-    """Per-candidate `group`/`detail` arrays aligned to `labels` (endmember order)."""
+    """Per-candidate `list`/`detail` arrays aligned to `labels` (endmember order).
+    `alliance_list[i]` is every slate candidate i ran with (guests appear in each);
+    the front-end places the candidate under each and annotates the others."""
     ym = amap.get(year, {})
-    groups, details = [], []
+    slates, details = [], []
     for lab in labels:
-        group, detail = ym.get(_norm_label(lab), (NO_ALLIANCE, NO_ALLIANCE))
-        groups.append(group)
+        lst, detail = ym.get(_norm_label(lab), ([], NO_ALLIANCE))
+        slates.append(lst)
         details.append(detail)
-    return {"alliance_group": groups, "alliance_detail": details}
+    return {"alliance_list": slates, "alliance_detail": details}
 COORD_ROUND = 5  # decimals for lon/lat in GeoJSON (~1 m; plenty for display)
 
 
