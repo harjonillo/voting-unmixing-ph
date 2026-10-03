@@ -104,6 +104,3 @@ change. `site/` is generated (gitignored) and rebuilt in CI from the committed
   render correctly despite the older shapefiles.
 - Normalization of the vote matrix is configurable
   (`[preprocessing] normalization`): `valid_ballots` (default), `row_max`, `none`.
-- MATLAB results (`results_hannahtest/`) are kept for manual cross-checking but
-  are **not** wired into the Python pipeline (no loader); their row alignment with
-  the CSVs is not guaranteed — the pipeline/site use only the Python outputs.

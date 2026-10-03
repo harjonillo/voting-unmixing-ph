@@ -71,6 +71,7 @@ def preprocess(
     min_candidate_25th_percentile: float = 10,
     min_precinct_votes: float = 10,
     normalization: str = "valid_ballots",
+    randomize_precinct_order: bool = False,
     verbose: bool = True,
 ) -> PreprocessedData:
     if normalization not in NORMALIZATIONS:
@@ -84,6 +85,9 @@ def preprocess(
 
     precinct_totals = df[kept_candidates].sum(axis=1)
     kept_precincts = precinct_totals[precinct_totals >= min_precinct_votes].index
+
+    if randomize_precinct_order:
+        kept_precincts = np.random.permutation(kept_precincts)
 
     can_totals = df.loc[kept_precincts, kept_candidates].sum().sort_values(ascending=False)
     ranked_columns = list(can_totals.index)
