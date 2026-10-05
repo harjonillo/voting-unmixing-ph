@@ -21,8 +21,11 @@ What it writes under ``--out`` (default ``site/data``)::
     loadings/{year}.json               endmember loadings (mean) + sweep-trial std.
     sweep/{year}_p{p}.json             per-p loadings mean/std + level stats
                                        (trial mean/std) for the comparison tab.
-    lineage/{year}.json                Sankey nodes/links tracing how archetypes
-                                       split as p grows across the sweep.
+    lineage/{year}.json                network nodes/links tracing how archetypes
+                                       persist/split as p grows across the sweep
+                                       (several similarity metrics per
+                                       consecutive-p pair, top candidates per
+                                       node, within-p min/mean distances).
 
 Aggregation, matching and geo-join all go through the shared library
 (``src.aggregation``, ``src.geo``, ``src.unmixing.matching``), so the baked
@@ -60,7 +63,14 @@ from src.geo import (
     load_municipalities,
     load_provinces,
 )
-from src.unmixing.matching import archetype_lineage, match_to_reference
+from src.unmixing.matching import (
+    archetype_lineage,
+    cosine_topk_matrix,
+    match_to_reference,
+    rbo_matrix,
+    spearman_matrix,
+    topk_jaccard_matrix,
+)
 
 # ---------------------------------------------------------------------------
 # What to bake (this file is the single source of truth for the site data contract).
@@ -387,52 +397,114 @@ def _rec(key: str, row, arch_cols) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Archetype lineage — the comparison-tab Sankey. For each consecutive p in the
-# sweep, Hungarian-matches the p+1 columns to p by cosine similarity; the extra
-# child is linked to its best parent and flagged as a split. Nodes carry their
-# top-loading candidate so the client can label each archetype, plus a fixed
-# (x, y) column layout.
+# Archetype lineage — the comparison-tab network. Nodes are the (p, k)
+# archetypes of the sweep, pinned per-p; links carry several similarity
+# metrics (LINEAGE_METRICS) for *every* archetype pair in consecutive p's,
+# with the Hungarian match (`matched`, full-cosine) and the leftover-child
+# flag (`split`) from `archetype_lineage` marked on top, so the client can
+# emphasise the lineage and fade the rest. Each node bakes its top candidates
+# so the client can list the top 6–12; per-p min/mean pairwise distances
+# (notebook 08's distinctness scalars) ride along for the column readout.
 # ---------------------------------------------------------------------------
 
+LINEAGE_TOP_K = 12  # candidates baked per node; the client shows the top 6–12
 
-def _top_candidate(loadings_mean: pd.DataFrame, k: int) -> str:
-    """The candidate with the largest loading in archetype column k, cleaned up
-    for a short node label on the lineage Sankey."""
-    top = str(loadings_mean.iloc[:, k].idxmax())
-    return top.split(" [")[0].split(",")[0].title()
+# Edge metrics baked per archetype pair (the client's similarity selector).
+# `signed` marks [-1, 1] metrics, mapped to a 0..1 distance as (1 - s) / 2;
+# unsigned [0, 1] metrics map as 1 - s (notebook 08's `to_distance`).
+LINEAGE_METRICS = {
+    "cos12": dict(fn=cosine_topk_matrix, signed=True),
+    "spearman": dict(fn=spearman_matrix, signed=True),
+    "rbo": dict(fn=rbo_matrix, signed=False),
+    "jac12": dict(fn=topk_jaccard_matrix, signed=False),
+}
+
+
+def _to_distance(S: np.ndarray, signed: bool) -> np.ndarray:
+    return (1.0 - S) / 2.0 if signed else 1.0 - S
+
+
+def _short_label(label: str) -> str:
+    """Surname for a compact node label: 'GO, BONG GO (PDPLBN) [3]' -> 'Go'."""
+    return str(label).split(" [")[0].split(",")[0].title()
+
+
+def _node_names(labels: list[str]) -> list[str]:
+    """Compact display names for one node's candidate list: surname only, with a
+    given-name initial prepended wherever two candidates in the same node share
+    a surname ('Tulfo' + 'Tulfo' -> 'B. Tulfo' + 'E. Tulfo')."""
+    surnames = [_short_label(c) for c in labels]
+    dupes = {s for s in surnames if surnames.count(s) > 1}
+    names = []
+    for c, s in zip(labels, surnames):
+        given = str(c).split(" [")[0].partition(",")[2]
+        given = re.sub(r"\s*\([^)]*\)\s*$", "", given).strip()
+        names.append(f"{given[0]}. {s}" if s in dupes and given else s)
+    return names
 
 
 def build_lineage(year: str, sweep: dict) -> dict:
-    """Sankey nodes/links tracing how archetypes split as p grows across the
-    sweep. Independent of level/weighting — driven only by loadings_mean."""
+    """Lineage network tracing how archetypes persist or split as p grows
+    across the sweep. Independent of level/weighting — driven only by
+    loadings_mean."""
     ps = sorted(sweep)
-    edges = archetype_lineage({p: sweep[p]["loadings_mean"].to_numpy() for p in ps})
+    mats = {p: sweep[p]["loadings_mean"].to_numpy() for p in ps}
+    lineage = {
+        (e["p_from"], e["k_from"], e["p_to"], e["k_to"]): e
+        for e in archetype_lineage(mats)
+    }
 
     node_index: dict[tuple[int, int], int] = {}
     nodes: list[dict] = []
-    span = max(len(ps) - 1, 1)
-    for pi, p in enumerate(ps):
+    for p in ps:
         lm = sweep[p]["loadings_mean"]
         for k in range(p):
             node_index[(p, k)] = len(nodes)
+            top = lm.iloc[:, k].sort_values(ascending=False).head(LINEAGE_TOP_K)
+            names = _node_names(list(top.index))
             nodes.append({
                 "p": p,
                 "k": k,
-                "label": _top_candidate(lm, k),
-                # Nudge columns inside (0, 1) so Plotly's fixed arrangement does
-                # not clip the first/last columns against the plot edges.
-                "x": round(0.04 + 0.92 * (pi / span), 4),
-                "y": round((k + 0.5) / p, 4),
+                "label": _short_label(top.index[0]),
+                "top": [
+                    {"name": nm, "full": str(c), "w": _round(w, ARCH_ROUND)}
+                    for nm, (c, w) in zip(names, top.items())
+                ],
             })
 
-    links = [{
-        "source": node_index[(e["p_from"], e["k_from"])],
-        "target": node_index[(e["p_to"], e["k_to"])],
-        "similarity": round(e["similarity"], 3),
-        "split": bool(e["split"]),
-    } for e in edges]
+    links: list[dict] = []
+    for p_from, p_to in zip(ps[:-1], ps[1:]):
+        sims = {
+            name: m["fn"](mats[p_from], mats[p_to])
+            for name, m in LINEAGE_METRICS.items()
+        }
+        for i in range(p_from):
+            for j in range(p_to):
+                e = lineage.get((p_from, i, p_to, j))
+                links.append({
+                    "source": node_index[(p_from, i)],
+                    "target": node_index[(p_to, j)],
+                    "sims": {n: round(float(S[i, j]), 3) for n, S in sims.items()},
+                    "matched": e is not None and not e["split"],
+                    "split": e is not None and bool(e["split"]),
+                })
 
-    return {"year": year, "ps": ps, "nodes": nodes, "links": links}
+    # Within-p distinctness scalars (notebook 08): the p×p distance matrix of
+    # each metric collapsed to its min / mean off-diagonal, per column.
+    distinct: dict[int, dict] = {}
+    for p in ps:
+        per = {}
+        for name, m in LINEAGE_METRICS.items():
+            D = _to_distance(m["fn"](mats[p], mats[p]), m["signed"])
+            off = D[np.triu_indices(p, 1)]
+            per[name] = {
+                "min": round(float(off.min()), 3),
+                "mean": round(float(off.mean()), 3),
+            }
+        distinct[p] = per
+
+    return {"year": year, "ps": ps, "nodes": nodes, "links": links,
+            "distinct": distinct}
 
 
 # ---------------------------------------------------------------------------
@@ -549,7 +621,7 @@ def build(out: Path, verify: bool) -> None:
             rel = f"sweep/{year}_p{p}.json"
             sizes[rel] = dump_json(sw, out / rel)
 
-        # --- archetype lineage across the whole sweep (comparison Sankey) ---
+        # --- archetype lineage across the whole sweep (comparison network) ---
         if len(sweep) > 1:
             sizes[f"lineage/{year}.json"] = dump_json(
                 build_lineage(year, sweep), out / "lineage" / f"{year}.json"
