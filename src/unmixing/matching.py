@@ -207,8 +207,36 @@ def topk_jaccard_matrix(A, B, k=12):
     return _cross_pairwise(A, B, f)
 
 
+def cosine_topk_matrix(A, B, k=12):
+    """Cosine similarity restricted to each pair's union of top-k candidates.
+
+    The cosine of two loading columns evaluated only on the candidates that
+    appear in either column's top-k, so the near-zero tail shared by all
+    archetypes does not inflate the similarity (notebook 08's `m_cosine_top`).
+
+    Parameters
+    ----------
+    A : ndarray, shape (L, p_A)
+    B : ndarray, shape (L, p_B)
+        Matrices with one archetype per column.
+    k : int, default 12
+        How many top-loading candidates per column enter the union.
+
+    Returns
+    -------
+    C : ndarray, shape (p_A, p_B)
+        Cosine of each column pair on its top-k union, in [-1, 1].
+    """
+    def f(u, v):
+        idx = np.union1d(_ranked_idx(u)[:k], _ranked_idx(v)[:k])
+        a, b = u[idx], v[idx]
+        return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
+    return _cross_pairwise(A, B, f)
+
+
 _SIMILARITIES = {
     "cosine": cosine_matrix,
+    "top12_cosine": cosine_topk_matrix,
     "spearman": spearman_matrix,
     "weighted_tau": weighted_tau_matrix,
     "rbo": rbo_matrix,
@@ -224,7 +252,7 @@ def similarity_matrix(A, B, similarity="cosine"):
     A : ndarray, shape (L, p_A)
     B : ndarray, shape (L, p_B)
         Matrices with one archetype per column.
-    similarity : {'cosine', 'spearman', 'weighted_tau', 'rbo', 'top12_jaccard'} or callable
+    similarity : {'cosine', 'top12_cosine', 'spearman', 'weighted_tau', 'rbo', 'top12_jaccard'} or callable
         Which metric to use (default 'cosine'). A callable receives
         ``(A, B)`` and must return the (p_A, p_B) similarity matrix.
 
