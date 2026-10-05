@@ -141,11 +141,35 @@ def tab_compare() -> Section:
         P("Trial mean/std at a chosen archetype count p (precomputed by the sweep). "
           "The map follows the sidebar level and weighting.", cls="text-sm opacity-60 mb-3"),
         card(
-            H2("Archetype lineage", cls="text-sm font-semibold mb-1"),
-            P("How archetypes split as the endmember count p grows (2 → 3 → "
-              "…). Consecutive p are cosine-matched; a highlighted link marks the "
-              "archetype that splits off when p increases by one. Each node is labelled "
-              "with its top-loading candidate; ribbon width ≈ match similarity.",
+            Div(
+                H2("Archetype lineage", cls="text-sm font-semibold"),
+                Div(
+                    labeled("Similarity metric", Select(
+                        Option("Cosine (top 12)", value="cos12"),
+                        Option("Spearman r", value="spearman"),
+                        Option("RBO", value="rbo"),
+                        Option("Jaccard (top 12)", value="jac12"),
+                        id="cmp-lineage-metric", cls=SELECT)),
+                    labeled("Column distance", Select(
+                        Option("Min pairwise", value="min"),
+                        Option("Mean pairwise", value="mean"),
+                        id="cmp-lineage-stat", cls=SELECT)),
+                    labeled("Candidates per node",
+                            Input(type="number", id="cmp-lineage-topn", min=6, max=12,
+                                  value=8, step=1, cls=f"{INPUT} w-28")),
+                    cls="flex flex-wrap gap-3 items-end",
+                ),
+                cls="flex items-start justify-between gap-3 mb-1",
+            ),
+            P("Network of archetypes across the sweep, one column per endmember "
+              "count p. Each node lists an archetype's top candidates; edge width "
+              "and label show the chosen similarity metric between the two loading "
+              "columns. Solid links are the Hungarian match from p to p+1 "
+              "(including the extra archetype's link to its closest parent — "
+              "hover says which), and faint links are other similar-enough pairs. "
+              "Above each column: the min/mean pairwise distance between that p's "
+              "archetypes (0 = identical, 1 = distinct) — where the min collapses, "
+              "the newest archetype duplicates an existing one.",
               cls="text-sm opacity-60 mb-2"),
             Div(id="cmp-lineage"),
             span="mb-4",

@@ -28,7 +28,8 @@ let MANIFEST = null;
 const state = {
   year: null, level: "province", weighted: true, topN: 5, tab: "map",
   map: { quantity: "Archetype abundance", arch: "arch_0", groupBy: "party" },
-  cmp: { p: 5, arch: "arch_0", stat: "mean", topN: 15, groupBy: "party" },
+  cmp: { p: 5, arch: "arch_0", stat: "mean", topN: 15, groupBy: "party",
+    lineageTopN: 8, lineageMetric: "cos12", lineageStat: "min" },
 };
 
 // --------------------------------------------------------------------- theme
@@ -347,39 +348,200 @@ async function renderMap() {
     `Summed endmember loading per ${mgb}, grouped by archetype.`, mgb);
 }
 
-// Sankey of how archetypes split as p grows across the whole sweep.
-// Independent of p/level/weighting.
+// Lineage network: how archetypes persist or split as p grows across the
+// sweep. Columns are pinned at x = p; each node is a box listing its top-N
+// candidates (surname, strongest first) with a border in the archetype color;
+// edge width + label = the selected similarity metric between the two loading
+// columns. The Hungarian-matched lineage (full cosine, split children
+// included) is solid; unmatched pairs above a floor are kept as faint
+// context. Above each column: that p's min/mean pairwise distance
+// (0 = identical … 1 = distinct). Independent of p/level/weighting.
+const LINEAGE_SIM_FLOOR = 0.35; // hide near-orthogonal unmatched pairs
+const LINEAGE_NODE_FONT = 9; // px, node box text (box widths are measured off it)
+const LINEAGE_METRICS = {
+  cos12: "cosine (top 12)", spearman: "Spearman r",
+  rbo: "RBO", jac12: "Jaccard (top 12)",
+};
+
+// Pixel width of a node box's widest text line (the annotation auto-sizes to
+// its text), measured with a canvas so edges can attach to the box border.
+const _measureCtx = document.createElement("canvas").getContext("2d");
+function lineageBoxHalfWidthPx(rows) {
+  let w = 0;
+  rows.forEach((ln, r) => {
+    _measureCtx.font =
+      `${r === 0 ? "bold " : ""}${LINEAGE_NODE_FONT}px ${FONT.family}`;
+    w = Math.max(w, _measureCtx.measureText(ln).width);
+  });
+  // half the text + annotation borderpad (2) + border (1.5) + a hair of slack
+  return w / 2 + 2 + 1.5 + 1;
+}
+
 async function renderLineage(divId) {
   const host = document.getElementById(divId);
   const lin = await getJSON(lineageURL(state.year)).catch(() => null);
   if (!lin) { host.textContent = ""; return; }
-  const hi = MANIFEST.theme.highlight;
-  const trace = {
-    type: "sankey",
-    arrangement: "fixed",
-    node: {
-      label: lin.nodes.map((n) => `p${n.p}·A${n.k} ${n.label}`),
-      x: lin.nodes.map((n) => n.x),
-      y: lin.nodes.map((n) => n.y),
-      pad: 8, thickness: 12,
-      color: lin.nodes.map((n) => hexToRgba(archColor(`arch_${n.k}`, n.p), 0.85)),
-    },
-    link: {
-      source: lin.links.map((l) => l.source),
-      target: lin.links.map((l) => l.target),
-      // clamp so near-zero-similarity links stay visible as thin ribbons
-      value: lin.links.map((l) => Math.max(l.similarity, 0.05)),
-      color: lin.links.map((l) =>
-        l.split ? hexToRgba(hi, 0.55) : "rgba(100,120,160,0.35)"),
-      customdata: lin.links.map((l) => l.similarity),
-      hovertemplate: "similarity %{customdata}<extra></extra>",
-    },
+  const topN = state.cmp.lineageTopN;
+  const metric = state.cmp.lineageMetric, stat = state.cmp.lineageStat;
+  const simOf = (l) => l.sims[metric];
+  const ps = lin.ps, maxP = ps[ps.length - 1];
+
+  const links = lin.links.filter((l) =>
+    l.matched || l.split || simOf(l) >= LINEAGE_SIM_FLOOR);
+
+  // Vertical layout: first column in k order, then each column ordered by the
+  // similarity-weighted mean y of its predecessors (barycenter) to limit
+  // edge crossings. y runs 0 (top) → 1 (bottom).
+  const byP = new Map(ps.map((p) => [p, []]));
+  lin.nodes.forEach((n, i) => byP.get(n.p).push(i));
+  const y = new Array(lin.nodes.length).fill(0.5);
+  byP.get(ps[0]).forEach((i, r, col) => { y[i] = (r + 0.5) / col.length; });
+  for (let c = 1; c < ps.length; c++) {
+    const col = byP.get(ps[c]);
+    const pulls = new Map(col.map((i) => [i, []]));
+    for (const l of links) {
+      if (lin.nodes[l.source].p === ps[c - 1] && pulls.has(l.target)) {
+        pulls.get(l.target).push([y[l.source], Math.max(simOf(l), 0)]);
+      }
+    }
+    col
+      .map((i, r) => {
+        const w = pulls.get(i).reduce((a, [, s]) => a + s, 0);
+        const b = w > 0
+          ? pulls.get(i).reduce((a, [yy, s]) => a + yy * s, 0) / w
+          : (r + 0.5) / col.length;
+        return [i, b];
+      })
+      .sort((a, b) => a[1] - b[1])
+      .forEach(([i], r) => { y[i] = (r + 0.5) / col.length; });
+  }
+
+  // Node box text (needed before the edges: box widths set where edges end).
+  const nodeRows = lin.nodes.map((n) => {
+    const names = n.top.slice(0, topN).map((t) => t.name);
+    const rows = [names[0]];
+    for (let r = 1; r < names.length; r += 2) {
+      rows.push(names.slice(r, r + 2).join(" · "));
+    }
+    return rows;
+  });
+
+  // Box half-widths in x-units, so each edge attaches to the border of its
+  // boxes, vertically centered: right-side middle of the source box to
+  // left-side middle of the target box.
+  const plotPx = Math.max(300, (host.clientWidth || 1100) - 20); // minus l/r margins
+  const unitsPerPx = (maxP - ps[0] + 0.9) / plotPx;
+  const halfW = nodeRows.map((rows) => lineageBoxHalfWidthPx(rows) * unitsPerPx);
+  const edgeEnds = (l) => {
+    const s = lin.nodes[l.source], t = lin.nodes[l.target];
+    return {
+      x0: s.p + halfW[l.source], y0: y[l.source],
+      x1: t.p - halfW[l.target], y1: y[l.target],
+    };
   };
-  Plotly.react(divId, [trace], {
-    height: 480, margin: { l: 10, r: 10, t: 10, b: 10 },
-    paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
+
+  // Edges as below-layer line shapes (per-edge width).
+  const shapes = links.map((l) => {
+    const e = edgeEnds(l);
+    return {
+      type: "line", layer: "below", ...e,
+      line: {
+        width: 0.5 + 6 * Math.max(simOf(l), 0),
+        color: l.matched || l.split
+          ? "rgba(100,120,160,0.55)" : "rgba(100,120,160,0.16)",
+      },
+    };
+  });
+
+  // Per-edge value labels, staggered along the edge so labels of crossing
+  // edges rarely land on top of each other; they double as the hover target
+  // (hover lists every metric, not just the selected one).
+  const edgeT = (l) => 0.3 + 0.13 * ((l.source + l.target) % 4);
+  const edgeLabels = {
+    type: "scatter", mode: "text", hoverinfo: "text", showlegend: false,
+    x: links.map((l) => {
+      const e = edgeEnds(l);
+      return e.x0 + (e.x1 - e.x0) * edgeT(l);
+    }),
+    y: links.map((l) => {
+      const e = edgeEnds(l);
+      return e.y0 + (e.y1 - e.y0) * edgeT(l);
+    }),
+    text: links.map((l) => simOf(l).toFixed(2)),
+    textposition: "top center",
+    textfont: {
+      family: FONT.family, size: 8.5,
+      color: links.map((l) => l.matched || l.split
+        ? "rgba(70,85,120,0.9)" : "rgba(100,120,160,0.55)"),
+    },
+    hovertext: links.map((l) => {
+      const s = lin.nodes[l.source], t = lin.nodes[l.target];
+      const kind = l.split ? " · split" : l.matched ? " · matched" : "";
+      return `p${s.p}·A${s.k} ${s.label} → p${t.p}·A${t.k} ${t.label}${kind}` +
+        `<br>cosine (top 12) ${l.sims.cos12} · Spearman r ${l.sims.spearman}` +
+        `<br>RBO ${l.sims.rbo} · Jaccard (top 12) ${l.sims.jac12}`;
+    }),
+  };
+
+  // Nodes: one annotation per archetype — top candidate bold on its own line,
+  // the rest of the top-N packed two per line to keep the plot compact, box
+  // border in the archetype color. Hover lists full labels + loadings.
+  const annotations = lin.nodes.map((n, i) => {
+    const rows = nodeRows[i].map((r, j) => (j === 0 ? `<b>${r}</b>` : r));
+    return {
+      x: n.p, y: y[i], xanchor: "center", yanchor: "middle",
+      align: "center", showarrow: false,
+      font: { family: FONT.family, size: LINEAGE_NODE_FONT },
+      bordercolor: archColor(`arch_${n.k}`, n.p), borderwidth: 1.5, borderpad: 2,
+      bgcolor: "rgba(255,255,255,0.85)",
+      text: rows.join("<br>"),
+      hovertext: `<b>p = ${n.p} · archetype ${n.k}</b><br>` +
+        n.top.slice(0, topN).map((t) => `${t.full} — ${t.w}`).join("<br>"),
+    };
+  });
+
+  // Within-p distinctness readout above each column: the min or mean pairwise
+  // distance (0 = identical … 1 = distinct) between that p's archetypes,
+  // under the selected metric (notebook 08's p-sweep scalars).
+  for (const p of ps) {
+    const d = lin.distinct && lin.distinct[p] && lin.distinct[p][metric];
+    if (!d) continue;
+    annotations.push({
+      x: p, xref: "x", y: 1, yref: "paper", yanchor: "bottom", showarrow: false,
+      font: { family: FONT.family, size: 9.5, color: "rgba(90,100,125,0.95)" },
+      text: `${stat} d = ${d[stat].toFixed(2)}`,
+      hovertext: `${stat} pairwise distance between the ${p} archetypes<br>` +
+        `(${LINEAGE_METRICS[metric]}; 0 = identical, 1 = distinct)`,
+    });
+  }
+
+  const nodeLines = 1 + Math.ceil((topN - 1) / 2);
+  Plotly.react(divId, [edgeLabels], {
+    height: Math.max(420, maxP * (nodeLines * 11 + 26)),
+    margin: { l: 10, r: 10, t: 24, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+    shapes, annotations,
+    xaxis: {
+      title: { text: "number of archetypes p" },
+      tickvals: ps, range: [ps[0] - 0.45, maxP + 0.45],
+      showgrid: false, zeroline: false, fixedrange: true,
+    },
+    yaxis: {
+      visible: false, range: [1.02, -0.02], fixedrange: true,
+    },
   }, PLOTLY_CFG);
 }
+
+// Edge attachment points are computed from the plot's pixel width, so re-derive
+// them when the window resizes (Plotly's own responsive reflow keeps the boxes
+// at their pixel size while the axis units stretch underneath them).
+let _lineageResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(_lineageResizeTimer);
+  _lineageResizeTimer = setTimeout(() => {
+    if (state.tab === "compare") renderLineage("cmp-lineage");
+  }, 250);
+});
 
 // ----------------------------------------------------------------- tab: compare
 async function renderCompare() {
@@ -543,6 +705,19 @@ async function init() {
   });
   document.getElementById("cmp-topN").addEventListener("change", (e) => {
     state.cmp.topN = +e.target.value; renderActive();
+  });
+  document.getElementById("cmp-lineage-topn").addEventListener("change", (e) => {
+    state.cmp.lineageTopN = Math.min(12, Math.max(6, +e.target.value || 8));
+    e.target.value = state.cmp.lineageTopN;
+    if (state.tab === "compare") renderLineage("cmp-lineage");
+  });
+  document.getElementById("cmp-lineage-metric").addEventListener("change", (e) => {
+    state.cmp.lineageMetric = e.target.value;
+    if (state.tab === "compare") renderLineage("cmp-lineage");
+  });
+  document.getElementById("cmp-lineage-stat").addEventListener("change", (e) => {
+    state.cmp.lineageStat = e.target.value;
+    if (state.tab === "compare") renderLineage("cmp-lineage");
   });
   for (const [t, id] of [["map", "tabbtn-map"], ["compare", "tabbtn-compare"], ["dist", "tabbtn-dist"]]) {
     document.getElementById(id).addEventListener("click", () => switchTab(t));
