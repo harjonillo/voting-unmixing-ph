@@ -50,15 +50,32 @@ class PreprocessedData:
 
     @property
     def n_candidates(self):
+        """Number of kept candidates (rows of ``Y``)."""
         return self.Y.shape[0]
 
     @property
     def n_precincts(self):
+        """Number of kept precincts (columns of ``Y``)."""
         return self.Y.shape[1]
 
 
 def candidate_label(column: str, rank: int) -> str:
-    """'12. SURNAME, NAME (PARTY)' -> 'SURNAME, NAME (PARTY) [12]'."""
+    """Build a display label from a CSV candidate column name and a rank.
+
+    Parameters
+    ----------
+    column : str
+        Original CSV column header, e.g. ``'12. SURNAME, NAME (PARTY)'``;
+        the ballot number before the first '.' is dropped and whitespace
+        (including embedded newlines) is collapsed.
+    rank : int
+        National rank by total votes (1 = most voted).
+
+    Returns
+    -------
+    label : str
+        ``'SURNAME, NAME (PARTY) [rank]'``.
+    """
     name = column.split(".", 1)[1].strip() if "." in column else column
     name = " ".join(name.split())  # collapse the newline/extra spaces in headers
     return f"{name} [{rank}]"
@@ -74,6 +91,52 @@ def preprocess(
     randomize_precinct_order: bool = False,
     verbose: bool = True,
 ) -> PreprocessedData:
+    """Filter, rank, and normalize the raw results table into a vote matrix.
+
+    Applies the five steps listed in the module docstring: drop excluded
+    regions, keep candidates by 25th-percentile votes, keep precincts by
+    total votes, rank candidates by national total, normalize per precinct.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Per-clustered-precinct results table (geography + stats + one column
+        per candidate), as returned by ``load_complete``.
+    excluded_regions : sequence of str, default ('OV', 'LAV', 'OAV')
+        REGION codes dropped before any filtering (overseas/absentee).
+    sen_col_start : int, default 17
+        Index of the first senatorial-candidate column in `df`.
+    min_candidate_25th_percentile : float, default 10
+        Candidate kept only if the 25th percentile of its per-precinct votes
+        is at least this.
+    min_precinct_votes : float, default 10
+        Precinct kept only if its total votes over the kept candidates is at
+        least this.
+    normalization : {'valid_ballots', 'row_max', 'none'}, default 'valid_ballots'
+        Per-precinct denominator for the vote counts.
+    randomize_precinct_order : bool, default False
+        If True, shuffle the kept precincts (columns of ``Y`` and rows of
+        ``df_geo``, which stay aligned) using the global NumPy RNG — seed
+        with ``np.random.seed`` beforehand for reproducibility. Used by
+        notebook 09's order-sensitivity trials.
+    verbose : bool, default True
+        Print the candidate/precinct counts before and after filtering.
+
+    Returns
+    -------
+    PreprocessedData
+        Vote matrices ``Y_raw``/``Y`` (L candidates x N precincts), the
+        row-aligned geography table, ranked column names and labels, and a
+        ``params`` dict recording the settings plus ``precinct_ids`` — the
+        original `df` row labels in final column order, which lets callers
+        map a shuffled run's precincts back onto another run's order.
+
+    Raises
+    ------
+    ValueError
+        If `normalization` is unknown, or a kept precinct has a zero
+        normalization denominator.
+    """
     if normalization not in NORMALIZATIONS:
         raise ValueError(f"normalization must be one of {NORMALIZATIONS}")
 
@@ -115,8 +178,12 @@ def preprocess(
         "min_candidate_25th_percentile": min_candidate_25th_percentile,
         "min_precinct_votes": min_precinct_votes,
         "normalization": normalization,
+        "randomize_precinct_order": randomize_precinct_order,
         "n_candidates_before": len(candidate_cols),
         "n_precincts_before": len(df),
+        # original df row labels in final column order of Y — lets callers map
+        # a (possibly shuffled) run's precincts back onto another run's order
+        "precinct_ids": np.asarray(kept_precincts),
     }
 
     if verbose:
@@ -131,8 +198,28 @@ def preprocess(
                             candidate_labels=labels, params=params)
 
 
-def preprocess_from_config(df: pd.DataFrame, config, verbose: bool = True) -> PreprocessedData:
-    """Run ``preprocess`` with the [preprocessing] section of the config."""
+def preprocess_from_config(df: pd.DataFrame, config, randomize_precinct_order: bool = False,
+                           verbose: bool = True) -> PreprocessedData:
+    """Run `preprocess` with the [preprocessing] section of the config.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Per-clustered-precinct results table, as returned by ``load_complete``.
+    config : configparser.ConfigParser
+        Loaded config whose ``[preprocessing]`` section supplies the
+        filtering and normalization settings.
+    randomize_precinct_order : bool, default False
+        Passed through to `preprocess`; shuffles the kept precincts using
+        the global NumPy RNG.
+    verbose : bool, default True
+        Passed through to `preprocess`.
+
+    Returns
+    -------
+    PreprocessedData
+        See `preprocess`.
+    """
     sec = config["preprocessing"]
     excluded = [r.strip() for r in sec["excluded_regions"].split(",") if r.strip()]
     return preprocess(
@@ -142,5 +229,6 @@ def preprocess_from_config(df: pd.DataFrame, config, verbose: bool = True) -> Pr
         min_candidate_25th_percentile=sec.getfloat("min_candidate_25th_percentile"),
         min_precinct_votes=sec.getfloat("min_precinct_votes"),
         normalization=sec.get("normalization"),
+        randomize_precinct_order=randomize_precinct_order,
         verbose=verbose,
     )
