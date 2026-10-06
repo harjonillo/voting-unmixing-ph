@@ -146,7 +146,9 @@ def tab_compare() -> Section:
                 Div(
                     labeled("Similarity metric", Select(
                         Option("Cosine (top 12)", value="cos12"),
+                        Option("Cosine (full)", value="cos"),
                         Option("Spearman r", value="spearman"),
+                        Option("Weighted tau", value="wtau"),
                         Option("RBO", value="rbo"),
                         Option("Jaccard (top 12)", value="jac12"),
                         id="cmp-lineage-metric", cls=SELECT)),

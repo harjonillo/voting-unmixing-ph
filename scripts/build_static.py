@@ -65,11 +65,13 @@ from src.geo import (
 )
 from src.unmixing.matching import (
     archetype_lineage,
+    cosine_matrix,
     cosine_topk_matrix,
     match_to_reference,
     rbo_matrix,
     spearman_matrix,
     topk_jaccard_matrix,
+    weighted_tau_matrix,
 )
 
 # ---------------------------------------------------------------------------
@@ -414,7 +416,9 @@ LINEAGE_TOP_K = 12  # candidates baked per node; the client shows the top 6–12
 # unsigned [0, 1] metrics map as 1 - s (notebook 08's `to_distance`).
 LINEAGE_METRICS = {
     "cos12": dict(fn=cosine_topk_matrix, signed=True),
+    "cos": dict(fn=cosine_matrix, signed=True),
     "spearman": dict(fn=spearman_matrix, signed=True),
+    "wtau": dict(fn=weighted_tau_matrix, signed=True),
     "rbo": dict(fn=rbo_matrix, signed=False),
     "jac12": dict(fn=topk_jaccard_matrix, signed=False),
 }

@@ -359,7 +359,8 @@ async function renderMap() {
 const LINEAGE_SIM_FLOOR = 0.35; // hide near-orthogonal unmatched pairs
 const LINEAGE_NODE_FONT = 9; // px, node box text (box widths are measured off it)
 const LINEAGE_METRICS = {
-  cos12: "cosine (top 12)", spearman: "Spearman r",
+  cos12: "cosine (top 12)", cos: "cosine (full)",
+  spearman: "Spearman r", wtau: "weighted tau",
   rbo: "RBO", jac12: "Jaccard (top 12)",
 };
 
@@ -478,7 +479,8 @@ async function renderLineage(divId) {
       const s = lin.nodes[l.source], t = lin.nodes[l.target];
       const kind = l.split ? " · split" : l.matched ? " · matched" : "";
       return `p${s.p}·A${s.k} ${s.label} → p${t.p}·A${t.k} ${t.label}${kind}` +
-        `<br>cosine (top 12) ${l.sims.cos12} · Spearman r ${l.sims.spearman}` +
+        `<br>cosine (top 12) ${l.sims.cos12} · cosine (full) ${l.sims.cos}` +
+        `<br>Spearman r ${l.sims.spearman} · weighted tau ${l.sims.wtau}` +
         `<br>RBO ${l.sims.rbo} · Jaccard (top 12) ${l.sims.jac12}`;
     }),
   };
