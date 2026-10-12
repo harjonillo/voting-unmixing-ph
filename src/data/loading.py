@@ -24,7 +24,9 @@ def load_complete(config) -> pd.DataFrame:
     return df.dropna(axis=0)
 
 
-def save_processed(pre, endmembers: np.ndarray, abundances: np.ndarray, meta: dict, config):
+def save_processed(
+    pre, endmembers: np.ndarray, abundances: np.ndarray, meta: dict, config
+):
     """Write the pipeline outputs the app and notebooks read.
 
     - endmembers.csv    candidates (rows, labelled) x archetypes
@@ -42,9 +44,9 @@ def save_processed(pre, endmembers: np.ndarray, abundances: np.ndarray, meta: di
     p = endmembers.shape[1]
     arch_cols = [f"arch_{j}" for j in range(p)]
 
-    pd.DataFrame(
-        endmembers, index=pre.candidate_labels, columns=arch_cols
-    ).rename_axis("candidate").to_csv(out / "endmembers.csv")
+    pd.DataFrame(endmembers, index=pre.candidate_labels, columns=arch_cols).rename_axis(
+        "candidate"
+    ).to_csv(out / "endmembers.csv")
 
     df_ab = pre.df_geo.reset_index(drop=True).copy()
     for j, col in enumerate(arch_cols):
@@ -93,8 +95,12 @@ def load_sweep(config, full_resolution: bool = False):
         except ValueError:
             continue
         entry = {
-            "loadings_mean": pd.read_csv(sub / "loadings_mean.csv", index_col="candidate"),
-            "loadings_std": pd.read_csv(sub / "loadings_std.csv", index_col="candidate"),
+            "loadings_mean": pd.read_csv(
+                sub / "loadings_mean.csv", index_col="candidate"
+            ),
+            "loadings_std": pd.read_csv(
+                sub / "loadings_std.csv", index_col="candidate"
+            ),
             "agg_trials": pd.read_parquet(sub / "agg_municipality_trials.parquet"),
         }
         with open(sub / "meta.json") as f:

@@ -29,8 +29,27 @@ import shutil
 from pathlib import Path
 
 from fasthtml.common import (
-    Aside, Body, Button, Div, H2, Head, Html, Input, Label, Link, Main,
-    Meta, Nav, Option, P, Script, Section, Select, Span, Title, to_xml,
+    Aside,
+    Body,
+    Button,
+    Div,
+    H2,
+    Head,
+    Html,
+    Input,
+    Label,
+    Link,
+    Main,
+    Meta,
+    Nav,
+    Option,
+    P,
+    Script,
+    Section,
+    Select,
+    Span,
+    Title,
+    to_xml,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -49,12 +68,16 @@ CARD = "card bg-base-100 shadow-md border border-base-200"
 
 def field(label_text: str, control) -> Div:
     """A sidebar (label above control) block."""
-    return Div(Label(label_text, cls="block text-sm font-medium mb-1"), control, cls="mb-4")
+    return Div(
+        Label(label_text, cls="block text-sm font-medium mb-1"), control, cls="mb-4"
+    )
 
 
 def labeled(label_text: str, control) -> Div:
     """A compact (tiny label above control) cell for the inline control strips."""
-    return Div(Span(label_text, cls="text-xs opacity-60"), control, cls="flex flex-col gap-1")
+    return Div(
+        Span(label_text, cls="text-xs opacity-60"), control, cls="flex flex-col gap-1"
+    )
 
 
 def card(*content, span: str = "") -> Div:
@@ -64,7 +87,10 @@ def card(*content, span: str = "") -> Div:
 
 def sidebar() -> Aside:
     return Aside(
-        P("Spectral-unmixing explorer of PH senatorial votes.", cls="text-xs opacity-60 mb-1"),
+        P(
+            "Spectral-unmixing explorer of PH senatorial votes.",
+            cls="text-xs opacity-60 mb-1",
+        ),
         P(id="sidebar-caption", cls="text-xs opacity-60 mb-4"),
         field("Election year", Select(id="year", cls=f"{SELECT} w-full")),
         Div(
@@ -72,11 +98,26 @@ def sidebar() -> Aside:
             Div(id="levels", cls="space-y-1"),
             cls="mb-4",
         ),
-        field("Top N candidates",
-              Input(type="number", id="topN", min=3, max=15, value=5, step=1, cls=f"{INPUT} w-full")),
+        field(
+            "Top N candidates",
+            Input(
+                type="number",
+                id="topN",
+                min=3,
+                max=15,
+                value=5,
+                step=1,
+                cls=f"{INPUT} w-full",
+            ),
+        ),
         Div(
             Label(
-                Input(type="checkbox", id="weighted", checked=True, cls="checkbox checkbox-sm"),
+                Input(
+                    type="checkbox",
+                    id="weighted",
+                    checked=True,
+                    cls="checkbox checkbox-sm",
+                ),
                 Span("Weight means by valid ballots", cls="text-sm"),
                 cls="flex items-center gap-2 cursor-pointer",
             ),
@@ -86,7 +127,7 @@ def sidebar() -> Aside:
         # scrolls; max-h-screen + overflow-y-auto lets a tall sidebar scroll on
         # its own instead of being clipped.
         cls="w-72 shrink-0 bg-base-100 border-r border-base-300 p-4 "
-            "sticky top-0 self-start max-h-screen overflow-y-auto",
+        "sticky top-0 self-start max-h-screen overflow-y-auto",
     )
 
 
@@ -108,24 +149,35 @@ def tab_map() -> Section:
             card(
                 Div(
                     H2("Party / alliance mixing", cls="text-sm font-semibold"),
-                    labeled("Group by", Select(
-                        Option("Party", value="party"),
-                        Option("Alliance", value="alliance"),
-                        id="map-groupby", cls=SELECT)),
+                    labeled(
+                        "Group by",
+                        Select(
+                            Option("Party", value="party"),
+                            Option("Alliance", value="alliance"),
+                            id="map-groupby",
+                            cls=SELECT,
+                        ),
+                    ),
                     cls="flex items-start justify-between gap-3 mb-1",
                 ),
-                P("Endmember loadings summed by party or by alliance/coalition (the "
-                  "grouping over parties), showing how each group's candidates distribute "
-                  "across the voting archetypes. National-level MVSA loadings.",
-                  cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                P(
+                    "Endmember loadings summed by party or by alliance/coalition (the "
+                    "grouping over parties), showing how each group's candidates distribute "
+                    "across the voting archetypes. National-level MVSA loadings.",
+                    cls="text-sm opacity-60 mb-2",
+                    style="flex-grow:0",
+                ),
                 Div(id="map-partylist"),
                 span="lg:col-span-3",
             ),
             card(
                 H2("Top candidates per group", cls="text-sm font-semibold mb-1"),
-                P("Best-ranked (by election result) in each party/alliance; the extra "
-                  "column shows the other grouping.",
-                  cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                P(
+                    "Best-ranked (by election result) in each party/alliance; the extra "
+                    "column shows the other grouping.",
+                    cls="text-sm opacity-60 mb-2",
+                    style="flex-grow:0",
+                ),
                 Div(id="map-partylist-table"),
                 span="lg:col-span-2",
             ),
@@ -138,41 +190,65 @@ def tab_map() -> Section:
 def tab_compare() -> Section:
     return Section(
         H2("Endmember-count comparison", cls="text-base font-semibold mb-2"),
-        P("Trial mean/std at a chosen archetype count p (precomputed by the sweep). "
-          "The map follows the sidebar level and weighting.", cls="text-sm opacity-60 mb-3"),
+        P(
+            "Trial mean/std at a chosen archetype count p (precomputed by the sweep). "
+            "The map follows the sidebar level and weighting.",
+            cls="text-sm opacity-60 mb-3",
+        ),
         card(
             Div(
                 H2("Archetype lineage", cls="text-sm font-semibold"),
                 Div(
-                    labeled("Similarity metric", Select(
-                        Option("Cosine (top 12)", value="cos12"),
-                        Option("Cosine (full)", value="cos"),
-                        Option("Spearman r", value="spearman"),
-                        Option("Weighted tau", value="wtau"),
-                        Option("RBO", value="rbo"),
-                        Option("Jaccard (top 12)", value="jac12"),
-                        id="cmp-lineage-metric", cls=SELECT)),
-                    labeled("Column distance", Select(
-                        Option("Min pairwise", value="min"),
-                        Option("Mean pairwise", value="mean"),
-                        id="cmp-lineage-stat", cls=SELECT)),
-                    labeled("Candidates per node",
-                            Input(type="number", id="cmp-lineage-topn", min=6, max=12,
-                                  value=8, step=1, cls=f"{INPUT} w-28")),
+                    labeled(
+                        "Similarity metric",
+                        Select(
+                            Option("Cosine (top 12)", value="cos12"),
+                            Option("Cosine (full)", value="cos"),
+                            Option("Spearman r", value="spearman"),
+                            Option("Weighted tau", value="wtau"),
+                            Option("RBO", value="rbo"),
+                            Option("Jaccard (top 12)", value="jac12"),
+                            id="cmp-lineage-metric",
+                            cls=SELECT,
+                        ),
+                    ),
+                    labeled(
+                        "Column distance",
+                        Select(
+                            Option("Min pairwise", value="min"),
+                            Option("Mean pairwise", value="mean"),
+                            id="cmp-lineage-stat",
+                            cls=SELECT,
+                        ),
+                    ),
+                    labeled(
+                        "Candidates per node",
+                        Input(
+                            type="number",
+                            id="cmp-lineage-topn",
+                            min=6,
+                            max=12,
+                            value=8,
+                            step=1,
+                            cls=f"{INPUT} w-28",
+                        ),
+                    ),
                     cls="flex flex-wrap gap-3 items-end",
                 ),
                 cls="flex items-start justify-between gap-3 mb-1",
             ),
-            P("Network of archetypes across the sweep, one column per endmember "
-              "count p. Each node lists an archetype's top candidates; edge width "
-              "and label show the chosen similarity metric between the two loading "
-              "columns. Solid links are the Hungarian match from p to p+1 "
-              "(including the extra archetype's link to its closest parent — "
-              "hover says which), and faint links are other similar-enough pairs. "
-              "Above each column: the min/mean pairwise distance between that p's "
-              "archetypes (0 = identical, 1 = distinct) — where the min collapses, "
-              "the newest archetype duplicates an existing one.",
-              cls="text-sm opacity-60 mb-2"),
+            P(
+                "Network of archetypes across the sweep, one column per endmember "
+                "count p. Each node lists an archetype's top candidates; edge width "
+                "and label show the chosen similarity metric between the two loading "
+                "columns. Solid links are the Hungarian match from p to p+1 "
+                "(including the extra archetype's link to its closest parent — "
+                "hover says which), and faint links are other similar-enough pairs. "
+                "Above each column: the min/mean pairwise distance between that p's "
+                "archetypes (0 = identical, 1 = distinct) — where the min collapses, "
+                "the newest archetype duplicates an existing one.",
+                cls="text-sm opacity-60 mb-2",
+            ),
             Div(id="cmp-lineage"),
             span="mb-4",
         ),
@@ -181,13 +257,27 @@ def tab_compare() -> Section:
         Div(
             labeled("Archetypes p", Select(id="cmp-p", cls=SELECT)),
             labeled("Archetype", Select(id="cmp-arch", cls=SELECT)),
-            labeled("Map shows", Select(
-                Option("Mean abundance", value="mean"),
-                Option("Std across trials", value="std"),
-                id="cmp-stat", cls=SELECT,
-            )),
-            labeled("Top N candidates",
-                    Input(type="number", id="cmp-topN", min=5, max=40, value=15, step=1, cls=f"{INPUT} w-28")),
+            labeled(
+                "Map shows",
+                Select(
+                    Option("Mean abundance", value="mean"),
+                    Option("Std across trials", value="std"),
+                    id="cmp-stat",
+                    cls=SELECT,
+                ),
+            ),
+            labeled(
+                "Top N candidates",
+                Input(
+                    type="number",
+                    id="cmp-topN",
+                    min=5,
+                    max=40,
+                    value=15,
+                    step=1,
+                    cls=f"{INPUT} w-28",
+                ),
+            ),
             cls="flex flex-wrap gap-3 items-end mb-3",
         ),
         Div(card(Div(id="cmp-plot")), card(Div(id="cmp-loadings")), cls="grid gap-4"),
@@ -195,40 +285,56 @@ def tab_compare() -> Section:
             card(
                 Div(
                     H2("Party / alliance mixing", cls="text-sm font-semibold"),
-                    labeled("Group by", Select(
-                        Option("Party", value="party"),
-                        Option("Alliance", value="alliance"),
-                        id="cmp-groupby", cls=SELECT)),
+                    labeled(
+                        "Group by",
+                        Select(
+                            Option("Party", value="party"),
+                            Option("Alliance", value="alliance"),
+                            id="cmp-groupby",
+                            cls=SELECT,
+                        ),
+                    ),
                     cls="flex items-start justify-between gap-3 mb-1",
                 ),
-                P("Endmember loadings summed by party or by alliance/coalition at the "
-                  "chosen archetype count p, showing how each group's candidates distribute "
-                  "across the archetypes as p changes.",
-                  cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                P(
+                    "Endmember loadings summed by party or by alliance/coalition at the "
+                    "chosen archetype count p, showing how each group's candidates distribute "
+                    "across the archetypes as p changes.",
+                    cls="text-sm opacity-60 mb-2",
+                    style="flex-grow:0",
+                ),
                 Div(id="cmp-partylist"),
                 span="lg:col-span-3",
             ),
             card(
                 H2("Top candidates per group", cls="text-sm font-semibold mb-1"),
-                P("Best-ranked (by election result) in each party/alliance; the extra "
-                  "column shows the other grouping.",
-                  cls="text-sm opacity-60 mb-2", style="flex-grow:0"),
+                P(
+                    "Best-ranked (by election result) in each party/alliance; the extra "
+                    "column shows the other grouping.",
+                    cls="text-sm opacity-60 mb-2",
+                    style="flex-grow:0",
+                ),
                 Div(id="cmp-partylist-table"),
                 span="lg:col-span-2",
             ),
             cls="grid grid-cols-1 lg:grid-cols-5 gap-4 mt-4",
         ),
-        id="tab-compare", hidden=True,
+        id="tab-compare",
+        hidden=True,
     )
 
 
 def tab_dist() -> Section:
     return Section(
         H2("Abundance distributions", cls="text-base font-semibold mb-2"),
-        P("Distribution of each archetype's abundance across the units at the current "
-          "aggregation level.", cls="text-sm opacity-60 mb-3"),
+        P(
+            "Distribution of each archetype's abundance across the units at the current "
+            "aggregation level.",
+            cls="text-sm opacity-60 mb-3",
+        ),
         card(Div(id="dist-plots")),
-        id="tab-dist", hidden=True,
+        id="tab-dist",
+        hidden=True,
     )
 
 
@@ -239,12 +345,20 @@ def page() -> Html:
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title("PH voting archetypes"),
             Link(rel="preconnect", href="https://fonts.googleapis.com"),
-            Link(rel="preconnect", href="https://fonts.gstatic.com", crossorigin="anonymous"),
-            Link(rel="stylesheet",
-                 href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"),
+            Link(
+                rel="preconnect",
+                href="https://fonts.gstatic.com",
+                crossorigin="anonymous",
+            ),
+            Link(
+                rel="stylesheet",
+                href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap",
+            ),
             Link(rel="stylesheet", href=DAISYUI_CDN),
             Script(src=TAILWIND_CDN),
-            Link(rel="stylesheet", href="./styles.css"),  # our overrides, after Tailwind/daisyUI
+            Link(
+                rel="stylesheet", href="./styles.css"
+            ),  # our overrides, after Tailwind/daisyUI
             Script(src=PLOTLY_CDN),
         ),
         Body(
@@ -257,10 +371,15 @@ def page() -> Html:
                 Main(
                     Div(
                         Nav(
-                            Button("Map / overview", id="tabbtn-map", cls="tab tab-active"),
+                            Button(
+                                "Map / overview", id="tabbtn-map", cls="tab tab-active"
+                            ),
                             Button("Model comparison", id="tabbtn-compare", cls="tab"),
-                            Button("Abundance distributions", id="tabbtn-dist", cls="tab"),
-                            role="tablist", cls="tabs tabs-bordered",
+                            Button(
+                                "Abundance distributions", id="tabbtn-dist", cls="tab"
+                            ),
+                            role="tablist",
+                            cls="tabs tabs-bordered",
                         ),
                         Span(id="status", cls="text-xs opacity-60 ml-2"),
                         cls="flex items-center gap-2 mb-4",
@@ -275,7 +394,8 @@ def page() -> Html:
             Script(src="./app.js"),
             cls="min-h-screen bg-base-100",
         ),
-        lang="en", data_theme=DAISY_THEME,
+        lang="en",
+        data_theme=DAISY_THEME,
     )
 
 
@@ -288,8 +408,11 @@ def build(out: Path) -> None:
     for asset in ("styles.css", "app.js"):
         shutil.copy2(WEB / asset, out / asset)
     data = out / "data"
-    note = "" if (data / "manifest.json").exists() else \
-        "  (!) site/data is empty — run scripts/build_static.py --out site/data first"
+    note = (
+        ""
+        if (data / "manifest.json").exists()
+        else "  (!) site/data is empty — run scripts/build_static.py --out site/data first"
+    )
     print(f"Wrote {out}/index.html + styles.css + app.js{note}")
 
 

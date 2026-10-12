@@ -44,9 +44,9 @@ def est_noise(y, noise_type="additive", verbose=True):
         print("Noise estimates:")
 
     if noise_type == "poisson":
-        sqy = np.sqrt(np.maximum(y, 0))       # prevent negative values
+        sqy = np.sqrt(np.maximum(y, 0))  # prevent negative values
         u, Ru = _est_additive_noise(sqy, verbose)
-        x = (sqy - u) ** 2                     # signal estimates
+        x = (sqy - u) ** 2  # signal estimates
         w = np.sqrt(x) * u * 2
         Rw = w @ w.T / N
     else:  # additive
@@ -58,6 +58,7 @@ def est_noise(y, noise_type="additive", verbose=True):
 # ---------------------------------------------------------------------------
 # Internal helper
 # ---------------------------------------------------------------------------
+
 
 def _est_additive_noise(r, verbose=True):
     """
@@ -81,7 +82,7 @@ def _est_additive_noise(r, verbose=True):
     if verbose:
         print("  Computing sample correlation matrix and its inverse")
 
-    RR = r @ r.T                              # (L, L)  equation (11)
+    RR = r @ r.T  # (L, L)  equation (11)
     RRi = np.linalg.inv(RR + small * np.eye(L))  # equation (11)
 
     if verbose:
@@ -95,14 +96,14 @@ def _est_additive_noise(r, verbose=True):
         XX = RRi - np.outer(RRi[:, i], RRi[i, :]) / RRi[i, i]
 
         RRa = RR[:, i].copy()
-        RRa[i] = 0.0                          # remove effect of XX[:, i]
+        RRa[i] = 0.0  # remove effect of XX[:, i]
 
         # equation (9)
         beta = XX @ RRa
-        beta[i] = 0.0                         # remove effect of XX[i, :]
+        beta[i] = 0.0  # remove effect of XX[i, :]
 
         # equation (10)
-        w[i, :] = r[i, :] - beta @ r          # beta[i]=0 so band i cancels
+        w[i, :] = r[i, :] - beta @ r  # beta[i]=0 so band i cancels
 
     if verbose:
         print("\n  Computing noise correlation matrix")

@@ -17,7 +17,7 @@ def plot_archetype_loadings(
     series_colors=None,
     top_n=15,
     title=None,
-    xlabel='Loading',
+    xlabel="Loading",
 ):
     """Grouped horizontal bar chart of top-N candidate loadings for one or more archetypes.
 
@@ -32,9 +32,7 @@ def plot_archetype_loadings(
 
     top_sets = [set(np.argsort(s)[::-1][:top_n]) for s in loadings_list]
     union = set().union(*top_sets)
-    order = np.asarray(
-        sorted(union, key=lambda k: -max(s[k] for s in loadings_list))
-    )
+    order = np.asarray(sorted(union, key=lambda k: -max(s[k] for s in loadings_list)))
 
     if ax is None:
         fig, ax = plt.subplots(figsize=(7, max(4.0, 0.32 * len(order))))
@@ -44,24 +42,24 @@ def plot_archetype_loadings(
     offsets = (np.arange(n_series) - (n_series - 1) / 2) * bar_h
 
     for s_idx, s in enumerate(loadings_list):
-        color = series_colors[s_idx] if series_colors else f'C{s_idx}'
+        color = series_colors[s_idx] if series_colors else f"C{s_idx}"
         label = series_labels[s_idx] if series_labels else None
-        xerr  = stds_list[s_idx][order] if stds_list is not None else None
+        xerr = stds_list[s_idx][order] if stds_list is not None else None
         ax.barh(
             y + offsets[s_idx],
             s[order],
             height=bar_h,
             color=color,
-            edgecolor='white',
+            edgecolor="white",
             label=label,
             xerr=xerr,
-            error_kw=dict(ecolor='black', lw=0.8, capsize=2),
+            error_kw=dict(ecolor="black", lw=0.8, capsize=2),
         )
 
     ax.set_yticks(y)
     ax.set_yticklabels([candidate_labels[k] for k in order], fontsize=8)
     ax.invert_yaxis()
-    ax.axvline(0, color='black', lw=0.6)
+    ax.axvline(0, color="black", lw=0.6)
     ax.set_xlabel(xlabel)
     if title:
         ax.set_title(title, fontsize=10)
@@ -76,8 +74,8 @@ def plot_archetypes_loadings_grid(
     stds=None,
     subtitles=None,
     top_n=15,
-    suptitle='',
-    xlabel='Loading',
+    suptitle="",
+    xlabel="Loading",
     colors=None,
 ):
     """Grid of horizontal top-N candidate bar charts, one panel per archetype column.
@@ -91,11 +89,13 @@ def plot_archetypes_loadings_grid(
     L, K = loadings.shape
     ncols = min(K, 4)
     nrows = int(np.ceil(K / ncols))
-    fig, axes = plt.subplots(nrows, ncols, figsize=(4.5 * ncols, max(4.5, 0.32 * top_n) * nrows))
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(4.5 * ncols, max(4.5, 0.32 * top_n) * nrows)
+    )
     axes_flat = np.atleast_1d(axes).flatten()
     for k in range(K):
-        color = colors[k] if colors is not None else f'C{k % 10}'
-        sub   = subtitles[k] if subtitles is not None else f'Archetype {k}'
+        color = colors[k] if colors is not None else f"C{k % 10}"
+        sub = subtitles[k] if subtitles is not None else f"Archetype {k}"
         plot_archetype_loadings(
             [loadings[:, k]],
             candidate_labels,
@@ -128,40 +128,44 @@ def build_abundance_panel(name, A, labels=None):
         totals = A.sum(axis=1)
         K = A.shape[0]
         return {
-            'name': name,
-            'clusters': list(range(K)),
-            'totals':   totals,
-            'sems':     np.zeros(K),
-            'sizes':    np.ones(K, dtype=int),
-            'n_noise':  0,
+            "name": name,
+            "clusters": list(range(K)),
+            "totals": totals,
+            "sems": np.zeros(K),
+            "sizes": np.ones(K, dtype=int),
+            "n_noise": 0,
         }
     totals_per_vec = A.sum(axis=1)
     clusters = sorted(c for c in np.unique(labels) if c >= 0)
-    n_noise  = int((labels == -1).sum())
-    totals   = np.zeros(len(clusters))
-    sems     = np.zeros(len(clusters))
-    sizes    = np.zeros(len(clusters), dtype=int)
+    n_noise = int((labels == -1).sum())
+    totals = np.zeros(len(clusters))
+    sems = np.zeros(len(clusters))
+    sizes = np.zeros(len(clusters), dtype=int)
     for j, c in enumerate(clusters):
         m = labels == c
-        sizes[j]  = int(m.sum())
-        vals      = totals_per_vec[m]
+        sizes[j] = int(m.sum())
+        vals = totals_per_vec[m]
         totals[j] = vals.mean()
-        sems[j]   = vals.std(ddof=1) / np.sqrt(sizes[j]) if sizes[j] > 1 else 0.0
+        sems[j] = vals.std(ddof=1) / np.sqrt(sizes[j]) if sizes[j] > 1 else 0.0
     return {
-        'name': name, 'clusters': clusters, 'totals': totals,
-        'sems': sems, 'sizes': sizes, 'n_noise': n_noise,
+        "name": name,
+        "clusters": clusters,
+        "totals": totals,
+        "sems": sems,
+        "sizes": sizes,
+        "n_noise": n_noise,
     }
 
 
 def plot_total_abundance_bars(
     panels,
-    suptitle='',
-    ylabel='Mean total abundance across precincts',
-    xlabel='cluster (reordered)',
-    xlabel_prefix='c',
+    suptitle="",
+    ylabel="Mean total abundance across precincts",
+    xlabel="cluster (reordered)",
+    xlabel_prefix="c",
     show_sizes=True,
     show_sems=True,
-    color='steelblue',
+    color="steelblue",
 ):
     """Bar chart of per-cluster total abundance, one panel per entry in `panels`.
 
@@ -170,26 +174,36 @@ def plot_total_abundance_bars(
     decreasing total abundance.
     """
     n_panels = len(panels)
-    fig, axes = plt.subplots(1, n_panels, figsize=(3.8 * n_panels, 3.6),
-                             sharey=True, squeeze=False)
+    fig, axes = plt.subplots(
+        1, n_panels, figsize=(3.8 * n_panels, 3.6), sharey=True, squeeze=False
+    )
     axes = axes[0]
     for ax, p in zip(axes, panels):
-        totals   = np.asarray(p['totals'])
-        sems     = np.asarray(p['sems']) if show_sems and p.get('sems') is not None else None
-        clusters = p['clusters']
-        sizes    = p['sizes']
+        totals = np.asarray(p["totals"])
+        sems = (
+            np.asarray(p["sems"]) if show_sems and p.get("sems") is not None else None
+        )
+        clusters = p["clusters"]
+        sizes = p["sizes"]
         order = np.argsort(totals)[::-1]
-        x     = np.arange(len(clusters))
-        ax.bar(x, totals[order],
-               yerr=(sems[order] if sems is not None else None),
-               color=color, edgecolor='black', capsize=3)
+        x = np.arange(len(clusters))
+        ax.bar(
+            x,
+            totals[order],
+            yerr=(sems[order] if sems is not None else None),
+            color=color,
+            edgecolor="black",
+            capsize=3,
+        )
         ax.set_xticks(x)
         if show_sizes:
-            ax.set_xticklabels([f'{xlabel_prefix}{clusters[o]}\n(n={sizes[o]})' for o in order])
+            ax.set_xticklabels(
+                [f"{xlabel_prefix}{clusters[o]}\n(n={sizes[o]})" for o in order]
+            )
         else:
-            ax.set_xticklabels([f'{xlabel_prefix}{clusters[o]}' for o in order])
-        title = p['name']
-        if p.get('n_noise', 0) > 0:
+            ax.set_xticklabels([f"{xlabel_prefix}{clusters[o]}" for o in order])
+        title = p["name"]
+        if p.get("n_noise", 0) > 0:
             title = f"{title}  (noise={p['n_noise']})"
         ax.set_title(title)
         ax.set_xlabel(xlabel)

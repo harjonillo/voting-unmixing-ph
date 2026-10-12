@@ -9,24 +9,24 @@ Reference:
     pp. 2435-2445, 2008.
 
   ┌──────────────┬──────────────────┬───────────────────────────────────────┐
-  │   Concept    │  Hyperspectral   │               Your data               │   
-  ├──────────────┼──────────────────┼───────────────────────────────────────┤   
-  │ Band (L=4)   │ spectral channel │ candidate                             │   
-  ├──────────────┼──────────────────┼───────────────────────────────────────┤   
-  │ Pixel        │ spatial location │ precinct                              │   
+  │   Concept    │  Hyperspectral   │               Your data               │
+  ├──────────────┼──────────────────┼───────────────────────────────────────┤
+  │ Band (L=4)   │ spectral channel │ candidate                             │
+  ├──────────────┼──────────────────┼───────────────────────────────────────┤
+  │ Pixel        │ spatial location │ precinct                              │
   │ (N=5000)     │                  │                                       │
-  ├──────────────┼──────────────────┼───────────────────────────────────────┤   
-  │ Endmember    │ material         │ archetype party profile               │   
+  ├──────────────┼──────────────────┼───────────────────────────────────────┤
+  │ Endmember    │ material         │ archetype party profile               │
   │ (p=3)        │ spectrum         │                                       │
-  ├──────────────┼──────────────────┼───────────────────────────────────────┤   
+  ├──────────────┼──────────────────┼───────────────────────────────────────┤
   │ kf           │ signal subspace  │ effective number of independent       │
-  │              │ dim              │ archetypes                            │   
+  │              │ dim              │ archetypes                            │
   ├──────────────┼──────────────────┼───────────────────────────────────────┤
   │ Ek (L×kf)    │ subspace basis   │ linear combinations of candidates     │
-  │              │                  │ that capture variance                 │   
+  │              │                  │ that capture variance                 │
   ├──────────────┼──────────────────┼───────────────────────────────────────┤
-  │ Ek.T @ y     │ projected coords │ each precinct's location in the       │   
-  │              │                  │ archetype subspace                    │   
+  │ Ek.T @ y     │ projected coords │ each precinct's location in the       │
+  │              │                  │ archetype subspace                    │
   └──────────────┴──────────────────┴───────────────────────────────────────┘
 """
 
@@ -83,8 +83,8 @@ def hysime(y, w, Rw, verbose=True):
     if verbose:
         print("Computing the correlation matrices")
 
-    Ry = y @ y.T / N     # sample correlation matrix
-    Rx = x @ x.T / N     # signal correlation matrix estimate
+    Ry = y @ y.T / N  # sample correlation matrix
+    Rx = x @ x.T / N  # signal correlation matrix estimate
 
     if verbose:
         print("Computing the eigenvectors of the signal correlation matrix")
@@ -92,7 +92,7 @@ def hysime(y, w, Rw, verbose=True):
     # SVD of Rx — for a PSD matrix, left singular vectors are eigenvectors.
     # np.linalg.svd returns singular values in *decreasing* order, matching
     # MATLAB's svd() behaviour.
-    E, dx, _ = np.linalg.svd(Rx)   # E: (L, L),  dx: (L,) descending
+    E, dx, _ = np.linalg.svd(Rx)  # E: (L, L),  dx: (L,) descending
 
     if verbose:
         print("Estimating the number of endmembers")
@@ -100,10 +100,10 @@ def hysime(y, w, Rw, verbose=True):
     # Regularise Rw slightly (equation before (23))
     Rw = Rw + np.sum(np.diag(Rx)) / L / 1e5 * np.eye(L)
 
-    Py = np.diag(E.T @ Ry @ E)   # signal power per eigenvector  eq. (23)
-    Pn = np.diag(E.T @ Rw @ E)   # noise  power per eigenvector  eq. (24)
+    Py = np.diag(E.T @ Ry @ E)  # signal power per eigenvector  eq. (23)
+    Pn = np.diag(E.T @ Rw @ E)  # noise  power per eigenvector  eq. (24)
 
-    cost_F = -Py + 2.0 * Pn      # cost function                  eq. (22)
+    cost_F = -Py + 2.0 * Pn  # cost function                  eq. (22)
 
     kf = int(np.sum(cost_F < 0))
 
@@ -117,6 +117,6 @@ def hysime(y, w, Rw, verbose=True):
     if verbose:
         print(f"The signal subspace dimension is: k = {kf}")
 
-    delta_p = -cost_F_ascend      # positive = signal dominates
+    delta_p = -cost_F_ascend  # positive = signal dominates
 
     return kf, Ek, E, delta_p

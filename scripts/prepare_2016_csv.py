@@ -56,8 +56,14 @@ def read_senator_rows(src: Path, chunksize: int = 500_000) -> pd.DataFrame:
     """
     keep = []
     reader = pd.read_csv(
-        src, sep="|", header=None, names=COLS, dtype=str,
-        na_filter=False, chunksize=chunksize, quoting=3,  # csv.QUOTE_NONE
+        src,
+        sep="|",
+        header=None,
+        names=COLS,
+        dtype=str,
+        na_filter=False,
+        chunksize=chunksize,
+        quoting=3,  # csv.QUOTE_NONE
     )
     for chunk in reader:
         keep.append(chunk[chunk["contest"] == SENATOR_CONTEST])
@@ -114,18 +120,28 @@ def build(src: Path, out: Path, geo_lookup: Path | None = None) -> None:
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out_df.reset_index(drop=True).to_csv(out, index=False)
-    print(f"wrote {out}  ({out_df.shape[0]:,} precincts x {len(cand)} candidates, "
-          f"sen_col_start=6)")
+    print(
+        f"wrote {out}  ({out_df.shape[0]:,} precincts x {len(cand)} candidates, "
+        f"sen_col_start=6)"
+    )
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--src", required=True, type=Path,
-                    help="path to results_nle2016_05092016_1950.txt")
+    ap.add_argument(
+        "--src",
+        required=True,
+        type=Path,
+        help="path to results_nle2016_05092016_1950.txt",
+    )
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    ap.add_argument("--geo-lookup", type=Path, default=None,
-                    help="optional CSV keyed by 8-digit 'precinct' id with columns "
-                         "REGION, PROVINCE, CITY_MUNICIPALITY, BARANGAY")
+    ap.add_argument(
+        "--geo-lookup",
+        type=Path,
+        default=None,
+        help="optional CSV keyed by 8-digit 'precinct' id with columns "
+        "REGION, PROVINCE, CITY_MUNICIPALITY, BARANGAY",
+    )
     args = ap.parse_args()
     build(args.src, args.out, args.geo_lookup)
 

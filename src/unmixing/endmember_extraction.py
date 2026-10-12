@@ -379,14 +379,14 @@ def _compute_AtransYinvLA(Y, sinvl):
     p, N = Y.shape
 
     Yaug = np.zeros((p * p, N))
-    SinvL = sinvl.reshape((p, N), order='F')          # (p, N)
-    SinvLaug = np.tile(SinvL, (p, 1))                 # (p^2, N)
+    SinvL = sinvl.reshape((p, N), order="F")  # (p, N)
+    SinvLaug = np.tile(SinvL, (p, 1))  # (p^2, N)
 
     for i in range(p):
-        Yaug[i * p:(i + 1) * p, :] = np.tile(Y[i:i + 1, :], (p, 1))
+        Yaug[i * p : (i + 1) * p, :] = np.tile(Y[i : i + 1, :], (p, 1))
 
-    AtransYinvLcompact = Yaug * SinvLaug               # (p^2, N)
-    AtransYinvLAcompact = AtransYinvLcompact @ Y.T     # (p^2, p)
+    AtransYinvLcompact = Yaug * SinvLaug  # (p^2, N)
+    AtransYinvLAcompact = AtransYinvLcompact @ Y.T  # (p^2, p)
 
     AtransYinvLA = np.zeros((p * p, p * p))
     for i in range(p):
@@ -430,36 +430,35 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
     n = N * p
 
     x = x0.copy()
-    y_sl = np.ones(n)   # slacks  (y >= 0)
-    l = np.ones(n)      # dual variables for inequalities
+    y_sl = np.ones(n)  # slacks  (y >= 0)
+    l = np.ones(n)  # dual variables for inequalities
     mu_vec = np.ones(neq)
 
-    Q_init = x0.reshape((p, p), order='F')
+    Q_init = x0.reshape((p, p), order="F")
     previous = -np.log(np.abs(np.linalg.det(Q_init)))
     below_threshold = False
 
     nniter = 300 if throtle else 150
 
     for k in range(1, nniter + 1):
-        yinvl = l / y_sl                                       # element-wise l/y
+        yinvl = l / y_sl  # element-wise l/y
 
         # ---- Residuals ----
-        temp = l.reshape((p, N), order='F') @ Y.T             # (p, p)
-        rd = G @ x + c - temp.ravel(order='F') + Aeq.T @ mu_vec
+        temp = l.reshape((p, N), order="F") @ Y.T  # (p, p)
+        rd = G @ x + c - temp.ravel(order="F") + Aeq.T @ mu_vec
 
-        Qx = x.reshape((p, p), order='F') @ Y                 # (p, N)
-        rb = Qx.ravel(order='F') - y_sl - b
+        Qx = x.reshape((p, p), order="F") @ Y  # (p, N)
+        rb = Qx.ravel(order="F") - y_sl - b
         rbeq = Aeq @ x - beq
 
         # ---- Build augmented system ----
         AtYiLA = _compute_AtransYinvLA(Y, yinvl)
         K = G + AtYiLA
-        Aug = np.block([[K, Aeq.T],
-                        [Aeq, np.zeros((neq, neq))]])
+        Aug = np.block([[K, Aeq.T], [Aeq, np.zeros((neq, neq))]])
 
         # ---- Affine (predictor) direction ----
         rh = yinvl * (rb + y_sl)
-        rhaug1 = -rd - (rh.reshape((p, N), order='F') @ Y.T).ravel(order='F')
+        rhaug1 = -rd - (rh.reshape((p, N), order="F") @ Y.T).ravel(order="F")
         rhaug = np.concatenate([rhaug1, -rbeq])
 
         try:
@@ -468,7 +467,7 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
             DxDm = np.linalg.lstsq(Aug, rhaug, rcond=None)[0]
 
         DxAff = DxDm[:m]
-        DyAff = (DxAff.reshape((p, p), order='F') @ Y).ravel(order='F') + rb
+        DyAff = (DxAff.reshape((p, p), order="F") @ Y).ravel(order="F") + rb
         DlAff = -yinvl * (y_sl + DyAff)
 
         mi = float(y_sl @ l) / n
@@ -488,7 +487,7 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
         # ---- Corrector direction ----
         ycorrected = y_sl + (DlAff * DyAff - sigma * mi_safe) / l
         rh2 = yinvl * (rb + ycorrected)
-        rhaug1_2 = -rd - (rh2.reshape((p, N), order='F') @ Y.T).ravel(order='F')
+        rhaug1_2 = -rd - (rh2.reshape((p, N), order="F") @ Y.T).ravel(order="F")
         rhaug2 = np.concatenate([rhaug1_2, -rbeq])
 
         try:
@@ -498,16 +497,20 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
 
         Dx = DxDm2[:m]
         Dmu = DxDm2[m:]
-        Dy = (Dx.reshape((p, p), order='F') @ Y).ravel(order='F') + rb
+        Dy = (Dx.reshape((p, p), order="F") @ Y).ravel(order="F") + rb
         Dl = -yinvl * (Dy + ycorrected)
 
         tk = 1.0 - 1.0 / (k + 1)
 
         neg_dy2 = Dy < 0
-        apri = float(np.min(-tk * y_sl[neg_dy2] / Dy[neg_dy2])) if np.any(neg_dy2) else 1.0
+        apri = (
+            float(np.min(-tk * y_sl[neg_dy2] / Dy[neg_dy2])) if np.any(neg_dy2) else 1.0
+        )
         apri = min(apri, 1.0)
         neg_dl2 = Dl < 0
-        adual = float(np.min(-tk * l[neg_dl2] / Dl[neg_dl2])) if np.any(neg_dl2) else 1.0
+        adual = (
+            float(np.min(-tk * l[neg_dl2] / Dl[neg_dl2])) if np.any(neg_dl2) else 1.0
+        )
         adual = min(adual, 1.0)
 
         a = min(apri, adual)
@@ -517,7 +520,7 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
         # ---- Update ----
         x_prev = x.copy()
         x = x + a * Dx
-        Q_new = x.reshape((p, p), order='F')
+        Q_new = x.reshape((p, p), order="F")
         true_value_new = -np.log(np.abs(np.linalg.det(Q_new)))
 
         y_sl = y_sl + a * Dy
@@ -525,8 +528,10 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
         mu_vec = mu_vec + a * Dmu
 
         if verbose >= 2:
-            print(f'    QP iter {k:3d}: f = {true_value_new:.4f}, '
-                  f'sigma = {sigma:.2e}, mi = {mi:.2e}, a = {a:.4f}')
+            print(
+                f"    QP iter {k:3d}: f = {true_value_new:.4f}, "
+                f"sigma = {sigma:.2e}, mi = {mi:.2e}, a = {a:.4f}"
+            )
 
         if sigma < 1e-8 and mi < 1e-8:
             break
@@ -536,14 +541,23 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
             below_threshold = True
         else:
             if below_threshold:
-                x = x_prev   # revert to step before energy increased
+                x = x_prev  # revert to step before energy increased
                 break
 
     return x
 
 
-def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
-         tol_f=1e-2, M0=None, verbose=1):
+def mvsa(
+    Y,
+    p,
+    MM_iters=10,
+    spherize="yes",
+    mu=1e-6,
+    lambda_=1e-10,
+    tol_f=1e-2,
+    M0=None,
+    verbose=1,
+):
     """
     Minimum Volume Simplex Analysis (MVSA).
 
@@ -610,7 +624,7 @@ def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
     Y = np.array(Y, dtype=float)
     L, N = Y.shape
     if L < p:
-        raise ValueError('Insufficient number of rows in Y (L must be >= p)')
+        raise ValueError("Insufficient number of rows in Y (L must be >= p)")
 
     slack = 1e-3
     any_energy_decreasing = False
@@ -619,36 +633,36 @@ def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
     # ------------------------------------------------------------------ #
     #  1. Identify affine subspace (PCA, p-1 dims)                        #
     # ------------------------------------------------------------------ #
-    my = np.mean(Y, axis=1, keepdims=True)          # (L, 1)
-    Y = Y - my                                       # zero-mean
+    my = np.mean(Y, axis=1, keepdims=True)  # (L, 1)
+    Y = Y - my  # zero-mean
 
     # p-1 leading eigenvectors of the sample covariance
     # np.linalg.eigh returns eigenvalues ascending → reverse
     evals, evecs = np.linalg.eigh(Y @ Y.T / N)
     idx = np.argsort(evals)[::-1]
-    Up = evecs[:, idx[:p - 1]]                       # (L, p-1)
-    sing_values = evals[idx[:p - 1]]                 # (p-1,)
-    D_diag = sing_values                             # alias for readability
+    Up = evecs[:, idx[: p - 1]]  # (L, p-1)
+    sing_values = evals[idx[: p - 1]]  # (p-1,)
+    D_diag = sing_values  # alias for readability
 
     # Project onto (p-1)-subspace, then lift back
     Y = Up @ (Up.T @ Y)
-    Y = Y + my                                       # lift
+    Y = Y + my  # lift
 
     # Orthogonal complement of my w.r.t. subspace
     my_ortho = my - Up @ (Up.T @ my)
-    Up = np.hstack([Up, my_ortho / np.sqrt(np.sum(my_ortho ** 2))])  # (L, p)
+    Up = np.hstack([Up, my_ortho / np.sqrt(np.sum(my_ortho**2))])  # (L, p)
 
     # Coordinates in R^p
-    Y = Up.T @ Y                                     # (p, N)
+    Y = Up.T @ Y  # (p, N)
 
     # ------------------------------------------------------------------ #
     #  2. Spherise (optional)                                             #
     # ------------------------------------------------------------------ #
     C = None
-    if spherize == 'yes':
-        Y_Ldim = Up @ Y - my                         # back to L-dim, centred
-        C = np.diag(1.0 / np.sqrt(D_diag + lambda_))         # (p-1, p-1)
-        Y_sph = C @ Up[:, :p - 1].T @ Y_Ldim         # (p-1, N)
+    if spherize == "yes":
+        Y_Ldim = Up @ Y - my  # back to L-dim, centred
+        C = np.diag(1.0 / np.sqrt(D_diag + lambda_))  # (p-1, p-1)
+        Y_sph = C @ Up[:, : p - 1].T @ Y_Ldim  # (p-1, N)
         Y = np.vstack([Y_sph, np.ones((1, N))]) / np.sqrt(p)  # (p, N)
 
     # ------------------------------------------------------------------ #
@@ -657,7 +671,7 @@ def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
     if M0 is None:
         # VCA on the (spherised) projected data
         Mvca, _, _, _, _, _ = vca(Y, Endmembers=p)
-        M = Mvca.copy()                              # (p, p)
+        M = Mvca.copy()  # (p, p)
         # Expand so initial Q = inv(M) is feasible
         Ym_col = np.mean(M, axis=1, keepdims=True)
         M = M + p * (M - Ym_col)
@@ -665,12 +679,12 @@ def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
         M = np.array(M0, dtype=float)
         # Project M into the identified affine subspace
         M = M - my
-        M = Up[:, :p - 1] @ (Up[:, :p - 1].T @ M)
+        M = Up[:, : p - 1] @ (Up[:, : p - 1].T @ M)
         M = M + my
-        M = Up.T @ M                                 # in R^p
-        if spherize == 'yes':
+        M = Up.T @ M  # in R^p
+        if spherize == "yes":
             M_Ldim = Up @ M - my
-            M_sph = C @ Up[:, :p - 1].T @ M_Ldim    # (p-1, p)
+            M_sph = C @ Up[:, : p - 1].T @ M_Ldim  # (p-1, p)
             M = np.vstack([M_sph, np.ones((1, p))]) / np.sqrt(p)
 
     Q = np.linalg.inv(M)
@@ -679,8 +693,8 @@ def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
     #  4. Build equality constraint for the QP                           #
     # ------------------------------------------------------------------ #
     # E @ vec(Q) = qm  enforces  ones(1,p) @ Q = qm  (column sums of Q)
-    E = np.kron(np.eye(p), np.ones((1, p)))                  # (p, p^2)
-    qm = np.sum(np.linalg.inv(Y @ Y.T) @ Y, axis=1)          # (p,)
+    E = np.kron(np.eye(p), np.ones((1, p)))  # (p, p^2)
+    qm = np.sum(np.linalg.inv(Y @ Y.T) @ Y, axis=1)  # (p,)
 
     # ------------------------------------------------------------------ #
     #  5. MM outer loop                                                   #
@@ -696,20 +710,22 @@ def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
         if not throtle:
             while np.any((Q @ Y) < 0):
                 if verbose >= 1:
-                    print(f'  iter {k}: expanding M to enforce feasibility...')
+                    print(f"  iter {k}: expanding M to enforce feasibility...")
                 M = M + 0.01 * dW
                 Q = np.linalg.inv(M)
                 count += 1
                 if count > 100:
                     if verbose >= 1:
-                        print(f'  iter {k}: could not make M feasible after 100 expansions')
+                        print(
+                            f"  iter {k}: could not make M feasible after 100 expansions"
+                        )
                     break
         Q = np.linalg.inv(M)
 
         # ---- Gradient and Hessian of  -log|det(Q)|  at Q ----
-        g = (-M.T).ravel(order='F')                  # (p^2,) gradient
-        H_reg = mu * np.eye(p ** 2) + np.diag(g ** 2)
-        q0 = Q.ravel(order='F')
+        g = (-M.T).ravel(order="F")  # (p^2,) gradient
+        H_reg = mu * np.eye(p**2) + np.diag(g**2)
+        q0 = Q.ravel(order="F")
         Q0 = Q.copy()
         f_lin = g - H_reg @ q0
 
@@ -717,14 +733,15 @@ def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
         energy_decreasing = False
 
         # ---- Solve QP ----
-        q = _quad_prog1(H_reg, f_lin, Y, np.zeros(p * N),
-                        E, qm, q0, throtle, verbose=verbose)
+        q = _quad_prog1(
+            H_reg, f_lin, Y, np.zeros(p * N), E, qm, q0, throtle, verbose=verbose
+        )
 
-        Q_cand = q.reshape((p, p), order='F')
+        Q_cand = q.reshape((p, p), order="F")
         f_val = -np.log(np.abs(np.linalg.det(Q_cand)))
 
         if verbose >= 1:
-            print(f'  iter {k}: f0 = {f0_val:.4f}, f = {f_val:.4f}')
+            print(f"  iter {k}: f0 = {f0_val:.4f}, f = {f_val:.4f}")
 
         # ---- Accept / reject / throttle ----
         if f0_val < f_val:
@@ -742,25 +759,26 @@ def mvsa(Y, p, MM_iters=10, spherize='yes', mu=1e-6, lambda_=1e-10,
 
         # ---- Termination test ----
         if energy_decreasing:
-            if abs((f_val_back - f_val) / max(abs(f_val), 1e-16)) < tol_f and not throtle:
+            if (
+                abs((f_val_back - f_val) / max(abs(f_val), 1e-16)) < tol_f
+                and not throtle
+            ):
                 if verbose >= 1:
-                    print(f'  iter {k}: termination test PASSED')
+                    print(f"  iter {k}: termination test PASSED")
                 break
             f_val_back = f_val
 
     # ------------------------------------------------------------------ #
     #  6. Map Q back to endmember matrix in original space               #
     # ------------------------------------------------------------------ #
-    if spherize == 'yes':
-        M_out = np.linalg.inv(Q) * np.sqrt(p)       # unscale
-        M_out = M_out[:p - 1, :]                     # remove lifted row
-        M_out = Up[:, :p - 1] @ np.diag(np.sqrt(D_diag + lambda_)) @ M_out
-        M_out = M_out + my                           # restore mean
+    if spherize == "yes":
+        M_out = np.linalg.inv(Q) * np.sqrt(p)  # unscale
+        M_out = M_out[: p - 1, :]  # remove lifted row
+        M_out = Up[:, : p - 1] @ np.diag(np.sqrt(D_diag + lambda_)) @ M_out
+        M_out = M_out + my  # restore mean
     else:
         M_out = Up @ np.linalg.inv(Q)
 
-    Sest = Q @ Y                                     # (p, N) abundances in proj. space
+    Sest = Q @ Y  # (p, N) abundances in proj. space
 
     return M_out, Sest, Up, my, sing_values
-
-

@@ -41,11 +41,11 @@ class PreprocessedData:
     Column j of ``Y`` corresponds to row j of ``df_geo``.
     """
 
-    Y_raw: np.ndarray                  # (L candidates, N precincts)
-    Y: np.ndarray                      # (L candidates, N precincts)
-    df_geo: pd.DataFrame               # N rows: GEO_COLS + INFO_COLS
-    ranked_columns: List[str]          # original CSV column names, by national rank
-    candidate_labels: List[str]        # "SURNAME, NAME (PARTY) [rank]"
+    Y_raw: np.ndarray  # (L candidates, N precincts)
+    Y: np.ndarray  # (L candidates, N precincts)
+    df_geo: pd.DataFrame  # N rows: GEO_COLS + INFO_COLS
+    ranked_columns: List[str]  # original CSV column names, by national rank
+    candidate_labels: List[str]  # "SURNAME, NAME (PARTY) [rank]"
     params: dict = field(default_factory=dict)
 
     @property
@@ -152,14 +152,18 @@ def preprocess(
     if randomize_precinct_order:
         kept_precincts = np.random.permutation(kept_precincts)
 
-    can_totals = df.loc[kept_precincts, kept_candidates].sum().sort_values(ascending=False)
+    can_totals = (
+        df.loc[kept_precincts, kept_candidates].sum().sort_values(ascending=False)
+    )
     ranked_columns = list(can_totals.index)
     labels = [candidate_label(c, r) for r, c in enumerate(ranked_columns, 1)]
 
     vote_raw = df.loc[kept_precincts, ranked_columns].values.astype(float)
 
     if normalization == "valid_ballots":
-        denom = df.loc[kept_precincts, "information.numberOfValidBallot"].values.reshape(-1, 1)
+        denom = df.loc[
+            kept_precincts, "information.numberOfValidBallot"
+        ].values.reshape(-1, 1)
     elif normalization == "row_max":
         denom = vote_raw.max(axis=1, keepdims=True)
     else:
@@ -187,19 +191,35 @@ def preprocess(
     }
 
     if verbose:
-        print(f"candidates: {len(candidate_cols)} -> {len(kept_candidates)} "
-              f"(25th pct >= {min_candidate_25th_percentile})")
-        print(f"precincts:  {len(df):,} -> {len(kept_precincts):,} "
-              f"(total votes >= {min_precinct_votes})")
-        print(f"Y: {Y.shape[0]} candidates x {Y.shape[1]:,} precincts "
-              f"({normalization} normalization)")
+        print(
+            f"candidates: {len(candidate_cols)} -> {len(kept_candidates)} "
+            f"(25th pct >= {min_candidate_25th_percentile})"
+        )
+        print(
+            f"precincts:  {len(df):,} -> {len(kept_precincts):,} "
+            f"(total votes >= {min_precinct_votes})"
+        )
+        print(
+            f"Y: {Y.shape[0]} candidates x {Y.shape[1]:,} precincts "
+            f"({normalization} normalization)"
+        )
 
-    return PreprocessedData(Y_raw=vote_raw.T, Y=Y, df_geo=df_geo, ranked_columns=ranked_columns,
-                            candidate_labels=labels, params=params)
+    return PreprocessedData(
+        Y_raw=vote_raw.T,
+        Y=Y,
+        df_geo=df_geo,
+        ranked_columns=ranked_columns,
+        candidate_labels=labels,
+        params=params,
+    )
 
 
-def preprocess_from_config(df: pd.DataFrame, config, randomize_precinct_order: bool = False,
-                           verbose: bool = True) -> PreprocessedData:
+def preprocess_from_config(
+    df: pd.DataFrame,
+    config,
+    randomize_precinct_order: bool = False,
+    verbose: bool = True,
+) -> PreprocessedData:
     """Run `preprocess` with the [preprocessing] section of the config.
 
     Parameters

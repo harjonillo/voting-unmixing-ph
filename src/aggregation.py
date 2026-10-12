@@ -37,11 +37,15 @@ def aggregate_abundances(
         arch_cols = [c for c in df_ab.columns if c.startswith("arch_")]
 
     group_cols = LEVEL_COLS[level]
-    count_cols = [c for c in (
-        "information.numberOfRegisteredVoters",
-        "information.numberOfActuallyVoters",
-        "information.numberOfValidBallot",
-    ) if c in df_ab.columns]
+    count_cols = [
+        c
+        for c in (
+            "information.numberOfRegisteredVoters",
+            "information.numberOfActuallyVoters",
+            "information.numberOfValidBallot",
+        )
+        if c in df_ab.columns
+    ]
 
     def _summarize(g: pd.DataFrame) -> pd.Series:
         out = {}
@@ -49,7 +53,9 @@ def aggregate_abundances(
             w = g[weight_col].to_numpy(dtype=float)
             w_sum = w.sum()
             for c in arch_cols:
-                out[c] = float((g[c].to_numpy() * w).sum() / w_sum) if w_sum > 0 else np.nan
+                out[c] = (
+                    float((g[c].to_numpy() * w).sum() / w_sum) if w_sum > 0 else np.nan
+                )
         else:
             for c in arch_cols:
                 out[c] = float(g[c].mean())

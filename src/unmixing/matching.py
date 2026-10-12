@@ -128,10 +128,11 @@ def rbo_ext(list_a, list_b, pval=0.9, k=None):
     depth = min(len(list_a), len(list_b))
     sa, sb, rbo_sum, overlap = set(), set(), 0.0, 0
     for d in range(depth):
-        sa.add(list_a[d]); sb.add(list_b[d])
+        sa.add(list_a[d])
+        sb.add(list_b[d])
         overlap = len(sa & sb)
-        rbo_sum += (pval ** d) * (overlap / (d + 1))
-    ext = (overlap / depth) * (pval ** depth)        # assume top-depth agreement persists
+        rbo_sum += (pval**d) * (overlap / (d + 1))
+    ext = (overlap / depth) * (pval**depth)  # assume top-depth agreement persists
     return (1 - pval) * rbo_sum + ext
 
 
@@ -154,6 +155,7 @@ def weighted_tau_matrix(A, B):
         Weighted tau of each column pair, in [-1, 1].
     """
     from scipy.stats import weightedtau
+
     return _cross_pairwise(A, B, lambda u, v: float(weightedtau(u, v, rank=True)[0]))
 
 
@@ -201,9 +203,11 @@ def topk_jaccard_matrix(A, B, k=12):
         ``|top_k(a) & top_k(b)| / |top_k(a) | top_k(b)|`` for each column
         pair, in [0, 1].
     """
+
     def f(u, v):
         sa, sb = set(_ranked_idx(u)[:k]), set(_ranked_idx(v)[:k])
         return len(sa & sb) / len(sa | sb)
+
     return _cross_pairwise(A, B, f)
 
 
@@ -227,10 +231,12 @@ def cosine_topk_matrix(A, B, k=12):
     C : ndarray, shape (p_A, p_B)
         Cosine of each column pair on its top-k union, in [-1, 1].
     """
+
     def f(u, v):
         idx = np.union1d(_ranked_idx(u)[:k], _ranked_idx(v)[:k])
         a, b = u[idx], v[idx]
         return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
+
     return _cross_pairwise(A, B, f)
 
 
@@ -268,7 +274,9 @@ def similarity_matrix(A, B, similarity="cosine"):
     """
     f = _SIMILARITIES.get(similarity, similarity)
     if not callable(f):
-        raise ValueError(f"similarity must be one of {sorted(_SIMILARITIES)} or a callable")
+        raise ValueError(
+            f"similarity must be one of {sorted(_SIMILARITIES)} or a callable"
+        )
     return f(A, B)
 
 
@@ -293,7 +301,7 @@ def match_to_reference(M_ref, M_other, similarity="cosine"):
         Similarity of each matched pair, in `M_ref`-column order.
     """
     C = similarity_matrix(M_ref, M_other, similarity)
-    row_ind, col_ind = linear_sum_assignment(-C)   # maximise similarity
+    row_ind, col_ind = linear_sum_assignment(-C)  # maximise similarity
     perm = np.zeros(M_ref.shape[1], dtype=int)
     perm[row_ind] = col_ind
     matched_sim = C[row_ind, col_ind]
@@ -324,24 +332,34 @@ def archetype_lineage(loadings_by_p):
     for p_from, p_to in zip(ps[:-1], ps[1:]):
         M_a = np.asarray(loadings_by_p[p_from])
         M_b = np.asarray(loadings_by_p[p_to])
-        C = cosine_matrix(M_a, M_b)                    # (p_a, p_b)
-        row_ind, col_ind = linear_sum_assignment(-C)   # matches min(p_a, p_b) pairs
+        C = cosine_matrix(M_a, M_b)  # (p_a, p_b)
+        row_ind, col_ind = linear_sum_assignment(-C)  # matches min(p_a, p_b) pairs
         matched_children = set()
         for i, j in zip(row_ind, col_ind):
-            edges.append({
-                "p_from": p_from, "k_from": int(i),
-                "p_to": p_to, "k_to": int(j),
-                "similarity": float(C[i, j]), "split": False,
-            })
+            edges.append(
+                {
+                    "p_from": p_from,
+                    "k_from": int(i),
+                    "p_to": p_to,
+                    "k_to": int(j),
+                    "similarity": float(C[i, j]),
+                    "split": False,
+                }
+            )
             matched_children.add(int(j))
         for j in range(M_b.shape[1]):
             if j not in matched_children:
                 parent = int(np.argmax(C[:, j]))
-                edges.append({
-                    "p_from": p_from, "k_from": parent,
-                    "p_to": p_to, "k_to": j,
-                    "similarity": float(C[parent, j]), "split": True,
-                })
+                edges.append(
+                    {
+                        "p_from": p_from,
+                        "k_from": parent,
+                        "p_to": p_to,
+                        "k_to": j,
+                        "similarity": float(C[parent, j]),
+                        "split": True,
+                    }
+                )
     return edges
 
 

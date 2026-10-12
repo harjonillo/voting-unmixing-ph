@@ -20,6 +20,7 @@ from src.config import shapefile_path
 # Name normalization
 # ---------------------------------------------------------------------------
 
+
 def normalize_name(name: str) -> str:
     """Uppercase, ASCII-fold, strip punctuation/extra spaces."""
     s = unicodedata.normalize("NFKD", str(name)).encode("ascii", "ignore").decode()
@@ -66,7 +67,11 @@ def canonical_province(province: str, region: str) -> str:
 # Boundary loading
 # ---------------------------------------------------------------------------
 
-def _detect_name_column(gdf: gpd.GeoDataFrame, candidates=("PROVINCE", "NAME_1", "NAME", "PROV_NAME", "ADM2_EN", "ADM1_EN")):
+
+def _detect_name_column(
+    gdf: gpd.GeoDataFrame,
+    candidates=("PROVINCE", "NAME_1", "NAME", "PROV_NAME", "ADM2_EN", "ADM1_EN"),
+):
     for c in candidates:
         if c in gdf.columns:
             return c
@@ -85,16 +90,18 @@ def load_provinces(config) -> gpd.GeoDataFrame:
     gdf = gdf.to_crs("EPSG:4326") if gdf.crs else gdf.set_crs("EPSG:4326")
     gdf["PROV_KEY"] = gdf[name_col].map(normalize_name)
     # shapefile-side fixes toward COMELC-era names
-    gdf["PROV_KEY"] = gdf["PROV_KEY"].replace({
-        "METROPOLITAN MANILA": NCR_CANONICAL,
-        "METRO MANILA": NCR_CANONICAL,
-        "NATIONAL CAPITAL REGION": NCR_CANONICAL,
-        "SAMAR WESTERN SAMAR": "SAMAR",
-        "WESTERN SAMAR": "SAMAR",
-        "NORTH COTABATO": "COTABATO",
-        "COTABATO NORTH COTABATO": "COTABATO",
-        "SHARIFF KABUNSUAN": "MAGUINDANAO",
-    })
+    gdf["PROV_KEY"] = gdf["PROV_KEY"].replace(
+        {
+            "METROPOLITAN MANILA": NCR_CANONICAL,
+            "METRO MANILA": NCR_CANONICAL,
+            "NATIONAL CAPITAL REGION": NCR_CANONICAL,
+            "SAMAR WESTERN SAMAR": "SAMAR",
+            "WESTERN SAMAR": "SAMAR",
+            "NORTH COTABATO": "COTABATO",
+            "COTABATO NORTH COTABATO": "COTABATO",
+            "SHARIFF KABUNSUAN": "MAGUINDANAO",
+        }
+    )
     # dissolve duplicated keys (e.g. multi-part provinces)
     gdf = gdf[["PROV_KEY", "geometry"]].dissolve(by="PROV_KEY", as_index=False)
     return gdf
@@ -127,17 +134,17 @@ MUNI_SUFFIXES = (" CITY", " CITY CAPITAL", " CAPITAL", " POB")
 MUNI_ALIASES = {
     "CALOOCAN": "KALOOKAN",
     "CITY OF CALOOCAN": "KALOOKAN",
-    "POZORRUBIO": "POZZORUBIO",          # GADM spelling
-    "AMAI MANABILANG": "BUMBARAN",       # renamed 2018
+    "POZORRUBIO": "POZZORUBIO",  # GADM spelling
+    "AMAI MANABILANG": "BUMBARAN",  # renamed 2018
     "OLD KAABAKAN": "KABACAN",
     "CITY OF BALIWAG": "BALIUAG",
     "SCIENCE CITY OF MUNOZ": "MUNOZ",
-    "LEON T POSTIGO": "BACUNGAN",        # renamed 2000s
-    "PIO V CORPUS": "PIO V CORPUZ",      # GADM spelling
-    "ALBURQUERQUE": "ALBUQUERQUE",       # GADM spelling
-    "GETAFE": "JETAFE",                  # GADM spelling
-    "CORDOVA": "CORDOBA",                # GADM spelling
-    "PINAMUNGAJAN": "PINAMUNGAHAN",      # GADM spelling
+    "LEON T POSTIGO": "BACUNGAN",  # renamed 2000s
+    "PIO V CORPUS": "PIO V CORPUZ",  # GADM spelling
+    "ALBURQUERQUE": "ALBUQUERQUE",  # GADM spelling
+    "GETAFE": "JETAFE",  # GADM spelling
+    "CORDOVA": "CORDOBA",  # GADM spelling
+    "PINAMUNGAJAN": "PINAMUNGAHAN",  # GADM spelling
     "ISLAND GARDEN CITY OF SAMAL": "SAMAL",
 }
 
@@ -206,7 +213,9 @@ def join_provinces(agg: pd.DataFrame, provinces: gpd.GeoDataFrame):
     return gdf, unmatched
 
 
-def join_regions(agg_prov: pd.DataFrame, provinces: gpd.GeoDataFrame, agg_region: pd.DataFrame):
+def join_regions(
+    agg_prov: pd.DataFrame, provinces: gpd.GeoDataFrame, agg_region: pd.DataFrame
+):
     """Region-level map: dissolve province polygons by the data's own
     province→region assignment, then merge region-level values.
 
@@ -214,9 +223,8 @@ def join_regions(agg_prov: pd.DataFrame, provinces: gpd.GeoDataFrame, agg_region
     agg_region : region-level aggregate (values to display).
     """
     prov_gdf, unmatched = join_provinces(agg_prov, provinces)
-    region_shapes = (
-        prov_gdf.dropna(subset=["REGION"])[["REGION", "geometry"]]
-        .dissolve(by="REGION", as_index=False)
+    region_shapes = prov_gdf.dropna(subset=["REGION"])[["REGION", "geometry"]].dissolve(
+        by="REGION", as_index=False
     )
     gdf = region_shapes.merge(agg_region, on="REGION", how="left")
     return gdf, unmatched
@@ -225,7 +233,9 @@ def join_regions(agg_prov: pd.DataFrame, provinces: gpd.GeoDataFrame, agg_region
 def _weighted_regroup(df: pd.DataFrame, group_cols, weight_col: str = "n_precincts"):
     """Collapse rows sharing ``group_cols``: numeric columns are averaged
     weighted by ``weight_col``; precinct/voter count columns are summed."""
-    sum_cols = [c for c in df.columns if c == "n_precincts" or c.startswith("information.")]
+    sum_cols = [
+        c for c in df.columns if c == "n_precincts" or c.startswith("information.")
+    ]
     num_cols = [c for c in df.select_dtypes("number").columns if c not in sum_cols]
 
     def _collapse(g):

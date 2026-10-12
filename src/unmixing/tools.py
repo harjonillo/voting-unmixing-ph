@@ -181,7 +181,7 @@ def endmember_noise_floor(
         # ── 2. Cross-archetype comparison ─────────────────────────────
         other_cols = np.delete(M_normed, j, axis=1)  # (L, p-1)
 
-        cross_mean = other_cols.mean(axis=1)          # (L,)
+        cross_mean = other_cols.mean(axis=1)  # (L,)
         if p >= 3:
             # ddof=1 for sample SD with p-1 >= 2 values
             cross_std = other_cols.std(axis=1, ddof=1)  # (L,)
@@ -228,8 +228,12 @@ def endmember_noise_floor(
 
     if plot:
         _plot_noise_floor_diagnostics(
-            archetype_results, L, p, candidate_labels,
-            uniform_expectation, cumulative_threshold,
+            archetype_results,
+            L,
+            p,
+            candidate_labels,
+            uniform_expectation,
+            cumulative_threshold,
             cross_archetype_sigma,
         )
 
@@ -272,7 +276,8 @@ def _plot_noise_floor_diagnostics(
         fig.suptitle(
             f"Archetype {j}  —  effective size = {n_eff} / {L} candidates "
             f"(at {cumulative_threshold:.0%} weight)",
-            fontsize=12, fontweight="bold",
+            fontsize=12,
+            fontweight="bold",
         )
 
         # ─── Left: sorted loadings + cumulative curve ─────────────
@@ -280,12 +285,20 @@ def _plot_noise_floor_diagnostics(
         x_pos = np.arange(n_show)
         colors = ["#2166ac" if i < n_eff else "#d1e5f0" for i in range(n_show)]
         ax.bar(x_pos, sorted_w[:n_show], color=colors, edgecolor="none")
-        ax.axhline(uniform_expectation, color="red", ls="--", lw=1,
-                    label=f"uniform = 1/{L}")
+        ax.axhline(
+            uniform_expectation, color="red", ls="--", lw=1, label=f"uniform = 1/{L}"
+        )
 
         ax2 = ax.twinx()
-        ax2.plot(x_pos, cumfrac[:n_show], color="black", lw=1.5, marker=".",
-                 markersize=4, label="cumulative")
+        ax2.plot(
+            x_pos,
+            cumfrac[:n_show],
+            color="black",
+            lw=1.5,
+            marker=".",
+            markersize=4,
+            label="cumulative",
+        )
         ax2.axhline(cumulative_threshold, color="grey", ls=":", lw=1)
         ax2.set_ylabel("cumulative fraction")
         ax2.set_ylim(0, 1.05)
@@ -293,7 +306,9 @@ def _plot_noise_floor_diagnostics(
         ax.set_xticks(x_pos)
         ax.set_xticklabels(
             [_truncate(s, 12) for s in sorted_labs[:n_show]],
-            rotation=70, ha="right", fontsize=7,
+            rotation=70,
+            ha="right",
+            fontsize=7,
         )
         ax.set_ylabel("normalised loading")
         ax.set_title("Sorted candidate loadings")
@@ -310,14 +325,24 @@ def _plot_noise_floor_diagnostics(
         x_pos2 = np.arange(n_show)
 
         # Bars: actual loading, coloured by signal status
-        ax.bar(x_pos2, sorted_w[:n_show], color=[
-            "#2166ac" if s else "#d1e5f0" for s in cross_sig_sorted[:n_show]
-        ], edgecolor="none", label="loading in this archetype")
+        ax.bar(
+            x_pos2,
+            sorted_w[:n_show],
+            color=["#2166ac" if s else "#d1e5f0" for s in cross_sig_sorted[:n_show]],
+            edgecolor="none",
+            label="loading in this archetype",
+        )
 
         # Cross-archetype mean as points
-        ax.scatter(x_pos2, cross_mean_sorted[:n_show],
-                   color="#333333", marker="_", s=80, zorder=3,
-                   label="mean in other archetypes")
+        ax.scatter(
+            x_pos2,
+            cross_mean_sorted[:n_show],
+            color="#333333",
+            marker="_",
+            s=80,
+            zorder=3,
+            label="mean in other archetypes",
+        )
 
         # Threshold band: mean + sigma * SD
         if p >= 3:
@@ -325,17 +350,25 @@ def _plot_noise_floor_diagnostics(
                 cross_mean_sorted[:n_show]
                 + cross_archetype_sigma * cross_std_sorted[:n_show]
             )
-            ax.plot(x_pos2, threshold_line,
-                    color="#d95f02", ls="--", lw=1.2,
-                    label=f"mean + {cross_archetype_sigma:.0f}σ threshold")
+            ax.plot(
+                x_pos2,
+                threshold_line,
+                color="#d95f02",
+                ls="--",
+                lw=1.2,
+                label=f"mean + {cross_archetype_sigma:.0f}σ threshold",
+            )
 
-        ax.axhline(uniform_expectation, color="red", ls=":", lw=0.8,
-                    label=f"uniform = 1/{L}")
+        ax.axhline(
+            uniform_expectation, color="red", ls=":", lw=0.8, label=f"uniform = 1/{L}"
+        )
 
         ax.set_xticks(x_pos2)
         ax.set_xticklabels(
             [_truncate(s, 12) for s in sorted_labs[:n_show]],
-            rotation=70, ha="right", fontsize=7,
+            rotation=70,
+            ha="right",
+            fontsize=7,
         )
         ax.set_ylabel("normalised loading")
         ax.set_title("Cross-archetype signal detection")
@@ -449,8 +482,8 @@ def abundance_weighted_signal(
             candidate_labels = [str(i) for i in range(L)]
 
     # ── Archetype prevalence ──────────────────────────────────────────
-    archetype_prevalence = S.mean(axis=1)      # (p,)
-    archetype_total = S.sum(axis=1)            # (p,)
+    archetype_prevalence = S.mean(axis=1)  # (p,)
+    archetype_total = S.sum(axis=1)  # (p,)
 
     # ── Per-candidate relevance ───────────────────────────────────────
     candidate_relevance = np.zeros(L)
@@ -462,16 +495,18 @@ def abundance_weighted_signal(
 
     for res in arch_list:
         if res.get("degenerate", False):
-            per_archetype_results.append({
-                "archetype_idx": res["archetype_idx"],
-                "degenerate": True,
-            })
+            per_archetype_results.append(
+                {
+                    "archetype_idx": res["archetype_idx"],
+                    "degenerate": True,
+                }
+            )
             continue
 
         j = res["archetype_idx"]
         prevalence_j = archetype_prevalence[j]
-        signal_mask = res["cross_signal"]                # (L,) bool
-        loadings = M_normed[:, j]                        # (L,)
+        signal_mask = res["cross_signal"]  # (L,) bool
+        loadings = M_normed[:, j]  # (L,)
 
         signal_indices = np.where(signal_mask)[0]
         signal_labels = [candidate_labels[i] for i in signal_indices]
@@ -490,18 +525,25 @@ def abundance_weighted_signal(
         # Sort signal candidates by relevance within this archetype
         rel_order = np.argsort(signal_relevance)[::-1]
 
-        per_archetype_results.append({
-            "archetype_idx": j,
-            "mean_abundance": prevalence_j,
-            "signal_candidates": [signal_labels[k] for k in rel_order],
-            "signal_loadings": signal_loadings[rel_order],
-            "signal_relevance": signal_relevance[rel_order],
-        })
+        per_archetype_results.append(
+            {
+                "archetype_idx": j,
+                "mean_abundance": prevalence_j,
+                "signal_candidates": [signal_labels[k] for k in rel_order],
+                "signal_loadings": signal_loadings[rel_order],
+                "signal_relevance": signal_relevance[rel_order],
+            }
+        )
 
     if plot:
         _plot_abundance_weighted(
-            per_archetype_results, candidate_relevance, candidate_labels,
-            candidate_max_archetype, archetype_prevalence, L, p,
+            per_archetype_results,
+            candidate_relevance,
+            candidate_labels,
+            candidate_max_archetype,
+            archetype_prevalence,
+            L,
+            p,
         )
 
     return {
@@ -541,15 +583,21 @@ def _plot_abundance_weighted(
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     fig.suptitle(
         "Abundance-weighted candidate relevance",
-        fontsize=12, fontweight="bold",
+        fontsize=12,
+        fontweight="bold",
     )
 
     # ─── Left: archetype prevalence ───────────────────────────────
     ax = axes[0]
     arch_indices = np.arange(p)
     bar_colors = [arch_colors[j % len(arch_colors)] for j in arch_indices]
-    ax.barh(arch_indices, archetype_prevalence, color=bar_colors,
-            edgecolor="none", height=0.6)
+    ax.barh(
+        arch_indices,
+        archetype_prevalence,
+        color=bar_colors,
+        edgecolor="none",
+        height=0.6,
+    )
     ax.set_yticks(arch_indices)
     ax.set_yticklabels([f"Archetype {j}" for j in arch_indices], fontsize=9)
     ax.set_xlabel("mean abundance across precincts")
@@ -558,9 +606,13 @@ def _plot_abundance_weighted(
 
     # Annotate with percentage
     for j in arch_indices:
-        ax.text(archetype_prevalence[j] + 0.005, j,
-                f"{archetype_prevalence[j]:.1%}",
-                va="center", fontsize=8)
+        ax.text(
+            archetype_prevalence[j] + 0.005,
+            j,
+            f"{archetype_prevalence[j]:.1%}",
+            va="center",
+            fontsize=8,
+        )
 
     # ─── Right: top candidates by relevance ───────────────────────
     ax = axes[1]
@@ -568,8 +620,14 @@ def _plot_abundance_weighted(
     # Show top candidates (nonzero relevance, capped for readability)
     nonzero = candidate_relevance > 1e-10
     if nonzero.sum() == 0:
-        ax.text(0.5, 0.5, "No signal candidates detected",
-                ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "No signal candidates detected",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
     else:
         rel_order = np.argsort(candidate_relevance)[::-1]
         n_show = min(int(nonzero.sum()), 30)
@@ -577,11 +635,15 @@ def _plot_abundance_weighted(
 
         y_pos = np.arange(n_show)
         bar_c = [
-            arch_colors[candidate_max_archetype[i] % len(arch_colors)]
-            for i in top_idx
+            arch_colors[candidate_max_archetype[i] % len(arch_colors)] for i in top_idx
         ]
-        ax.barh(y_pos, candidate_relevance[top_idx], color=bar_c,
-                edgecolor="none", height=0.7)
+        ax.barh(
+            y_pos,
+            candidate_relevance[top_idx],
+            color=bar_c,
+            edgecolor="none",
+            height=0.7,
+        )
         ax.set_yticks(y_pos)
         ax.set_yticklabels(
             [_truncate(candidate_labels[i], 18) for i in top_idx],

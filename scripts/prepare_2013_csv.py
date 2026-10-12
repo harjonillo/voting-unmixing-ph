@@ -28,7 +28,7 @@ def canon_region(r: str) -> str:
     """Match the other years' REGION spelling:
     'N.C.R.'->'NCR', 'C.A.R'->'CAR', 'Region IV - A'->'REGION IV-A'."""
     s = str(r).upper().replace(".", "")
-    s = re.sub(r"\s*-\s*", "-", s)      # "IV - A" -> "IV-A"
+    s = re.sub(r"\s*-\s*", "-", s)  # "IV - A" -> "IV-A"
     return " ".join(s.split())
 
 
@@ -59,21 +59,29 @@ def build(src: Path, out: Path) -> None:
     # (which strips up to the first ".") keeps names that contain a period
     # (ENRILE, JUAN PONCE JR.(NPC); VILLANUEVA, BRO.EDDIE (BP)).
     for i, c in enumerate(cand, 1):
-        out_df[f"{i}. {c}"] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
+        out_df[f"{i}. {c}"] = (
+            pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
+        )
 
     if out_df.isna().to_numpy().sum():
         raise ValueError("NaN left in output — load_complete would drop those rows")
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(out, index=False)
-    print(f"wrote {out}  ({out_df.shape[0]:,} precincts x {len(cand)} candidates, "
-          f"sen_col_start=6)")
+    print(
+        f"wrote {out}  ({out_df.shape[0]:,} precincts x {len(cand)} candidates, "
+        f"sen_col_start=6)"
+    )
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--src", required=True, type=Path,
-                    help="path to 2013_per_precincts_senators.xls")
+    ap.add_argument(
+        "--src",
+        required=True,
+        type=Path,
+        help="path to 2013_per_precincts_senators.xls",
+    )
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
     build(args.src, args.out)

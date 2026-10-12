@@ -97,7 +97,7 @@ SIMPLIFY_TOLERANCE = {"municipality": 0.001}
 DEFAULT_TOLERANCE = 0.005
 
 ARCH_ROUND = 4  # decimals for abundances/loadings
-PCT_ROUND = 2   # decimals for turnout / percentages
+PCT_ROUND = 2  # decimals for turnout / percentages
 
 # Coalition / alliance grouping (the layer *over* parties). Hand-curated from news
 # sources; see data/README_coalitions.md. Baked alongside the loadings so the site
@@ -158,6 +158,8 @@ def alliance_arrays(year: str, labels: list[str], amap: dict) -> dict:
         slates.append(lst)
         details.append(detail)
     return {"alliance_list": slates, "alliance_detail": details}
+
+
 COORD_ROUND = 5  # decimals for lon/lat in GeoJSON (~1 m; plenty for display)
 
 
@@ -178,7 +180,9 @@ def add_turnout(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def build_level_agg(abundances: pd.DataFrame, level: str, weighted: bool) -> pd.DataFrame:
+def build_level_agg(
+    abundances: pd.DataFrame, level: str, weighted: bool
+) -> pd.DataFrame:
     """The aggregate the main tab builds for (level, weighting): mean abundances
     per unit + dominant archetype + turnout (mirror of build_view)."""
     arch_cols = [c for c in abundances.columns if c.startswith("arch_")]
@@ -343,8 +347,14 @@ def load_level_stats(cfg, p: int) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 
-def _level_frame(level_stats: pd.DataFrame, level: str, weighted: bool, stat: str,
-                 arch_cols: list[str], keep_counts: bool) -> pd.DataFrame:
+def _level_frame(
+    level_stats: pd.DataFrame,
+    level: str,
+    weighted: bool,
+    stat: str,
+    arch_cols: list[str],
+    keep_counts: bool,
+) -> pd.DataFrame:
     """Slice one (level, weighting, stat) table out of the long-format stats,
     keeping only that level's key columns (and, optionally, the count columns)."""
     group_cols = LEVEL_COLS[level]
@@ -365,11 +375,17 @@ def sweep_records(level_stats, arch_cols, level, weighted, provinces, municipali
     so they need no geometry join. Province/municipality stats are joined to the
     boundaries to canonicalize / name-match their key; mean and std ride one
     join together (split afterward)."""
-    mean_agg = _level_frame(level_stats, level, weighted, "mean", arch_cols, keep_counts=True)
-    std_agg = _level_frame(level_stats, level, weighted, "std", arch_cols, keep_counts=False)
+    mean_agg = _level_frame(
+        level_stats, level, weighted, "mean", arch_cols, keep_counts=True
+    )
+    std_agg = _level_frame(
+        level_stats, level, weighted, "std", arch_cols, keep_counts=False
+    )
 
     if level == "region":
-        mean_recs = [_rec(str(r["REGION"]), r, arch_cols) for _, r in mean_agg.iterrows()]
+        mean_recs = [
+            _rec(str(r["REGION"]), r, arch_cols) for _, r in mean_agg.iterrows()
+        ]
         std_recs = [_rec(str(r["REGION"]), r, arch_cols) for _, r in std_agg.iterrows()]
         return mean_recs, std_recs
 
@@ -389,8 +405,15 @@ def sweep_records(level_stats, arch_cols, level, weighted, provinces, municipali
     mean_recs, std_recs = [], []
     for i, (_, row) in enumerate(gdf.iterrows()):
         keys_i = keys[i]
-        mean_recs.append({"id": keys_i, **{c: _round(row.get(c), ARCH_ROUND) for c in arch_cols}})
-        std_recs.append({"id": keys_i, **{c: _round(row.get(c + "__std"), ARCH_ROUND) for c in arch_cols}})
+        mean_recs.append(
+            {"id": keys_i, **{c: _round(row.get(c), ARCH_ROUND) for c in arch_cols}}
+        )
+        std_recs.append(
+            {
+                "id": keys_i,
+                **{c: _round(row.get(c + "__std"), ARCH_ROUND) for c in arch_cols},
+            }
+        )
     return mean_recs, std_recs
 
 
@@ -466,15 +489,17 @@ def build_lineage(year: str, sweep: dict) -> dict:
             node_index[(p, k)] = len(nodes)
             top = lm.iloc[:, k].sort_values(ascending=False).head(LINEAGE_TOP_K)
             names = _node_names(list(top.index))
-            nodes.append({
-                "p": p,
-                "k": k,
-                "label": _short_label(top.index[0]),
-                "top": [
-                    {"name": nm, "full": str(c), "w": _round(w, ARCH_ROUND)}
-                    for nm, (c, w) in zip(names, top.items())
-                ],
-            })
+            nodes.append(
+                {
+                    "p": p,
+                    "k": k,
+                    "label": _short_label(top.index[0]),
+                    "top": [
+                        {"name": nm, "full": str(c), "w": _round(w, ARCH_ROUND)}
+                        for nm, (c, w) in zip(names, top.items())
+                    ],
+                }
+            )
 
     links: list[dict] = []
     for p_from, p_to in zip(ps[:-1], ps[1:]):
@@ -485,13 +510,15 @@ def build_lineage(year: str, sweep: dict) -> dict:
         for i in range(p_from):
             for j in range(p_to):
                 e = lineage.get((p_from, i, p_to, j))
-                links.append({
-                    "source": node_index[(p_from, i)],
-                    "target": node_index[(p_to, j)],
-                    "sims": {n: round(float(S[i, j]), 3) for n, S in sims.items()},
-                    "matched": e is not None and not e["split"],
-                    "split": e is not None and bool(e["split"]),
-                })
+                links.append(
+                    {
+                        "source": node_index[(p_from, i)],
+                        "target": node_index[(p_to, j)],
+                        "sims": {n: round(float(S[i, j]), 3) for n, S in sims.items()},
+                        "matched": e is not None and not e["split"],
+                        "split": e is not None and bool(e["split"]),
+                    }
+                )
 
     # Within-p distinctness scalars (notebook 08): the p×p distance matrix of
     # each metric collapsed to its min / mean off-diagonal, per column.
@@ -507,8 +534,13 @@ def build_lineage(year: str, sweep: dict) -> dict:
             }
         distinct[p] = per
 
-    return {"year": year, "ps": ps, "nodes": nodes, "links": links,
-            "distinct": distinct}
+    return {
+        "year": year,
+        "ps": ps,
+        "nodes": nodes,
+        "links": links,
+        "distinct": distinct,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -521,7 +553,9 @@ def build(out: Path, verify: bool) -> None:
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    provinces = load_provinces(load_config(REPO_ROOT / "configs" / f"config_{DEFAULT_YEAR}.ini"))
+    provinces = load_provinces(
+        load_config(REPO_ROOT / "configs" / f"config_{DEFAULT_YEAR}.ini")
+    )
     municipalities = load_municipalities(
         load_config(REPO_ROOT / "configs" / f"config_{DEFAULT_YEAR}.ini")
     )
@@ -586,7 +620,9 @@ def build(out: Path, verify: bool) -> None:
         loadings_payload = {
             "candidates": list(endmembers.index),
             "arch_cols": arch_cols,
-            "mean": {c: [_round(v, ARCH_ROUND) for v in endmembers[c]] for c in arch_cols},
+            "mean": {
+                c: [_round(v, ARCH_ROUND) for v in endmembers[c]] for c in arch_cols
+            },
             **alliance_arrays(year, list(endmembers.index), amap),
         }
         std_df = _loading_std(endmembers, sweep, meta)
@@ -609,8 +645,12 @@ def build(out: Path, verify: bool) -> None:
                 "p": p,
                 "candidates": list(lm.index),
                 "arch_cols": arch_cols_p,
-                "loadings_mean": {c: [_round(v, ARCH_ROUND) for v in lm[c]] for c in arch_cols_p},
-                "loadings_std": {c: [_round(v, ARCH_ROUND) for v in ls[c]] for c in arch_cols_p},
+                "loadings_mean": {
+                    c: [_round(v, ARCH_ROUND) for v in lm[c]] for c in arch_cols_p
+                },
+                "loadings_std": {
+                    c: [_round(v, ARCH_ROUND) for v in ls[c]] for c in arch_cols_p
+                },
                 **alliance_arrays(year, list(lm.index), amap),
                 "levels": {},
             }
@@ -618,7 +658,12 @@ def build(out: Path, verify: bool) -> None:
                 lvl = {}
                 for weighted in WEIGHTINGS:
                     mean_recs, std_recs = sweep_records(
-                        level_stats, arch_cols_p, level, weighted, provinces, municipalities
+                        level_stats,
+                        arch_cols_p,
+                        level,
+                        weighted,
+                        provinces,
+                        municipalities,
                     )
                     lvl[w_tag(weighted)] = {"mean": mean_recs, "std": std_recs}
                 sw["levels"][level] = lvl
@@ -642,7 +687,8 @@ def build(out: Path, verify: bool) -> None:
     import geopandas as gpd
 
     pooled = gpd.GeoDataFrame(
-        pd.concat(muni_gdfs, ignore_index=True), geometry="geometry",
+        pd.concat(muni_gdfs, ignore_index=True),
+        geometry="geometry",
         crs=muni_gdfs[0].crs,
     )
     pooled["MUNI_ID"] = feature_key(pooled, "MUNI_ID")
@@ -702,24 +748,33 @@ def _verify(out: Path, provinces, municipalities) -> None:
                 gdf, key_col = join_agg_to_boundaries(
                     abundances, agg, level, weighted, provinces, municipalities
                 )
-                recs = records_from_gdf(gdf, key_col, [c for c in agg if c.startswith("arch_")])
+                recs = records_from_gdf(
+                    gdf, key_col, [c for c in agg if c.startswith("arch_")]
+                )
                 baked = json.loads(
                     (out / f"values/{year}_{level}_{w_tag(weighted)}.json").read_text()
                 )["records"]
                 if recs != baked:
                     ok = False
                     print(f"  MISMATCH {year} {level} {w_tag(weighted)}")
-    print("  all baked value tables reproduce the in-process aggregation"
-          if ok else "  VERIFY FAILED")
+    print(
+        "  all baked value tables reproduce the in-process aggregation"
+        if ok
+        else "  VERIFY FAILED"
+    )
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", default="site/data", help="output dir (default: site/data)")
+    ap.add_argument(
+        "--out", default="site/data", help="output dir (default: site/data)"
+    )
     ap.add_argument("--verify", action="store_true", help="spot-check baked values")
     args = ap.parse_args()
     target = Path(args.out)
-    build(target if target.is_absolute() else (REPO_ROOT / target).resolve(), args.verify)
+    build(
+        target if target.is_absolute() else (REPO_ROOT / target).resolve(), args.verify
+    )
 
 
 if __name__ == "__main__":

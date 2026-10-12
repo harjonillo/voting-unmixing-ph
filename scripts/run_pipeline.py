@@ -28,10 +28,15 @@ from src.unmixing import est_noise, hysime, mvsa, sunsal_mod
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", required=True,
-                        help="per-year config, e.g. configs/config_2025.ini")
-    parser.add_argument("--n-archetypes", type=int, default=None,
-                        help="override [unmixing] n_archetypes (0 = use HySime kf)")
+    parser.add_argument(
+        "--config", required=True, help="per-year config, e.g. configs/config_2025.ini"
+    )
+    parser.add_argument(
+        "--n-archetypes",
+        type=int,
+        default=None,
+        help="override [unmixing] n_archetypes (0 = use HySime kf)",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -49,7 +54,11 @@ def main():
     kf, *_ = hysime(Y, w_hat, Rw_hat, verbose=False)
     print(f"HySime signal subspace dimension kf = {kf}")
 
-    n_archetypes = args.n_archetypes if args.n_archetypes is not None else unmix.getint("n_archetypes")
+    n_archetypes = (
+        args.n_archetypes
+        if args.n_archetypes is not None
+        else unmix.getint("n_archetypes")
+    )
     if n_archetypes == 0:
         n_archetypes = kf
     print(f"n_archetypes = {n_archetypes}")
@@ -57,19 +66,24 @@ def main():
     print("\n== MVSA ==")
     t0 = time.time()
     endmembers, *_ = mvsa(
-        Y, p=n_archetypes,
+        Y,
+        p=n_archetypes,
         MM_iters=unmix.getint("mvsa_mm_iters"),
-        spherize="yes", verbose=0,
+        spherize="yes",
+        verbose=0,
     )
     print(f"M: {endmembers.shape}  ({time.time() - t0:.1f}s)")
 
     print("\n== SUNSAL ==")
     t0 = time.time()
     abundances, res_p, res_d = sunsal_mod(
-        endmembers, Y,
-        positivity="yes", addone="yes",
+        endmembers,
+        Y,
+        positivity="yes",
+        addone="yes",
         AL_iters=unmix.getint("sunsal_al_iters"),
-        lambda_=0.0, tol=unmix.getfloat("sunsal_tol"),
+        lambda_=0.0,
+        tol=unmix.getfloat("sunsal_tol"),
         verbose="no",
     )
     print(f"S: {abundances.shape}  ({time.time() - t0:.1f}s)")

@@ -4,12 +4,13 @@ from typing import List, Union
 
 
 def plot_arr_cols_to_subplots(
-    arr: np.ndarray, 
-    arr_ref: np.ndarray, 
-    n_row: int, titles: List[str], 
-    plot_type="bar", 
-    label: str = "extracted", 
-    label_ref: str = "reference"
+    arr: np.ndarray,
+    arr_ref: np.ndarray,
+    n_row: int,
+    titles: List[str],
+    plot_type="bar",
+    label: str = "extracted",
+    label_ref: str = "reference",
 ):
     """
     Plots a column in the given array into its own subplot.
@@ -18,16 +19,20 @@ def plot_arr_cols_to_subplots(
 
     fig, axs = plt.subplots(n_row, n_col, figsize=(15, 6))
     for m in range(arr.shape[1]):
-        
+
         if n_row == 1:
             if plot_type == "bar":
                 axs[m].bar(range(len(arr[:, m])), arr[:, m], label=label, alpha=0.7)
-                axs[m].bar(range(len(arr_ref[:, m])), arr_ref[:, m], label=label_ref, alpha=0.7)
-            
+                axs[m].bar(
+                    range(len(arr_ref[:, m])), arr_ref[:, m], label=label_ref, alpha=0.7
+                )
+
             else:
                 axs[m].plot(arr_ref[:, m], color="C3", label=label_ref, alpha=0.7)
-                axs[m].plot(arr[:, m], color="C0", label=label, linestyle='--', alpha=0.7)
-            
+                axs[m].plot(
+                    arr[:, m], color="C0", label=label, linestyle="--", alpha=0.7
+                )
+
             axs[m].legend(loc="best")
             axs[m].set_title(titles[m])
 
@@ -37,10 +42,18 @@ def plot_arr_cols_to_subplots(
 
             if plot_type == "bar":
                 axs[i, j].bar(range(len(arr[:, m])), arr[:, m], label=label, alpha=0.7)
-                axs[i, j].bar(range(len(arr_ref[:, m])), arr_ref[:, m], label=label_ref, alpha=0.7)
+                axs[i, j].bar(
+                    range(len(arr_ref[:, m])), arr_ref[:, m], label=label_ref, alpha=0.7
+                )
 
             else:
-                axs[i, j].plot(arr_ref[:, m], color="C3", label=label_ref, linestyle='--', alpha=0.7)
+                axs[i, j].plot(
+                    arr_ref[:, m],
+                    color="C3",
+                    label=label_ref,
+                    linestyle="--",
+                    alpha=0.7,
+                )
                 axs[i, j].plot(arr[:, m], color="C0", label=label, alpha=0.7)
 
             axs[i, j].legend(loc="best")
@@ -97,15 +110,26 @@ def plot_reconstruction_histograms(
 
     bins = np.linspace(xmin, xmax, n_bins)
 
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols * col_width, n_rows * col_width))
+    fig, axs = plt.subplots(
+        n_rows, n_cols, figsize=(n_cols * col_width, n_rows * col_width)
+    )
     axs = axs.flatten()
 
     for i, (idx, name) in enumerate(zip(top_n_index, top_n_names)):
         hist = Y[idx, :]
         hist_rec = Y_rec[idx, :]
         hist_rec = hist_rec[~np.isnan(hist_rec)]
-        axs[i].hist(hist, bins=bins, color="C0", density=True, alpha=0.5, label="Original")
-        axs[i].hist(hist_rec, bins=bins, color="C3", density=True, alpha=0.5, label="Reconstructed")
+        axs[i].hist(
+            hist, bins=bins, color="C0", density=True, alpha=0.5, label="Original"
+        )
+        axs[i].hist(
+            hist_rec,
+            bins=bins,
+            color="C3",
+            density=True,
+            alpha=0.5,
+            label="Reconstructed",
+        )
         axs[i].set_title(f"{i + 1}: {name}", fontsize=10)
         axs[i].set_xlabel("Vote fraction per precinct")
         axs[i].set_ylabel("Density")
@@ -148,12 +172,15 @@ def plot_archetype_weights(
 
     L, p = endm.shape
 
-    df = pd.DataFrame(
-        endm,
-        columns=list(range(p)),
-        index=candidate_labels,
-    ).reset_index().rename(columns={"index": "candidate"}).melt(
-        id_vars=["candidate"], var_name="archetype", value_name="weight"
+    df = (
+        pd.DataFrame(
+            endm,
+            columns=list(range(p)),
+            index=candidate_labels,
+        )
+        .reset_index()
+        .rename(columns={"index": "candidate"})
+        .melt(id_vars=["candidate"], var_name="archetype", value_name="weight")
     )
 
     fig, axs = plt.subplots(1, p, figsize=(8 * p, 8))
@@ -163,7 +190,9 @@ def plot_archetype_weights(
     for i, ax in zip(range(p), axs):
         sns.barplot(
             ax=ax,
-            data=df.query(f"archetype == {i}").sort_values(by="weight", ascending=False).head(top_n),
+            data=df.query(f"archetype == {i}")
+            .sort_values(by="weight", ascending=False)
+            .head(top_n),
             x="weight",
             y="candidate",
         )

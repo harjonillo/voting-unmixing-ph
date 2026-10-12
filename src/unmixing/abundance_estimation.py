@@ -20,7 +20,7 @@ def fcls(Ae, R):
     # Augment to enforce sum-to-one constraint
     delta = 1e4  # regularization weight
     Ae_aug = np.vstack([Ae, delta * np.ones((1, p))])
-    R_aug  = np.vstack([R,  delta * np.ones((1, N))])
+    R_aug = np.vstack([R, delta * np.ones((1, N))])
 
     abundances = np.zeros((p, N))
     for j in range(N):
@@ -49,13 +49,15 @@ def hyperFcls(Y_data, endmembers):
     """
     # Input validation and dimension extraction
     if endmembers.ndim != 2:
-        raise ValueError('Endmembers matrix (U) must be a 2D matrix (L x R).')
+        raise ValueError("Endmembers matrix (U) must be a 2D matrix (L x R).")
 
-    L_data, P_pixels = Y_data.shape    # L = number of channels, P = number of pixels
-    L_em, R_endmembers = endmembers.shape # L_em = channels, R = number of endmembers
+    L_data, P_pixels = Y_data.shape  # L = number of channels, P = number of pixels
+    L_em, R_endmembers = endmembers.shape  # L_em = channels, R = number of endmembers
 
     if L_data != L_em:
-        raise ValueError('Y_data and endmembers must have the same number of spectral channels (L).')
+        raise ValueError(
+            "Y_data and endmembers must have the same number of spectral channels (L)."
+        )
 
     # Initialize abundance matrix X (R x P)
     X_abundances = np.zeros((R_endmembers, P_pixels))
@@ -65,14 +67,16 @@ def hyperFcls(Y_data, endmembers):
 
     # Iterate over each pixel to solve for its abundances
     for p_idx in range(P_pixels):
-        current_R = R_endmembers  # Number of endmembers currently considered for this pixel
-        done = False              # Flag to indicate if solution is found for current pixel
+        current_R = (
+            R_endmembers  # Number of endmembers currently considered for this pixel
+        )
+        done = False  # Flag to indicate if solution is found for current pixel
 
         # `current_ref_indices` keeps track of the original indices of endmembers currently in `U_current`
         current_ref_indices = np.arange(R_endmembers)
 
         # `y_p` is the current pixel's spectrum (L x 1)
-        y_p = Y_data[:, p_idx].reshape(-1, 1) # Ensure it's a column vector
+        y_p = Y_data[:, p_idx].reshape(-1, 1)  # Ensure it's a column vector
 
         # `U_current` is the subset of endmembers currently being considered (L x current_R)
         U_current = endmembers_bckp.copy()
@@ -80,63 +84,75 @@ def hyperFcls(Y_data, endmembers):
         # Iterative loop to enforce non-negativity
         while not done:
             # Calculate (U_current.T @ U_current)
-            MTM = U_current.T @ U_current # (current_R x current_R)
+            MTM = U_current.T @ U_current  # (current_R x current_R)
 
             # Handle potential singularity or ill-conditioning
             if np.linalg.cond(MTM) > 1e10:
-                warnings.warn("U.T @ U matrix is ill-conditioned during FCLS, adding regularization.")
-                MTM = MTM + np.eye(current_R) * 1e-9 # Add small regularization
+                warnings.warn(
+                    "U.T @ U matrix is ill-conditioned during FCLS, adding regularization."
+                )
+                MTM = MTM + np.eye(current_R) * 1e-9  # Add small regularization
 
             try:
-                MTM_inv = np.linalg.inv(MTM) # (current_R x current_R)
+                MTM_inv = np.linalg.inv(MTM)  # (current_R x current_R)
             except np.linalg.LinAlgError:
-                warnings.warn("U.T @ U matrix is singular during FCLS, using pseudo-inverse. Results may be inaccurate.")
-                MTM_inv = np.linalg.pinv(MTM) # Fallback to pseudo-inverse
+                warnings.warn(
+                    "U.T @ U matrix is singular during FCLS, using pseudo-inverse. Results may be inaccurate."
+                )
+                MTM_inv = np.linalg.pinv(MTM)  # Fallback to pseudo-inverse
 
             # 1. Unconstrained Least Squares (ALS) solution: als_hat = (U.T @ U)^-1 @ U.T @ r
-            als_hat = MTM_inv @ U_current.T @ y_p # (current_R x 1)
+            als_hat = MTM_inv @ U_current.T @ y_p  # (current_R x 1)
 
             # 2. Vector 's' (sum-to-one constraint related term)
             # s = (U.T @ U)^-1 @ ones(count, 1)
-            ones_vec = np.ones((current_R, 1)) # (current_R x 1)
-            s = MTM_inv @ ones_vec # (current_R x 1)
+            ones_vec = np.ones((current_R, 1))  # (current_R x 1)
+            s = MTM_inv @ ones_vec  # (current_R x 1)
 
             # 3. Fully Constrained Least Squares (FCLS) solution (intermediate step)
             # This implements the correction from the IEEE Magazine method.
             # afcls_hat = als_hat - inv(U.'*U)*ones(count, 1)*inv(ones(1, count)*inv(U.'*U)*ones(count, 1))*(ones(1, count)*als_hat-1);
 
             # (ones(1, count)*inv(U.'*U)*ones(count, 1)) is a scalar: ones_vec.T @ MTM_inv @ ones_vec
-            scalar_denom = ones_vec.T @ MTM_inv @ ones_vec # (1 x 1)
+            scalar_denom = ones_vec.T @ MTM_inv @ ones_vec  # (1 x 1)
 
             # Handle potential division by zero if scalar_denom is very small
             if np.abs(scalar_denom) < 1e-12:
-                warnings.warn("Denominator for FCLS correction is near zero. Skipping correction for this pixel.")
-                afcls_hat = als_hat # Fallback to ALS if correction term is unstable
+                warnings.warn(
+                    "Denominator for FCLS correction is near zero. Skipping correction for this pixel."
+                )
+                afcls_hat = als_hat  # Fallback to ALS if correction term is unstable
             else:
-                scalar_factor = np.linalg.inv(scalar_denom) # Inverse of the scalar (1x1)
+                scalar_factor = np.linalg.inv(
+                    scalar_denom
+                )  # Inverse of the scalar (1x1)
                 # (ones(1, count)*als_hat-1) is a scalar: ones_vec.T @ als_hat - 1
-                scalar_term = (ones_vec.T @ als_hat - 1) # (1 x 1)
+                scalar_term = ones_vec.T @ als_hat - 1  # (1 x 1)
 
-                afcls_hat = als_hat - s @ scalar_factor @ scalar_term # (current_R x 1)
+                afcls_hat = als_hat - s @ scalar_factor @ scalar_term  # (current_R x 1)
 
             # Check if all components are positive. If so, then we found the solution.
-            if np.all(afcls_hat >= -1e-9): # Use a small tolerance for "positive"
-                alpha = np.zeros((R_endmembers, 1)) # Initialize full abundance vector
-                alpha[current_ref_indices] = afcls_hat # Assign to original positions
-                done = True # Solution found
-                break # Exit inner while loop
+            if np.all(afcls_hat >= -1e-9):  # Use a small tolerance for "positive"
+                alpha = np.zeros((R_endmembers, 1))  # Initialize full abundance vector
+                alpha[current_ref_indices] = afcls_hat  # Assign to original positions
+                done = True  # Solution found
+                break  # Exit inner while loop
 
             # If not all positive, find the most negative component to remove
             # Multiply negative elements by their counterpart in the s vector.
             # This step is part of the iterative removal process.
-            idx_negative = np.where(afcls_hat < -1e-9)[0] # Indices of negative abundances
+            idx_negative = np.where(afcls_hat < -1e-9)[
+                0
+            ]  # Indices of negative abundances
 
             # If no negative elements found but not all positive (e.g., due to tolerance),
             # this indicates a numerical issue or convergence problem.
             if len(idx_negative) == 0:
-                warnings.warn("FCLS: No negative abundances found but not all positive (tolerance issue). Breaking loop.")
+                warnings.warn(
+                    "FCLS: No negative abundances found but not all positive (tolerance issue). Breaking loop."
+                )
                 alpha = np.zeros((R_endmembers, 1))
-                alpha[current_ref_indices] = afcls_hat # Assign current best estimate
+                alpha[current_ref_indices] = afcls_hat  # Assign current best estimate
                 done = True
                 break
 
@@ -152,14 +168,20 @@ def hyperFcls(Y_data, endmembers):
             idx_to_remove_in_current_U = idx_negative[max_ratio_idx_in_negative]
 
             # Remove this endmember from the current set
-            keep_indices_in_current_U = np.setdiff1d(np.arange(current_R), idx_to_remove_in_current_U)
+            keep_indices_in_current_U = np.setdiff1d(
+                np.arange(current_R), idx_to_remove_in_current_U
+            )
 
             U_current = U_current[:, keep_indices_in_current_U]
-            current_R -= 1 # Decrement count of active endmembers
-            current_ref_indices = current_ref_indices[keep_indices_in_current_U] # Update reference indices
+            current_R -= 1  # Decrement count of active endmembers
+            current_ref_indices = current_ref_indices[
+                keep_indices_in_current_U
+            ]  # Update reference indices
 
-            if current_R == 0: # All endmembers removed, no solution possible
-                warnings.warn(f"FCLS: All endmembers removed for pixel {p_idx}. Abundances set to zero.")
+            if current_R == 0:  # All endmembers removed, no solution possible
+                warnings.warn(
+                    f"FCLS: All endmembers removed for pixel {p_idx}. Abundances set to zero."
+                )
                 alpha = np.zeros((R_endmembers, 1))
                 done = True
                 break
@@ -171,8 +193,18 @@ def hyperFcls(Y_data, endmembers):
     return X_abundances
 
 
-def sunsal_mod(M, y, AL_iters=1000, lambda_=0.0, positivity='no', threshold=0.0,
-               addone='no', tol=1e-4, verbose='no', x0=None):
+def sunsal_mod(
+    M,
+    y,
+    AL_iters=1000,
+    lambda_=0.0,
+    positivity="no",
+    threshold=0.0,
+    addone="no",
+    tol=1e-4,
+    verbose="no",
+    x0=None,
+):
     """
     SUNSAL_MOD - Sparse Unmixing via variable Splitting and Augmented Lagrangian (modified).
 
@@ -235,7 +267,7 @@ def sunsal_mod(M, y, AL_iters=1000, lambda_=0.0, positivity='no', threshold=0.0,
     L, N = y.shape
 
     if LM != L:
-        raise ValueError('Mixing matrix M and data set y are inconsistent')
+        raise ValueError("Mixing matrix M and data set y are inconsistent")
 
     # --- Expand lambda to (p, N) ---
     lambda_ = np.asarray(lambda_, dtype=float)
@@ -243,26 +275,28 @@ def sunsal_mod(M, y, AL_iters=1000, lambda_=0.0, positivity='no', threshold=0.0,
         lambda_ = float(lambda_) * np.ones((p, N))
     elif lambda_.ndim == 1:
         if lambda_.size != N:
-            raise ValueError('Lambda size is inconsistent with the size of the data set')
+            raise ValueError(
+                "Lambda size is inconsistent with the size of the data set"
+            )
         lambda_ = np.tile(lambda_.reshape(1, N), (p, 1))
 
     # Rescale M, y, and lambda by the RMS of y
-    norm_y = np.sqrt(np.mean(y ** 2))
+    norm_y = np.sqrt(np.mean(y**2))
     M = M / norm_y
     y = y / norm_y
-    lambda_ = lambda_ / norm_y ** 2
+    lambda_ = lambda_ / norm_y**2
 
     # --- Pure least squares (no regularisation, no constraints) ---
-    if np.all(lambda_ == 0) and positivity == 'no' and addone == 'no':
+    if np.all(lambda_ == 0) and positivity == "no" and addone == "no":
         z = np.linalg.pinv(M) @ y
         return z, 0.0, 0.0
 
     # --- Constrained least squares: sum-to-one only, no positivity ---
     SMALL = 1e-12
-    B = np.ones((1, p))   # (1, p)
-    a = np.ones((1, N))   # (1, N)
+    B = np.ones((1, p))  # (1, p)
+    a = np.ones((1, N))  # (1, N)
 
-    if addone == 'yes' and positivity == 'no':
+    if addone == "yes" and positivity == "no":
         F = M.T @ M
         # rcond(F) > SMALL in MATLAB ↔ condition number is not too large
         if 1.0 / np.linalg.cond(F) > SMALL:
@@ -276,7 +310,7 @@ def sunsal_mod(M, y, AL_iters=1000, lambda_=0.0, positivity='no', threshold=0.0,
     mu = 10 * float(np.mean(lambda_)) + mu_AL
 
     # Eigendecomposition of M'M for efficient updates
-    UF, sF, _ = np.linalg.svd(M.T @ M)   # sF is 1-D array of singular values
+    UF, sF, _ = np.linalg.svd(M.T @ M)  # sF is 1-D array of singular values
 
     def _build_IF(mu_val):
         IF = UF @ np.diag(1.0 / (sF + mu_val)) @ UF.T
@@ -286,14 +320,14 @@ def sunsal_mod(M, y, AL_iters=1000, lambda_=0.0, positivity='no', threshold=0.0,
         return IF, x_aux, IF1
 
     IF, x_aux, IF1 = _build_IF(mu)
-    yy = M.T @ y   # (p, N)
+    yy = M.T @ y  # (p, N)
 
     # --- Initial solution ---
     if x0 is None:
         x = IF @ yy
     else:
         if x0.shape != (p, N):
-            raise ValueError('Initial X is inconsistent with M or Y')
+            raise ValueError("Initial X is inconsistent with M or Y")
         x = x0.copy()
 
     z = x.copy()
@@ -325,13 +359,13 @@ def sunsal_mod(M, y, AL_iters=1000, lambda_=0.0, positivity='no', threshold=0.0,
         if use_soft:
             z = _soft(x - d, lambda_ / mu)
         else:
-            z = x - d   # soft(x, 0) = x
+            z = x - d  # soft(x, 0) = x
 
-        if positivity == 'yes':
+        if positivity == "yes":
             z = np.maximum(z, threshold)
 
         # X-update
-        if addone == 'yes':
+        if addone == "yes":
             x = IF1 @ (yy + mu * (z + d)) + x_aux
         else:
             x = IF @ (yy + mu * (z + d))
@@ -341,11 +375,11 @@ def sunsal_mod(M, y, AL_iters=1000, lambda_=0.0, positivity='no', threshold=0.0,
 
         # Residuals and mu adaptation (every 10 iterations)
         if i % 10 == 1:
-            res_p = np.linalg.norm(x - z, 'fro')
-            res_d = mu * np.linalg.norm(z - z0, 'fro')
+            res_p = np.linalg.norm(x - z, "fro")
+            res_d = mu * np.linalg.norm(z - z0, "fro")
 
-            if verbose == 'yes':
-                print(f' i = {i}, res_p = {res_p:.6f}, res_d = {res_d:.6f}')
+            if verbose == "yes":
+                print(f" i = {i}, res_p = {res_p:.6f}, res_d = {res_d:.6f}")
 
             if res_p > 10 * res_d:
                 mu *= 2

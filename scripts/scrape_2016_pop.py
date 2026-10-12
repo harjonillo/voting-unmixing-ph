@@ -46,8 +46,10 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASE = "https://www.comelec.gov.ph"
-UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+)
 
 PROVINCE_URL = "html-scripts/2016NLE/province2016.html"
 MUNI_URL = "php-sys-generated/2016NLE/pop-2016nle/prov_{P}/prov_list{P}2016.html"
@@ -61,8 +63,8 @@ NCR_CODES = {"39", "74", "75", "76"}
 # (administratively Region XII / SOCCSKSARGEN) and Isabela City, Basilan (Region IX
 # / Zamboanga Peninsula — it stayed out of ARMM).
 REGION_OVERRIDES: dict[str, str] = {
-    "98": "REGION XII",   # SPECIAL PROVINCE - COTABATO CITY
-    "97": "REGION IX",    # SPECIAL PROVINCE - ISABELA CITY
+    "98": "REGION XII",  # SPECIAL PROVINCE - COTABATO CITY
+    "97": "REGION IX",  # SPECIAL PROVINCE - ISABELA CITY
 }
 
 OPTION = re.compile(r"<option value='([^']*)'[^>]*>(.*?)</option>", re.S | re.I)
@@ -115,7 +117,10 @@ class Fetcher:
 def region_map() -> dict[str, str]:
     """norm_prov(province) -> REGION, from 2013 (era-correct) then 2019."""
     m: dict[str, str] = {}
-    for yr in ("2019", "2013"):  # 2013 second so it overwrites -> era-correct labels win
+    for yr in (
+        "2019",
+        "2013",
+    ):  # 2013 second so it overwrites -> era-correct labels win
         path = REPO_ROOT / "data" / "elections" / f"{yr}_senators_complete.csv"
         if not path.exists():
             continue
@@ -136,7 +141,7 @@ def parse_table(text: str, P: str, M_key: str, region: str, prov: str, muni: str
         tds = TD.findall(tr)
         if len(tds) < 5:
             continue
-        cluster = clean(tds[3])          # CLUSTER/GROUP NUMBER column
+        cluster = clean(tds[3])  # CLUSTER/GROUP NUMBER column
         if not cluster.isdigit():
             continue
         pid = f"{int(P):02d}{int(M_key):02d}{int(cluster):04d}"
@@ -146,15 +151,25 @@ def parse_table(text: str, P: str, M_key: str, region: str, prov: str, muni: str
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", type=Path,
-                    default=REPO_ROOT / "data" / "elections" / "2016_precinct_geo.csv")
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=REPO_ROOT / "data" / "elections" / "2016_precinct_geo.csv",
+    )
     ap.add_argument("--cache", type=Path, default=REPO_ROOT / ".pop_cache_2016")
     ap.add_argument("--workers", type=int, default=8)
-    ap.add_argument("--delay", type=float, default=0.05,
-                    help="seconds to sleep after each *network* fetch (cached hits skip it)")
-    ap.add_argument("--fallback", default="2019",
-                    help="election year whose *_senators_complete.csv fills precincts POP "
-                         "cannot key (NCR/big cities); '' to disable")
+    ap.add_argument(
+        "--delay",
+        type=float,
+        default=0.05,
+        help="seconds to sleep after each *network* fetch (cached hits skip it)",
+    )
+    ap.add_argument(
+        "--fallback",
+        default="2019",
+        help="election year whose *_senators_complete.csv fills precincts POP "
+        "cannot key (NCR/big cities); '' to disable",
+    )
     args = ap.parse_args()
 
     f = Fetcher(args.cache, args.delay)
@@ -193,8 +208,8 @@ def main() -> None:
         for val, mname in OPTION.findall(mh):
             if not val.strip():
                 continue
-            m_url = val[2:14]            # getpop: muni_v.substring(2,14) — file path part
-            m_key = val[2:4]             # 2-digit city/municipality code for the 8-digit id
+            m_url = val[2:14]  # getpop: muni_v.substring(2,14) — file path part
+            m_key = val[2:4]  # 2-digit city/municipality code for the 8-digit id
             # Big cities split into legislative districts (e.g. QUEZON CITY, 1ST
             # DISTRICT -> '7404-1') share one city code; their POP cluster numbers
             # overlap across districts, so the city+cluster key is not unique for
@@ -220,8 +235,10 @@ def main() -> None:
             if i % 200 == 0:
                 print(f"  {i}/{len(tasks)} municipalities, {len(all_rows):,} precincts")
 
-    df = pd.DataFrame(all_rows,
-                      columns=["precinct", "REGION", "PROVINCE", "CITY_MUNICIPALITY", "BARANGAY"])
+    df = pd.DataFrame(
+        all_rows,
+        columns=["precinct", "REGION", "PROVINCE", "CITY_MUNICIPALITY", "BARANGAY"],
+    )
     df = df.drop_duplicates("precinct")
     df["source"] = "pop2016"
     pop_n = len(df)
@@ -233,14 +250,36 @@ def main() -> None:
     # precinct; 2019 only adds ids POP lacks.
     fb = REPO_ROOT / "data" / "elections" / f"{args.fallback}_senators_complete.csv"
     if fb.exists():
-        f19 = pd.read_csv(fb, usecols=["REGION", "PROVINCE", "CITY_MUNICIPALITY",
-                                       "BARANGAY", "CLUSTERED_PRECINCT"], dtype=str)
+        f19 = pd.read_csv(
+            fb,
+            usecols=[
+                "REGION",
+                "PROVINCE",
+                "CITY_MUNICIPALITY",
+                "BARANGAY",
+                "CLUSTERED_PRECINCT",
+            ],
+            dtype=str,
+        )
         f19["precinct"] = f19["CLUSTERED_PRECINCT"].str.zfill(8)
         f19 = f19[~f19["precinct"].isin(set(df["precinct"]))].copy()
         f19["source"] = f"nle{args.fallback}"
-        df = pd.concat([df, f19[["precinct", "REGION", "PROVINCE",
-                                 "CITY_MUNICIPALITY", "BARANGAY", "source"]]],
-                       ignore_index=True)
+        df = pd.concat(
+            [
+                df,
+                f19[
+                    [
+                        "precinct",
+                        "REGION",
+                        "PROVINCE",
+                        "CITY_MUNICIPALITY",
+                        "BARANGAY",
+                        "source",
+                    ]
+                ],
+            ],
+            ignore_index=True,
+        )
         print(f"fallback {args.fallback}: added {len(f19):,} precincts POP lacked")
     else:
         print(f"fallback {args.fallback} CSV not found — POP only")
@@ -248,12 +287,18 @@ def main() -> None:
     df = df.drop_duplicates("precinct").sort_values("precinct")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(args.out, index=False)
-    print(f"\nwrote {args.out}  ({len(df):,} precincts; {pop_n:,} from POP, "
-          f"{len(df) - pop_n:,} from fallback)")
-    print(f"  regions: {df['REGION'].nunique()}  provinces: {df['PROVINCE'].nunique()}  "
-          f"municipalities: {df['CITY_MUNICIPALITY'].nunique()}")
-    if (df['REGION'] == 'UNKNOWN').any():
-        print(f"  ! {int((df['REGION']=='UNKNOWN').sum()):,} precincts have REGION=UNKNOWN")
+    print(
+        f"\nwrote {args.out}  ({len(df):,} precincts; {pop_n:,} from POP, "
+        f"{len(df) - pop_n:,} from fallback)"
+    )
+    print(
+        f"  regions: {df['REGION'].nunique()}  provinces: {df['PROVINCE'].nunique()}  "
+        f"municipalities: {df['CITY_MUNICIPALITY'].nunique()}"
+    )
+    if (df["REGION"] == "UNKNOWN").any():
+        print(
+            f"  ! {int((df['REGION']=='UNKNOWN').sum()):,} precincts have REGION=UNKNOWN"
+        )
     if f.fail:
         print(f"  ! {len(f.fail)} fetch failures (first few):")
         for u in f.fail[:5]:
