@@ -11,13 +11,15 @@ notebook 08 — rank-biased overlap, weighted Kendall tau, and top-k Jaccard —
 which emphasise the high-loading candidates that define an archetype.
 """
 
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
+
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 from scipy.stats import spearmanr
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-def cosine_matrix(A, B):
+def cosine_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
     """Cosine similarity between the columns of two matrices.
 
     Parameters
@@ -37,7 +39,7 @@ def cosine_matrix(A, B):
     return cosine_similarity(A.T, B.T)
 
 
-def spearman_matrix(A, B):
+def spearman_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
     """Spearman rank correlation between the columns of two matrices.
 
     Parameters
@@ -59,7 +61,9 @@ def spearman_matrix(A, B):
     return np.atleast_2d(rho)[:p_a, p_a:]
 
 
-def _cross_pairwise(A, B, f):
+def _cross_pairwise(
+    A: np.ndarray, B: np.ndarray, f: Callable[[np.ndarray, np.ndarray], float]
+) -> np.ndarray:
     """Apply a per-pair column function over the cross product of two matrices.
 
     Parameters
@@ -82,7 +86,7 @@ def _cross_pairwise(A, B, f):
     return C
 
 
-def _ranked_idx(col):
+def _ranked_idx(col: np.ndarray) -> np.ndarray:
     """Candidate indices sorted by descending loading (as in notebook 08).
 
     Parameters
@@ -99,7 +103,12 @@ def _ranked_idx(col):
     return np.argsort(-np.asarray(col))
 
 
-def rbo_ext(list_a, list_b, pval=0.9, k=None):
+def rbo_ext(
+    list_a: Sequence,
+    list_b: Sequence,
+    pval: float = 0.9,
+    k: Optional[int] = None,
+) -> float:
     """Extrapolated rank-biased overlap (Webber et al. 2010).
 
     Top-weighted agreement between two ranked lists: overlap is measured at
@@ -136,7 +145,7 @@ def rbo_ext(list_a, list_b, pval=0.9, k=None):
     return (1 - pval) * rbo_sum + ext
 
 
-def weighted_tau_matrix(A, B):
+def weighted_tau_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
     """Weighted Kendall tau between the columns of two matrices.
 
     Uses scipy's ``weightedtau`` with ``rank=True``: hyperbolic weights
@@ -159,7 +168,7 @@ def weighted_tau_matrix(A, B):
     return _cross_pairwise(A, B, lambda u, v: float(weightedtau(u, v, rank=True)[0]))
 
 
-def rbo_matrix(A, B, pval=0.9):
+def rbo_matrix(A: np.ndarray, B: np.ndarray, pval: float = 0.9) -> np.ndarray:
     """Extrapolated rank-biased overlap between the columns of two matrices.
 
     Each column is converted to a descending-loading candidate ranking and
@@ -182,7 +191,7 @@ def rbo_matrix(A, B, pval=0.9):
     return _cross_pairwise(A, B, f)
 
 
-def topk_jaccard_matrix(A, B, k=12):
+def topk_jaccard_matrix(A: np.ndarray, B: np.ndarray, k: int = 12) -> np.ndarray:
     """Jaccard overlap of the top-k candidate sets between columns.
 
     Order within the top-k set is ignored — this asks only "do the two
@@ -211,7 +220,7 @@ def topk_jaccard_matrix(A, B, k=12):
     return _cross_pairwise(A, B, f)
 
 
-def cosine_topk_matrix(A, B, k=12):
+def cosine_topk_matrix(A: np.ndarray, B: np.ndarray, k: int = 12) -> np.ndarray:
     """Cosine similarity restricted to each pair's union of top-k candidates.
 
     The cosine of two loading columns evaluated only on the candidates that
@@ -250,7 +259,11 @@ _SIMILARITIES = {
 }
 
 
-def similarity_matrix(A, B, similarity="cosine"):
+def similarity_matrix(
+    A: np.ndarray,
+    B: np.ndarray,
+    similarity: Union[str, Callable[[np.ndarray, np.ndarray], np.ndarray]] = "cosine",
+) -> np.ndarray:
     """Column-similarity matrix between two archetype matrices.
 
     Parameters
@@ -280,7 +293,11 @@ def similarity_matrix(A, B, similarity="cosine"):
     return f(A, B)
 
 
-def match_to_reference(M_ref, M_other, similarity="cosine"):
+def match_to_reference(
+    M_ref: np.ndarray,
+    M_other: np.ndarray,
+    similarity: Union[str, Callable[[np.ndarray, np.ndarray], np.ndarray]] = "cosine",
+) -> Tuple[np.ndarray, np.ndarray]:
     """Hungarian alignment of `M_other` columns to `M_ref` columns by column similarity.
 
     Parameters
@@ -308,7 +325,7 @@ def match_to_reference(M_ref, M_other, similarity="cosine"):
     return perm, matched_sim
 
 
-def archetype_lineage(loadings_by_p):
+def archetype_lineage(loadings_by_p: Dict[int, np.ndarray]) -> List[dict]:
     """Trace how archetypes split as the endmember count p increases.
 
     For each consecutive pair (p, p+1), the p+1 columns are Hungarian-matched
@@ -363,7 +380,9 @@ def archetype_lineage(loadings_by_p):
     return edges
 
 
-def relabel_to_reference(ref, other, n_clusters):
+def relabel_to_reference(
+    ref: np.ndarray, other: np.ndarray, n_clusters: int
+) -> np.ndarray:
     """Permute cluster labels so `other` overlaps `ref` as much as possible.
 
     Hungarian assignment on the label-overlap (contingency) matrix; requires
@@ -392,7 +411,9 @@ def relabel_to_reference(ref, other, n_clusters):
     return np.array([mapping[o] for o in other])
 
 
-def relabel_density_to_reference(ref, other, n_ref_clusters):
+def relabel_density_to_reference(
+    ref: np.ndarray, other: np.ndarray, n_ref_clusters: int
+) -> np.ndarray:
     """Align a density-clustering labeling (with noise) to a reference labeling.
 
     Like `relabel_to_reference`, but tolerant of the output shape of

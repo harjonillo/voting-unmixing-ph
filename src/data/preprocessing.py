@@ -11,8 +11,9 @@ recent version (trial-clustering notebook) as the reference:
 5. normalize each precinct's votes (valid ballots / row max / none).
 """
 
+import configparser
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Sequence
 
 import numpy as np
 import pandas as pd
@@ -39,6 +40,24 @@ class PreprocessedData:
     """Vote matrix plus the row-aligned geography table.
 
     Column j of ``Y`` corresponds to row j of ``df_geo``.
+
+    Attributes
+    ----------
+    Y_raw : ndarray, shape (L, N)
+        Raw vote counts: L candidates (rows, in national-rank order) x
+        N precincts (columns).
+    Y : ndarray, shape (L, N)
+        Normalized vote matrix, same orientation and alignment as `Y_raw`.
+    df_geo : pandas.DataFrame, shape (N, n_geo)
+        One row per precinct (GEO_COLS + INFO_COLS), row j aligned with
+        column j of `Y`.
+    ranked_columns : list of str, length L
+        Original CSV column names in national-rank order (row order of `Y`).
+    candidate_labels : list of str, length L
+        Display labels ``'SURNAME, NAME (PARTY) [rank]'``, same order.
+    params : dict
+        Preprocessing settings plus ``precinct_ids`` (original `df` row
+        labels in final column order of `Y`).
     """
 
     Y_raw: np.ndarray  # (L candidates, N precincts)
@@ -49,12 +68,12 @@ class PreprocessedData:
     params: dict = field(default_factory=dict)
 
     @property
-    def n_candidates(self):
+    def n_candidates(self) -> int:
         """Number of kept candidates (rows of ``Y``)."""
         return self.Y.shape[0]
 
     @property
-    def n_precincts(self):
+    def n_precincts(self) -> int:
         """Number of kept precincts (columns of ``Y``)."""
         return self.Y.shape[1]
 
@@ -83,7 +102,7 @@ def candidate_label(column: str, rank: int) -> str:
 
 def preprocess(
     df: pd.DataFrame,
-    excluded_regions=("OV", "LAV", "OAV"),
+    excluded_regions: Sequence[str] = ("OV", "LAV", "OAV"),
     sen_col_start: int = 17,
     min_candidate_25th_percentile: float = 10,
     min_precinct_votes: float = 10,
@@ -216,7 +235,7 @@ def preprocess(
 
 def preprocess_from_config(
     df: pd.DataFrame,
-    config,
+    config: configparser.ConfigParser,
     randomize_precinct_order: bool = False,
     verbose: bool = True,
 ) -> PreprocessedData:

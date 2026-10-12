@@ -1,3 +1,5 @@
+from typing import Optional, Tuple
+
 import numpy as np
 from scipy.linalg import det, svd, pinv  # svd for full SVD, pinv for pseudo-inverse
 from scipy.sparse.linalg import (
@@ -9,7 +11,7 @@ from tqdm import tqdm  # For progress bar
 from scipy.optimize import nnls
 
 
-def nfindr(y_proj):
+def nfindr(y_proj: np.ndarray) -> Tuple[np.ndarray, float]:
     """
     N-FINDR endmember extraction algorithm.
 
@@ -26,7 +28,10 @@ def nfindr(y_proj):
     ----------
     y_proj : ndarray, shape (Nb_pix, Nb_bandes)
         Dimensionality-reduced hyperspectral data, typically the output of
-        PCA with Nb_bandes = p - 1 retained components.
+        PCA with Nb_bandes = p - 1 retained components.  NOTE the
+        orientation: one pixel (precinct) per ROW, one reduced band per
+        column — the transpose of the (L, N) convention used elsewhere
+        in this package.
 
     Returns
     -------
@@ -128,18 +133,24 @@ def nfindr(y_proj):
     return endm, critere_opt
 
 
-def _estimate_snr(R_data, r_m, x):
+def _estimate_snr(R_data: np.ndarray, r_m: np.ndarray, x: np.ndarray) -> float:
     """
     Internal helper function to estimate Signal-to-Noise Ratio (SNR).
     Translated from MATLAB's estimate_snr.
 
-    Args:
-        R_data (np.ndarray): Hyperspectral data matrix (L channels x N pixels).
-        r_m (np.ndarray): Mean of each band (L x 1).
-        x (np.ndarray): Data projected onto p-subspace (p x N).
+    Parameters
+    ----------
+    R_data : ndarray, shape (L, N)
+        Hyperspectral data matrix: L channels (rows) x N pixels (columns).
+    r_m : ndarray, shape (L, 1)
+        Mean of each band (column vector).
+    x : ndarray, shape (p, N)
+        Data projected onto the p-dimensional subspace, one pixel per column.
 
-    Returns:
-        float: Estimated SNR in dB.
+    Returns
+    -------
+    float
+        Estimated SNR in dB (``-inf`` if the log argument is non-positive).
     """
     L, N = R_data.shape
     p, _ = x.shape
@@ -163,7 +174,9 @@ def _estimate_snr(R_data, r_m, x):
     return snr_est
 
 
-def vca(R, **kwargs):
+def vca(
+    R: np.ndarray, **kwargs
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float, np.ndarray, np.ndarray]:
     """
     Vertex Component Analysis (VCA) endmember extraction algorithm.
 
@@ -176,7 +189,8 @@ def vca(R, **kwargs):
     Parameters
     ----------
     R : ndarray, shape (L, N)
-        Hyperspectral data matrix: L spectral channels, N pixels.
+        Hyperspectral data matrix: L spectral channels (rows) x N pixels
+        (columns); in this project, L candidates x N precincts.
     **kwargs
         Endmembers : int
             Number of endmembers p to extract.  Required.
@@ -362,7 +376,7 @@ def vca(R, **kwargs):
     return Ae, indice, Rp, SNR, Ud, x
 
 
-def _compute_AtransYinvLA(Y, sinvl):
+def _compute_AtransYinvLA(Y: np.ndarray, sinvl: np.ndarray) -> np.ndarray:
     """
     Compute A^T @ diag(sinvl) @ A where A = kron(Y.T, I_p), using column-major
     (Fortran-order) vectorization — faithful translation of computeAtransYinvLA.m.
@@ -370,11 +384,15 @@ def _compute_AtransYinvLA(Y, sinvl):
     Parameters
     ----------
     Y : ndarray, shape (p, N)
-    sinvl : ndarray, shape (p*N,)  — column-major flattened dual/slack product
+        Projected data matrix: p subspace coordinates (rows) x N pixels
+        (columns).
+    sinvl : ndarray, shape (p*N,)
+        Column-major flattened dual/slack product.
 
     Returns
     -------
     AtransYinvLA : ndarray, shape (p^2, p^2)
+        The assembled quadratic-form matrix.
     """
     p, N = Y.shape
 
@@ -397,7 +415,17 @@ def _compute_AtransYinvLA(Y, sinvl):
     return AtransYinvLA
 
 
-def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
+def _quad_prog1(
+    G: np.ndarray,
+    c: np.ndarray,
+    Y: np.ndarray,
+    b: np.ndarray,
+    Aeq: np.ndarray,
+    beq: np.ndarray,
+    x0: np.ndarray,
+    throtle: bool,
+    verbose: int = 0,
+) -> np.ndarray:
     """
     Interior-point primal-dual QP solver (Mehrotra predictor-corrector).
 
@@ -410,19 +438,30 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
 
     Parameters
     ----------
-    G   : ndarray (p^2, p^2) — positive-definite quadratic coefficient
-    c   : ndarray (p^2,)     — linear coefficient
-    Y   : ndarray (p, N)     — data matrix (defines implicit A)
-    b   : ndarray (p*N,)     — inequality RHS (zeros in MVSA)
-    Aeq : ndarray (neq, p^2) — equality constraint matrix
-    beq : ndarray (neq,)     — equality RHS
-    x0  : ndarray (p^2,)     — warm-start point (column-major vec of Q0)
-    throtle : bool           — slow-step flag from outer MVSA loop
-    verbose : int            — 0 silent, >=2 print per-iteration info
+    G : ndarray, shape (p^2, p^2)
+        Positive-definite quadratic coefficient matrix.
+    c : ndarray, shape (p^2,)
+        Linear coefficient vector.
+    Y : ndarray, shape (p, N)
+        Projected data matrix, one pixel per column (defines the
+        implicit inequality matrix A).
+    b : ndarray, shape (p*N,)
+        Inequality right-hand side (zeros in MVSA).
+    Aeq : ndarray, shape (neq, p^2)
+        Equality constraint matrix.
+    beq : ndarray, shape (neq,)
+        Equality right-hand side.
+    x0 : ndarray, shape (p^2,)
+        Warm-start point (column-major vec of Q0).
+    throtle : bool
+        Slow-step flag from the outer MVSA loop.
+    verbose : int, optional
+        0 silent (default); >= 2 prints per-iteration info.
 
     Returns
     -------
-    x : ndarray (p^2,) — solution in column-major order
+    x : ndarray, shape (p^2,)
+        Solution in column-major order.
     """
     p, N = Y.shape
     neq = Aeq.shape[0]
@@ -548,16 +587,16 @@ def _quad_prog1(G, c, Y, b, Aeq, beq, x0, throtle, verbose=0):
 
 
 def mvsa(
-    Y,
-    p,
-    MM_iters=10,
-    spherize="yes",
-    mu=1e-6,
-    lambda_=1e-10,
-    tol_f=1e-2,
-    M0=None,
-    verbose=1,
-):
+    Y: np.ndarray,
+    p: int,
+    MM_iters: int = 10,
+    spherize: str = "yes",
+    mu: float = 1e-6,
+    lambda_: float = 1e-10,
+    tol_f: float = 1e-2,
+    M0: Optional[np.ndarray] = None,
+    verbose: int = 1,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Minimum Volume Simplex Analysis (MVSA).
 
@@ -573,7 +612,8 @@ def mvsa(
     Parameters
     ----------
     Y : ndarray, shape (L, N)
-        Hyperspectral data matrix: L channels, N pixels.
+        Hyperspectral data matrix: L channels (rows) x N pixels (columns);
+        in this project, L candidates (rows) x N precincts (columns).
     p : int
         Number of endmembers (simplex vertices).
     MM_iters : int, optional

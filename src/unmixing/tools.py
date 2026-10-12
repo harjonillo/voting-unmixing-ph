@@ -11,16 +11,35 @@ def match_endmembers(
     y_extracted: np.ndarray,
     metric: str = "euclidean",
     algo: str = "linear_sum",
-) -> List[int]:
-    """
-    Match extracted endmembers to true endmembers..
+) -> np.ndarray:
+    """Match extracted endmembers to true (reference) endmembers.
 
-    Parameters:
-    - y_true: np.ndarray of shape (n_endmembers, n_bands)
-    - y_extracted: np.ndarray of shape (n_endmembers, n_bands)
+    Note the row orientation: unlike most of this package, the endmember
+    matrices here carry one endmember per ROW (``cdist`` compares rows).
+    Transpose an (n_bands, p) column-oriented matrix before calling.
 
-    Returns:
-    - matched_indices: list of indices indicating the best match of extracted to true endmembers
+    Parameters
+    ----------
+    y_true : ndarray, shape (n_endmembers, n_bands)
+        Reference endmember signatures, one endmember per row
+        (each row is that endmember's loading over the n_bands
+        candidates/bands).
+    y_extracted : ndarray, shape (n_endmembers, n_bands)
+        Extracted endmember signatures, same orientation as `y_true`.
+    metric : str, optional
+        Distance metric passed to ``scipy.spatial.distance.cdist``
+        (default 'euclidean').
+    algo : {'linear_sum', 'min'}, optional
+        'linear_sum' (default) solves the Hungarian assignment problem,
+        guaranteeing a one-to-one matching; 'min' greedily takes each
+        true endmember's nearest extracted one (may reuse columns).
+
+    Returns
+    -------
+    matched_indices : ndarray of int, shape (n_endmembers,)
+        For each row i of `y_true`, the index of the matching row of
+        `y_extracted`, i.e. ``y_extracted[matched_indices]`` is aligned
+        with `y_true`.
     """
 
     # Compute the cost matrix based on Euclidean distance
@@ -252,7 +271,7 @@ def _plot_noise_floor_diagnostics(
     uniform_expectation: float,
     cumulative_threshold: float,
     cross_archetype_sigma: float,
-):
+) -> None:
     """
     Internal helper: one figure per archetype with two subplots.
 
@@ -564,7 +583,7 @@ def _plot_abundance_weighted(
     archetype_prevalence: np.ndarray,
     L: int,
     p: int,
-):
+) -> None:
     """
     Internal helper: two summary plots.
 

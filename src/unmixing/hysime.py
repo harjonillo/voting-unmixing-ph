@@ -30,17 +30,22 @@ Reference:
   └──────────────┴──────────────────┴───────────────────────────────────────┘
 """
 
+from typing import Tuple
+
 import numpy as np
 
 
-def hysime(y, w, Rw, verbose=True):
+def hysime(
+    y: np.ndarray, w: np.ndarray, Rw: np.ndarray, verbose: bool = True
+) -> Tuple[int, np.ndarray, np.ndarray, np.ndarray]:
     """
     Estimate the signal subspace dimension and basis for hyperspectral data.
 
     Parameters
     ----------
     y : ndarray, shape (L, N)
-        Hyperspectral data set. L = number of bands, N = number of pixels.
+        Hyperspectral data set: L bands (rows) x N pixels (columns); in
+        this project, L candidates (rows) x N precincts (columns).
     w : ndarray, shape (L, N)
         Noise matrix (one noise vector per pixel), e.g. from est_noise().
     Rw : ndarray, shape (L, L)

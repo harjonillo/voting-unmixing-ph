@@ -1,19 +1,59 @@
+from typing import Optional, Tuple, Union
+
 import numpy as np
 from scipy.linalg import pinv
 from scipy.optimize import nnls
 import warnings
 
 
-def ucls(Ae, R):
-    # Unconstrained Least Squares (UCLS) — fast but may give negative values
-    # Solves: R ≈ Ae @ abundances
-    abundances = pinv(Ae) @ R  # shape: (p x N)
+def ucls(Ae: np.ndarray, R: np.ndarray) -> np.ndarray:
+    """Unconstrained Least Squares (UCLS) abundance estimation.
+
+    Solves ``R ≈ Ae @ abundances`` via the Moore-Penrose pseudo-inverse.
+    Fast, but the result is unconstrained: abundances may be negative
+    and need not sum to one.
+
+    Parameters
+    ----------
+    Ae : ndarray, shape (L, p)
+        Endmember (mixing) matrix: L channels/candidates (rows) x
+        p endmembers/archetypes (columns), one signature per column.
+    R : ndarray, shape (L, N)
+        Data matrix: L channels/candidates (rows) x N pixels/precincts
+        (columns), one observation per column.
+
+    Returns
+    -------
+    abundances : ndarray, shape (p, N)
+        Estimated abundances, one pixel per column.
+    """
+    abundances = pinv(Ae) @ R  # shape: (p, N)
 
     return abundances
 
 
-# Fully constrained: each pixel's abundances sum to 1 and are >= 0
-def fcls(Ae, R):
+def fcls(Ae: np.ndarray, R: np.ndarray) -> np.ndarray:
+    """Fully Constrained Least Squares (FCLS) abundance estimation.
+
+    Enforces both the non-negativity constraint (abundances >= 0, via
+    ``scipy.optimize.nnls``) and, approximately, the sum-to-one
+    constraint (via a heavily weighted augmented row).
+
+    Parameters
+    ----------
+    Ae : ndarray, shape (L, p)
+        Endmember (mixing) matrix: L channels/candidates (rows) x
+        p endmembers/archetypes (columns), one signature per column.
+    R : ndarray, shape (L, N)
+        Data matrix: L channels/candidates (rows) x N pixels/precincts
+        (columns), one observation per column.
+
+    Returns
+    -------
+    abundances : ndarray, shape (p, N)
+        Estimated abundances, one pixel per column; each column is
+        non-negative and sums to ~1.
+    """
     L, N = R.shape
     p = Ae.shape[1]
 
@@ -26,26 +66,42 @@ def fcls(Ae, R):
     for j in range(N):
         abundances[:, j], _ = nnls(Ae_aug, R_aug[:, j])
 
-    return abundances  # shape: (p x N)
+    return abundances  # shape: (p, N)
 
 
-def hyperFcls(Y_data, endmembers):
+def hyperFcls(Y_data: np.ndarray, endmembers: np.ndarray) -> np.ndarray:
     """
     Fully Constrained Least Squares (FCLS) solver.
+
     This implementation is based on the iterative algorithm described in
-    "Fully Constrained Least-Squares Based Linear Unmixing" by Heinz, Chang, and Althouse (1999),
-    including a common correction to the sign in the formula.
+    "Fully Constrained Least-Squares Based Linear Unmixing" by Heinz,
+    Chang, and Althouse (1999), including a common correction to the sign
+    in the formula.
 
     Solves for abundances (X) in Y = M @ X with:
+
     1. Non-negativity Constraint (ANC): X >= 0
     2. Abundance Sum-to-One Constraint (ASC): sum(X, axis=0) = 1
 
-    Args:
-        Y_data (np.ndarray): Hyperspectral data matrix (L channels x P pixels).
-        endmembers (np.ndarray): Matrix of endmember signatures (L channels x R endmembers).
+    Parameters
+    ----------
+    Y_data : ndarray, shape (L, P)
+        Hyperspectral data matrix: L channels/candidates (rows) x
+        P pixels/precincts (columns), one observation per column.
+    endmembers : ndarray, shape (L, R)
+        Endmember signatures: L channels (rows) x R endmembers (columns),
+        one signature per column.
 
-    Returns:
-        np.ndarray: Abundance maps (R endmembers x P pixels), satisfying ANC and ASC.
+    Returns
+    -------
+    X_abundances : ndarray, shape (R, P)
+        Abundance maps satisfying ANC and ASC, one pixel per column.
+
+    Raises
+    ------
+    ValueError
+        If `endmembers` is not 2-D or its channel count differs from
+        `Y_data`'s.
     """
     # Input validation and dimension extraction
     if endmembers.ndim != 2:
@@ -194,17 +250,17 @@ def hyperFcls(Y_data, endmembers):
 
 
 def sunsal_mod(
-    M,
-    y,
-    AL_iters=1000,
-    lambda_=0.0,
-    positivity="no",
-    threshold=0.0,
-    addone="no",
-    tol=1e-4,
-    verbose="no",
-    x0=None,
-):
+    M: np.ndarray,
+    y: np.ndarray,
+    AL_iters: int = 1000,
+    lambda_: Union[float, np.ndarray] = 0.0,
+    positivity: str = "no",
+    threshold: float = 0.0,
+    addone: str = "no",
+    tol: float = 1e-4,
+    verbose: str = "no",
+    x0: Optional[np.ndarray] = None,
+) -> Tuple[np.ndarray, float, float]:
     """
     SUNSAL_MOD - Sparse Unmixing via variable Splitting and Augmented Lagrangian (modified).
 
@@ -222,9 +278,11 @@ def sunsal_mod(
     Parameters
     ----------
     M : ndarray, shape (L, p)
-        Mixing matrix with L channels and p endmembers.
+        Mixing matrix: L channels (rows) x p endmembers (columns), one
+        endmember signature per column.
     y : ndarray, shape (L, N)
-        Data matrix with L channels and N pixels.
+        Data matrix: L channels (rows) x N pixels (columns), one pixel
+        per column.
     AL_iters : int, optional
         Maximum number of augmented Lagrangian iterations. Default: 1000.
     lambda_ : float or ndarray, optional

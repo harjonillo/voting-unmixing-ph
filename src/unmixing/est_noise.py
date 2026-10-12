@@ -9,10 +9,14 @@ Reference:
     pp. 2435-2445, 2008.
 """
 
+from typing import Tuple
+
 import numpy as np
 
 
-def est_noise(y, noise_type="additive", verbose=True):
+def est_noise(
+    y: np.ndarray, noise_type: str = "additive", verbose: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Estimate noise in a hyperspectral data set.
 
@@ -22,7 +26,8 @@ def est_noise(y, noise_type="additive", verbose=True):
     Parameters
     ----------
     y : ndarray, shape (L, N)
-        Hyperspectral data set. L = number of bands, N = number of pixels.
+        Hyperspectral data set: L bands (rows) x N pixels (columns); in
+        this project, L candidates (rows) x N precincts (columns).
     noise_type : str, optional
         'additive' (default) or 'poisson'.
     verbose : bool, optional
@@ -60,19 +65,25 @@ def est_noise(y, noise_type="additive", verbose=True):
 # ---------------------------------------------------------------------------
 
 
-def _est_additive_noise(r, verbose=True):
+def _est_additive_noise(
+    r: np.ndarray, verbose: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Estimate additive noise via band-wise linear regression.
 
     Parameters
     ----------
     r : ndarray, shape (L, N)
-    verbose : bool
+        Data matrix: L bands (rows) x N pixels (columns).
+    verbose : bool, optional
+        Print progress messages. Default True.
 
     Returns
     -------
-    w : ndarray, shape (L, N)   — noise estimates
-    Rw : ndarray, shape (L, L)  — diagonal noise correlation matrix
+    w : ndarray, shape (L, N)
+        Noise estimates, one pixel per column.
+    Rw : ndarray, shape (L, L)
+        Diagonal noise correlation matrix.
     """
     small = 1e-6
     L, N = r.shape

@@ -6,9 +6,11 @@ Instead, provinces are matched by name and dissolved into regions using the
 province→region assignment observed in the election data itself.
 """
 
+import configparser
 import re
 import unicodedata
 from pathlib import Path
+from typing import List, Optional, Sequence, Tuple
 
 import geopandas as gpd
 import numpy as np
@@ -22,7 +24,18 @@ from src.config import shapefile_path
 
 
 def normalize_name(name: str) -> str:
-    """Uppercase, ASCII-fold, strip punctuation/extra spaces."""
+    """Uppercase, ASCII-fold, strip punctuation/extra spaces.
+
+    Parameters
+    ----------
+    name : str
+        Raw place name (COMELEC or shapefile spelling).
+
+    Returns
+    -------
+    str
+        Canonical form: uppercase ASCII letters/digits, single-spaced.
+    """
     s = unicodedata.normalize("NFKD", str(name)).encode("ascii", "ignore").decode()
     s = s.upper()
     s = re.sub(r"[^A-Z0-9 ]+", " ", s)
@@ -56,7 +69,22 @@ NCR_CANONICAL = "METROPOLITAN MANILA"
 
 
 def canonical_province(province: str, region: str) -> str:
-    """Map a COMELEC PROVINCE value to the shapefile-era province name."""
+    """Map a COMELEC PROVINCE value to the shapefile-era province name.
+
+    Parameters
+    ----------
+    province : str
+        COMELEC PROVINCE value.
+    region : str
+        COMELEC REGION value; NCR districts all collapse to
+        ``NCR_CANONICAL``.
+
+    Returns
+    -------
+    str
+        Normalized province name as it appears in the shapefiles
+        (aliases from ``PROVINCE_ALIASES`` applied).
+    """
     p = normalize_name(province)
     if normalize_name(region) == "NCR":
         return NCR_CANONICAL
@@ -70,8 +98,20 @@ def canonical_province(province: str, region: str) -> str:
 
 def _detect_name_column(
     gdf: gpd.GeoDataFrame,
-    candidates=("PROVINCE", "NAME_1", "NAME", "PROV_NAME", "ADM2_EN", "ADM1_EN"),
-):
+    candidates: Sequence[str] = (
+        "PROVINCE",
+        "NAME_1",
+        "NAME",
+        "PROV_NAME",
+        "ADM2_EN",
+        "ADM1_EN",
+    ),
+) -> str:
+    """Pick the column of `gdf` most likely to hold the place name.
+
+    Tries `candidates` in order, then falls back to the string column
+    with the most unique values. Raises ValueError if none exists.
+    """
     for c in candidates:
         if c in gdf.columns:
             return c
@@ -82,8 +122,21 @@ def _detect_name_column(
     return max(str_cols, key=lambda c: gdf[c].nunique())
 
 
-def load_provinces(config) -> gpd.GeoDataFrame:
-    """Province polygons with a normalized ``PROV_KEY`` column (WGS84)."""
+def load_provinces(config: configparser.ConfigParser) -> gpd.GeoDataFrame:
+    """Province polygons with a normalized ``PROV_KEY`` column (WGS84).
+
+    Parameters
+    ----------
+    config : configparser.ConfigParser
+        Loaded config whose ``[geo]`` section names the
+        ``province_shapefile``.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        Columns ``PROV_KEY`` (normalized name, duplicates dissolved) and
+        ``geometry``, in EPSG:4326.
+    """
     path = shapefile_path(config, config["geo"]["province_shapefile"])
     gdf = gpd.read_file(path)
     name_col = _detect_name_column(gdf)
@@ -107,9 +160,24 @@ def load_provinces(config) -> gpd.GeoDataFrame:
     return gdf
 
 
-def load_municipalities(config) -> gpd.GeoDataFrame:
-    """Municipal polygons with ``PROV_KEY``/``MUNI_KEY`` columns, or None if
-    the (optional, downloaded) file is missing."""
+def load_municipalities(
+    config: configparser.ConfigParser,
+) -> Optional[gpd.GeoDataFrame]:
+    """Municipal polygons with ``PROV_KEY``/``MUNI_KEY`` columns.
+
+    Parameters
+    ----------
+    config : configparser.ConfigParser
+        Loaded config whose ``[geo]`` section names the
+        ``municipality_file``.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame or None
+        Columns ``PROV_KEY``, ``MUNI_KEY`` (normalized names) and
+        ``geometry``, in EPSG:4326 — or None if the (optional,
+        downloaded) file is missing.
+    """
     path = shapefile_path(config, config["geo"]["municipality_file"])
     if not Path(path).exists():
         return None
@@ -165,8 +233,13 @@ _MUNI_WORD_EXPANSIONS = {
 }
 
 
-def _muni_variants(name: str):
-    """Normalized variants of a municipality/city name for fuzzy-ish matching."""
+def _muni_variants(name: str) -> List[str]:
+    """Normalized variants of a municipality/city name for fuzzy-ish matching.
+
+    Generates the normalized name plus alias, abbreviation-expanded/
+    contracted, parenthetical-stripped, and 'CITY (OF)' suffix/prefix
+    variants, so the caller can probe a lookup table with each in turn.
+    """
     n = normalize_name(name)
     # drop parentheticals (old names): "SAN JUAN (LAPOG)" -> "SAN JUAN"
     base = " ".join(re.sub(r"\(.*?\)", " ", str(name)).split())
@@ -191,12 +264,32 @@ def _muni_variants(name: str):
     return variants
 
 
-def join_provinces(agg: pd.DataFrame, provinces: gpd.GeoDataFrame):
+def join_provinces(
+    agg: pd.DataFrame, provinces: gpd.GeoDataFrame
+) -> Tuple[gpd.GeoDataFrame, List[str]]:
     """Merge a province-level aggregate onto province polygons.
 
     NCR districts and split/renamed provinces are collapsed into their
     canonical province (numeric values re-averaged weighted by precinct
-    count, voter counts summed). Returns (gdf, unmatched_province_names).
+    count, voter counts summed).
+
+    Parameters
+    ----------
+    agg : pandas.DataFrame
+        Province-level aggregate with ``PROVINCE`` and ``REGION`` columns
+        (plus the value columns to display), e.g. from
+        ``src.aggregation.aggregate_abundances(level='province')``.
+    provinces : geopandas.GeoDataFrame
+        Province polygons with a ``PROV_KEY`` column, from `load_provinces`.
+
+    Returns
+    -------
+    gdf : geopandas.GeoDataFrame
+        `provinces` left-merged with the collapsed aggregate (one row per
+        province polygon; provinces absent from `agg` carry NaN values).
+    unmatched : list of str
+        PROV_KEY values present in the data but missing from the
+        shapefile.
     """
     agg = agg.copy()
     agg["PROV_KEY"] = [
@@ -215,12 +308,26 @@ def join_provinces(agg: pd.DataFrame, provinces: gpd.GeoDataFrame):
 
 def join_regions(
     agg_prov: pd.DataFrame, provinces: gpd.GeoDataFrame, agg_region: pd.DataFrame
-):
+) -> Tuple[gpd.GeoDataFrame, List[str]]:
     """Region-level map: dissolve province polygons by the data's own
     province→region assignment, then merge region-level values.
 
-    agg_prov   : province-level aggregate (defines province→region).
-    agg_region : region-level aggregate (values to display).
+    Parameters
+    ----------
+    agg_prov : pandas.DataFrame
+        Province-level aggregate (defines the province→region assignment).
+    provinces : geopandas.GeoDataFrame
+        Province polygons with a ``PROV_KEY`` column, from `load_provinces`.
+    agg_region : pandas.DataFrame
+        Region-level aggregate with a ``REGION`` column (values to display).
+
+    Returns
+    -------
+    gdf : geopandas.GeoDataFrame
+        One row per region: dissolved geometry merged with `agg_region`.
+    unmatched : list of str
+        PROV_KEY values present in `agg_prov` but missing from the
+        shapefile.
     """
     prov_gdf, unmatched = join_provinces(agg_prov, provinces)
     region_shapes = prov_gdf.dropna(subset=["REGION"])[["REGION", "geometry"]].dissolve(
@@ -230,7 +337,9 @@ def join_regions(
     return gdf, unmatched
 
 
-def _weighted_regroup(df: pd.DataFrame, group_cols, weight_col: str = "n_precincts"):
+def _weighted_regroup(
+    df: pd.DataFrame, group_cols: List[str], weight_col: str = "n_precincts"
+) -> pd.DataFrame:
     """Collapse rows sharing ``group_cols``: numeric columns are averaged
     weighted by ``weight_col``; precinct/voter count columns are summed."""
     sum_cols = [
@@ -253,14 +362,34 @@ def _weighted_regroup(df: pd.DataFrame, group_cols, weight_col: str = "n_precinc
     )
 
 
-def join_municipalities(agg: pd.DataFrame, municipalities: gpd.GeoDataFrame):
+def join_municipalities(
+    agg: pd.DataFrame, municipalities: gpd.GeoDataFrame
+) -> Tuple[gpd.GeoDataFrame, float, pd.DataFrame]:
     """Merge a municipality-level aggregate onto municipal polygons.
 
     Matching is exact on (canonical province, municipality-name variant).
     COMELEC lists the City of Manila as its legislative districts
     (Tondo, Binondo, ...); these are dissolved into one MANILA row
-    (precinct-weighted mean) before matching. Returns
-    (gdf, match_rate, unmatched_dataframe).
+    (precinct-weighted mean) before matching.
+
+    Parameters
+    ----------
+    agg : pandas.DataFrame
+        Municipality-level aggregate with ``REGION``, ``PROVINCE`` and
+        ``CITY_MUNICIPALITY`` columns (plus the value columns), e.g. from
+        ``src.aggregation.aggregate_abundances(level='municipality')``.
+    municipalities : geopandas.GeoDataFrame
+        Municipal polygons with ``PROV_KEY``/``MUNI_KEY`` columns, from
+        `load_municipalities`.
+
+    Returns
+    -------
+    gdf : geopandas.GeoDataFrame
+        The matched rows of `agg` with their polygon geometry attached.
+    rate : float
+        Fraction of `agg` rows that found a polygon, in [0, 1].
+    unmatched : pandas.DataFrame
+        The rows of `agg` that found no polygon.
     """
     muni = municipalities.copy()
     # compact keys throughout: GADM low-res names have no spaces

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Union
+from typing import List, Optional, Tuple, Union
 
 
 def plot_arr_cols_to_subplots(
@@ -8,12 +8,41 @@ def plot_arr_cols_to_subplots(
     arr_ref: np.ndarray,
     n_row: int,
     titles: List[str],
-    plot_type="bar",
+    plot_type: str = "bar",
     label: str = "extracted",
     label_ref: str = "reference",
-):
-    """
-    Plots a column in the given array into its own subplot.
+) -> None:
+    """Plot each column of two arrays into its own subplot, overlaid.
+
+    Typically used to compare extracted endmember signatures against a
+    reference, one archetype per panel.
+
+    Parameters
+    ----------
+    arr : ndarray, shape (L, K)
+        Primary array: L values per series (rows, e.g. candidate
+        loadings) x K series (columns, e.g. archetypes) — one subplot
+        per column.
+    arr_ref : ndarray, shape (L, K)
+        Reference array, same orientation as `arr`, overlaid on each
+        subplot.
+    n_row : int
+        Number of subplot rows; K must be divisible by `n_row` (the grid
+        is n_row x K // n_row).
+    titles : list of str, length K
+        Subplot title for each column.
+    plot_type : {'bar', 'line'}, optional
+        'bar' (default) draws overlapping bar charts; anything else draws
+        line plots.
+    label : str, optional
+        Legend label for `arr`. Default 'extracted'.
+    label_ref : str, optional
+        Legend label for `arr_ref`. Default 'reference'.
+
+    Returns
+    -------
+    None
+        Draws on the current matplotlib figure.
     """
     n_col = arr.shape[1] // n_row
 
@@ -70,10 +99,10 @@ def plot_reconstruction_histograms(
     top_n_names: List[str],
     n_cols: int = 4,
     col_width: int = 3,
-    x_range: Union[tuple, None] = None,
+    x_range: Optional[Tuple[float, float]] = None,
     n_bins: int = 50,
     log_scale: bool = True,
-):
+) -> None:
     """
     For each candidate (in rank order), plot a density histogram of their
     vote distribution in the original data vs. the VCA reconstruction.
@@ -81,9 +110,9 @@ def plot_reconstruction_histograms(
     Parameters
     ----------
     Y : ndarray, shape (L, N)
-        Original data matrix (candidates × precincts).
+        Original data matrix: L candidates (rows) x N precincts (columns).
     Y_rec : ndarray, shape (L, N)
-        Reconstructed data matrix from VCA (same shape as Y).
+        Reconstructed data matrix from VCA, same orientation as `Y`.
     top_n_index : list of int
         Indices into Y rows, in rank order (highest total votes first).
     top_n_names : list of str
@@ -98,6 +127,11 @@ def plot_reconstruction_histograms(
         Number of histogram bins. Default 50.
     log_scale : bool
         If True, use log scale on the y-axis. Default True.
+
+    Returns
+    -------
+    None
+        Draws on the current matplotlib figure.
     """
     n_show = len(top_n_index)
     n_rows = n_show // n_cols + int(n_show % n_cols > 0)
@@ -148,15 +182,16 @@ def plot_archetype_weights(
     candidate_labels: List[str],
     year: Union[int, str] = "",
     top_n: int = 24,
-    seat_line: Union[int, None] = 12,
-):
+    seat_line: Optional[int] = 12,
+) -> None:
     """
     Bar chart of candidate weights per archetype, one subplot per archetype.
 
     Parameters
     ----------
     endm : ndarray, shape (L, p)
-        Endmember matrix (candidates × archetypes).
+        Endmember matrix: L candidates (rows) x p archetypes (columns),
+        one archetype signature per column.
     candidate_labels : list of str
         Human-readable name for each of the L candidates (in endm row order).
     year : int or str
@@ -166,6 +201,11 @@ def plot_archetype_weights(
     seat_line : int or None
         If given, draw a dashed line after this many candidates (e.g. 12 for
         the 12 electable seats). Default 12. Pass None to omit.
+
+    Returns
+    -------
+    None
+        Draws on the current matplotlib figure.
     """
     import pandas as pd
     import seaborn as sns
