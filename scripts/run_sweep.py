@@ -53,7 +53,9 @@ LEVEL_COLS = {
 }
 
 
-def level_stats_from_trials(agg_trials: pd.DataFrame, arch_cols: list[str]) -> pd.DataFrame:
+def level_stats_from_trials(
+    agg_trials: pd.DataFrame, arch_cols: list[str]
+) -> pd.DataFrame:
     """Trial mean/std of abundances at each aggregation level and weighting.
 
     From the per-trial municipality table, re-aggregate to region / province /
@@ -75,7 +77,11 @@ def level_stats_from_trials(agg_trials: pd.DataFrame, arch_cols: list[str]) -> p
             n_precincts=(arch_cols[0], "size"), **{WEIGHT_COL: (WEIGHT_COL, "sum")}
         )
         for weighted in (True, False):
-            w = agg_trials[WEIGHT_COL].to_numpy(float) if weighted else np.ones(len(agg_trials))
+            w = (
+                agg_trials[WEIGHT_COL].to_numpy(float)
+                if weighted
+                else np.ones(len(agg_trials))
+            )
             work = agg_trials[["trial"] + gcols].copy()
             for c in arch_cols:
                 work[c] = agg_trials[c].to_numpy() * w
@@ -83,7 +89,10 @@ def level_stats_from_trials(agg_trials: pd.DataFrame, arch_cols: list[str]) -> p
             g = work.groupby(["trial"] + gcols, observed=True).sum()
             per_trial = g[arch_cols].div(g["_w"], axis=0).reset_index()
             grouped = per_trial.groupby(gcols, observed=True)[arch_cols]
-            for stat, values in (("mean", grouped.mean()), ("std", grouped.std(ddof=1))):
+            for stat, values in (
+                ("mean", grouped.mean()),
+                ("std", grouped.std(ddof=1)),
+            ):
                 out = values.join(counts).reset_index()
                 out.insert(0, "stat", stat)
                 out.insert(0, "weighted", weighted)
@@ -96,8 +105,14 @@ def run_one_trial(Y, p, seed, mvsa_mm_iters, sunsal_al_iters, sunsal_tol):
     np.random.seed(seed)
     M, *_ = mvsa(Y, p=p, MM_iters=mvsa_mm_iters, spherize="yes", verbose=0)
     A, _, _ = sunsal_mod(
-        M, Y, positivity="yes", addone="yes",
-        AL_iters=sunsal_al_iters, lambda_=0.0, tol=sunsal_tol, verbose="no",
+        M,
+        Y,
+        positivity="yes",
+        addone="yes",
+        AL_iters=sunsal_al_iters,
+        lambda_=0.0,
+        tol=sunsal_tol,
+        verbose="no",
     )
     rmse = float(np.sqrt(np.mean((Y - M @ A) ** 2)))
     return M, A, rmse
@@ -119,8 +134,9 @@ def aggregate_to_municipality(A, codes, w, n_units):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", required=True,
-                        help="per-year config, e.g. configs/config_2025.ini")
+    parser.add_argument(
+        "--config", required=True, help="per-year config, e.g. configs/config_2025.ini"
+    )
     parser.add_argument("--n-trials", type=int, default=None)
     args = parser.parse_args()
 
@@ -161,7 +177,9 @@ def main():
         print(f"\n== p = {p}: {n_trials} trials (n_jobs={n_jobs}) ==")
         results = Parallel(n_jobs=n_jobs)(
             delayed(run_one_trial)(
-                Y, p, base_seed + t,
+                Y,
+                p,
+                base_seed + t,
                 unmix.getint("mvsa_mm_iters"),
                 unmix.getint("sunsal_al_iters"),
                 unmix.getfloat("sunsal_tol"),
@@ -184,7 +202,7 @@ def main():
 
         loadings_mean = M_aligned.mean(axis=0)
         loadings_std = M_aligned.std(axis=0, ddof=1)
-        stability = sims.mean(axis=0)          # per-archetype mean cosine to ref
+        stability = sims.mean(axis=0)  # per-archetype mean cosine to ref
 
         # per-trial municipality aggregates (long format)
         agg_frames = []
@@ -206,14 +224,10 @@ def main():
         out.mkdir(parents=True, exist_ok=True)
         arch_cols = [f"arch_{j}" for j in range(p)]
         pd.DataFrame(
-            loadings_mean, 
-            index=pre.candidate_labels, 
-            columns=arch_cols
+            loadings_mean, index=pre.candidate_labels, columns=arch_cols
         ).rename_axis("candidate").to_csv(out / "loadings_mean.csv")
         pd.DataFrame(
-            loadings_std, 
-            index=pre.candidate_labels, 
-            columns=arch_cols
+            loadings_std, index=pre.candidate_labels, columns=arch_cols
         ).rename_axis("candidate").to_csv(out / "loadings_std.csv")
         agg_trials.to_parquet(out / "agg_municipality_trials.parquet", index=False)
         # Per-level trial mean/std the site build serializes (so build_static.py
@@ -223,23 +237,29 @@ def main():
         )
         df_ref.to_parquet(out / "abundances_ref.parquet", index=False)
         with open(out / "meta.json", "w") as f:
-            json.dump({
-                "p": p,
-                "n_trials": n_trials,
-                "base_seed": base_seed,
-                "reference_trial": ref,
-                "rmse_trials": rmse_trials.tolist(),
-                "rmse_mean": float(rmse_trials.mean()),
-                "rmse_std": float(rmse_trials.std(ddof=1)),
-                "stability_per_archetype": stability.tolist(),
-                "stability_mean": float(stability.mean()),
-                "preprocessing": pre.params,
-                "candidate_labels": pre.candidate_labels,
-            }, f, indent=2)
+            json.dump(
+                {
+                    "p": p,
+                    "n_trials": n_trials,
+                    "base_seed": base_seed,
+                    "reference_trial": ref,
+                    "rmse_trials": rmse_trials.tolist(),
+                    "rmse_mean": float(rmse_trials.mean()),
+                    "rmse_std": float(rmse_trials.std(ddof=1)),
+                    "stability_per_archetype": stability.tolist(),
+                    "stability_mean": float(stability.mean()),
+                    "preprocessing": pre.params,
+                    "candidate_labels": pre.candidate_labels,
+                },
+                f,
+                indent=2,
+            )
 
-        print(f"p={p}: RMSE {rmse_trials.mean():.5f} ± {rmse_trials.std(ddof=1):.5f}, "
-              f"stability {stability.mean():.4f} "
-              f"(min per-archetype {stability.min():.4f})  [{time.time() - t0:.0f}s]")
+        print(
+            f"p={p}: RMSE {rmse_trials.mean():.5f} ± {rmse_trials.std(ddof=1):.5f}, "
+            f"stability {stability.mean():.4f} "
+            f"(min per-archetype {stability.min():.4f})  [{time.time() - t0:.0f}s]"
+        )
 
     print(f"\nwrote {sweep_root}/p{{{p_range.start}..{p_range.stop - 1}}}/")
 

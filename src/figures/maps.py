@@ -1,20 +1,51 @@
 """Choropleth helpers: ``plot_choropleth`` (matplotlib) for the notebooks."""
 
+from typing import Optional
+
+import geopandas as gpd
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 
 
 def plot_choropleth(
-    gdf,
-    column,
-    ax=None,
-    cmap="viridis",
-    title=None,
-    legend_label=None,
-    missing_color="#eeeeee",
-    vmin=None,
-    vmax=None,
-):
-    """Static (matplotlib/geopandas) choropleth for notebooks."""
+    gdf: gpd.GeoDataFrame,
+    column: str,
+    ax: Optional[Axes] = None,
+    cmap: str = "viridis",
+    title: Optional[str] = None,
+    legend_label: Optional[str] = None,
+    missing_color: str = "#eeeeee",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+) -> Axes:
+    """Static (matplotlib/geopandas) choropleth for notebooks.
+
+    Parameters
+    ----------
+    gdf : geopandas.GeoDataFrame
+        One row per geographic unit with a ``geometry`` column, e.g.
+        from ``src.geo.join_provinces``/``join_municipalities``.
+    column : str
+        Column of `gdf` to color by; NaN rows are drawn in
+        `missing_color`.
+    ax : matplotlib.axes.Axes, optional
+        Axes to draw on; a new figure is created when None.
+    cmap : str, default 'viridis'
+        Matplotlib colormap name.
+    title : str, optional
+        Axes title.
+    legend_label : str, optional
+        Colorbar label; defaults to `column`.
+    missing_color : str, default '#eeeeee'
+        Fill color for units with no data.
+    vmin, vmax : float, optional
+        Color scale limits; inferred from the data when None.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes drawn on.
+    """
     if ax is None:
         fig, ax = plt.subplots(figsize=(7, 9))
     gdf.plot(

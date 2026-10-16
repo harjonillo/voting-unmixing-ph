@@ -9,10 +9,14 @@ Reference:
     pp. 2435-2445, 2008.
 """
 
+from typing import Tuple
+
 import numpy as np
 
 
-def est_noise(y, noise_type="additive", verbose=True):
+def est_noise(
+    y: np.ndarray, noise_type: str = "additive", verbose: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Estimate noise in a hyperspectral data set.
 
@@ -22,7 +26,8 @@ def est_noise(y, noise_type="additive", verbose=True):
     Parameters
     ----------
     y : ndarray, shape (L, N)
-        Hyperspectral data set. L = number of bands, N = number of pixels.
+        Hyperspectral data set: L bands (rows) x N pixels (columns); in
+        this project, L candidates (rows) x N precincts (columns).
     noise_type : str, optional
         'additive' (default) or 'poisson'.
     verbose : bool, optional
@@ -44,9 +49,9 @@ def est_noise(y, noise_type="additive", verbose=True):
         print("Noise estimates:")
 
     if noise_type == "poisson":
-        sqy = np.sqrt(np.maximum(y, 0))       # prevent negative values
+        sqy = np.sqrt(np.maximum(y, 0))  # prevent negative values
         u, Ru = _est_additive_noise(sqy, verbose)
-        x = (sqy - u) ** 2                     # signal estimates
+        x = (sqy - u) ** 2  # signal estimates
         w = np.sqrt(x) * u * 2
         Rw = w @ w.T / N
     else:  # additive
@@ -59,19 +64,26 @@ def est_noise(y, noise_type="additive", verbose=True):
 # Internal helper
 # ---------------------------------------------------------------------------
 
-def _est_additive_noise(r, verbose=True):
+
+def _est_additive_noise(
+    r: np.ndarray, verbose: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Estimate additive noise via band-wise linear regression.
 
     Parameters
     ----------
     r : ndarray, shape (L, N)
-    verbose : bool
+        Data matrix: L bands (rows) x N pixels (columns).
+    verbose : bool, optional
+        Print progress messages. Default True.
 
     Returns
     -------
-    w : ndarray, shape (L, N)   — noise estimates
-    Rw : ndarray, shape (L, L)  — diagonal noise correlation matrix
+    w : ndarray, shape (L, N)
+        Noise estimates, one pixel per column.
+    Rw : ndarray, shape (L, L)
+        Diagonal noise correlation matrix.
     """
     small = 1e-6
     L, N = r.shape
@@ -81,7 +93,7 @@ def _est_additive_noise(r, verbose=True):
     if verbose:
         print("  Computing sample correlation matrix and its inverse")
 
-    RR = r @ r.T                              # (L, L)  equation (11)
+    RR = r @ r.T  # (L, L)  equation (11)
     RRi = np.linalg.inv(RR + small * np.eye(L))  # equation (11)
 
     if verbose:
@@ -95,14 +107,14 @@ def _est_additive_noise(r, verbose=True):
         XX = RRi - np.outer(RRi[:, i], RRi[i, :]) / RRi[i, i]
 
         RRa = RR[:, i].copy()
-        RRa[i] = 0.0                          # remove effect of XX[:, i]
+        RRa[i] = 0.0  # remove effect of XX[:, i]
 
         # equation (9)
         beta = XX @ RRa
-        beta[i] = 0.0                         # remove effect of XX[i, :]
+        beta[i] = 0.0  # remove effect of XX[i, :]
 
         # equation (10)
-        w[i, :] = r[i, :] - beta @ r          # beta[i]=0 so band i cancels
+        w[i, :] = r[i, :] - beta @ r  # beta[i]=0 so band i cancels
 
     if verbose:
         print("\n  Computing noise correlation matrix")

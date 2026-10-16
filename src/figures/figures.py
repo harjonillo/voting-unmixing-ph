@@ -1,33 +1,67 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Union
+from typing import List, Optional, Tuple, Union
 
 
 def plot_arr_cols_to_subplots(
-    arr: np.ndarray, 
-    arr_ref: np.ndarray, 
-    n_row: int, titles: List[str], 
-    plot_type="bar", 
-    label: str = "extracted", 
-    label_ref: str = "reference"
-):
-    """
-    Plots a column in the given array into its own subplot.
+    arr: np.ndarray,
+    arr_ref: np.ndarray,
+    n_row: int,
+    titles: List[str],
+    plot_type: str = "bar",
+    label: str = "extracted",
+    label_ref: str = "reference",
+) -> None:
+    """Plot each column of two arrays into its own subplot, overlaid.
+
+    Typically used to compare extracted endmember signatures against a
+    reference, one archetype per panel.
+
+    Parameters
+    ----------
+    arr : ndarray, shape (L, K)
+        Primary array: L values per series (rows, e.g. candidate
+        loadings) x K series (columns, e.g. archetypes) — one subplot
+        per column.
+    arr_ref : ndarray, shape (L, K)
+        Reference array, same orientation as `arr`, overlaid on each
+        subplot.
+    n_row : int
+        Number of subplot rows; K must be divisible by `n_row` (the grid
+        is n_row x K // n_row).
+    titles : list of str, length K
+        Subplot title for each column.
+    plot_type : {'bar', 'line'}, optional
+        'bar' (default) draws overlapping bar charts; anything else draws
+        line plots.
+    label : str, optional
+        Legend label for `arr`. Default 'extracted'.
+    label_ref : str, optional
+        Legend label for `arr_ref`. Default 'reference'.
+
+    Returns
+    -------
+    None
+        Draws on the current matplotlib figure.
     """
     n_col = arr.shape[1] // n_row
 
     fig, axs = plt.subplots(n_row, n_col, figsize=(15, 6))
     for m in range(arr.shape[1]):
-        
+
         if n_row == 1:
             if plot_type == "bar":
                 axs[m].bar(range(len(arr[:, m])), arr[:, m], label=label, alpha=0.7)
-                axs[m].bar(range(len(arr_ref[:, m])), arr_ref[:, m], label=label_ref, alpha=0.7)
-            
+                axs[m].bar(
+                    range(len(arr_ref[:, m])), arr_ref[:, m], label=label_ref, alpha=0.7
+                )
+
             else:
                 axs[m].plot(arr_ref[:, m], color="C3", label=label_ref, alpha=0.7)
-                axs[m].plot(arr[:, m], color="C0", label=label, linestyle='--', alpha=0.7)
-            
+                axs[m].plot(
+                    arr[:, m], color="C0", label=label, linestyle="--", alpha=0.7
+                )
+
             axs[m].legend(loc="best")
             axs[m].set_title(titles[m])
 
@@ -37,10 +71,18 @@ def plot_arr_cols_to_subplots(
 
             if plot_type == "bar":
                 axs[i, j].bar(range(len(arr[:, m])), arr[:, m], label=label, alpha=0.7)
-                axs[i, j].bar(range(len(arr_ref[:, m])), arr_ref[:, m], label=label_ref, alpha=0.7)
+                axs[i, j].bar(
+                    range(len(arr_ref[:, m])), arr_ref[:, m], label=label_ref, alpha=0.7
+                )
 
             else:
-                axs[i, j].plot(arr_ref[:, m], color="C3", label=label_ref, linestyle='--', alpha=0.7)
+                axs[i, j].plot(
+                    arr_ref[:, m],
+                    color="C3",
+                    label=label_ref,
+                    linestyle="--",
+                    alpha=0.7,
+                )
                 axs[i, j].plot(arr[:, m], color="C0", label=label, alpha=0.7)
 
             axs[i, j].legend(loc="best")
@@ -57,10 +99,10 @@ def plot_reconstruction_histograms(
     top_n_names: List[str],
     n_cols: int = 4,
     col_width: int = 3,
-    x_range: Union[tuple, None] = None,
+    x_range: Optional[Tuple[float, float]] = None,
     n_bins: int = 50,
     log_scale: bool = True,
-):
+) -> None:
     """
     For each candidate (in rank order), plot a density histogram of their
     vote distribution in the original data vs. the VCA reconstruction.
@@ -68,9 +110,9 @@ def plot_reconstruction_histograms(
     Parameters
     ----------
     Y : ndarray, shape (L, N)
-        Original data matrix (candidates × precincts).
+        Original data matrix: L candidates (rows) x N precincts (columns).
     Y_rec : ndarray, shape (L, N)
-        Reconstructed data matrix from VCA (same shape as Y).
+        Reconstructed data matrix from VCA, same orientation as `Y`.
     top_n_index : list of int
         Indices into Y rows, in rank order (highest total votes first).
     top_n_names : list of str
@@ -85,6 +127,11 @@ def plot_reconstruction_histograms(
         Number of histogram bins. Default 50.
     log_scale : bool
         If True, use log scale on the y-axis. Default True.
+
+    Returns
+    -------
+    None
+        Draws on the current matplotlib figure.
     """
     n_show = len(top_n_index)
     n_rows = n_show // n_cols + int(n_show % n_cols > 0)
@@ -97,15 +144,26 @@ def plot_reconstruction_histograms(
 
     bins = np.linspace(xmin, xmax, n_bins)
 
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols * col_width, n_rows * col_width))
+    fig, axs = plt.subplots(
+        n_rows, n_cols, figsize=(n_cols * col_width, n_rows * col_width)
+    )
     axs = axs.flatten()
 
     for i, (idx, name) in enumerate(zip(top_n_index, top_n_names)):
         hist = Y[idx, :]
         hist_rec = Y_rec[idx, :]
         hist_rec = hist_rec[~np.isnan(hist_rec)]
-        axs[i].hist(hist, bins=bins, color="C0", density=True, alpha=0.5, label="Original")
-        axs[i].hist(hist_rec, bins=bins, color="C3", density=True, alpha=0.5, label="Reconstructed")
+        axs[i].hist(
+            hist, bins=bins, color="C0", density=True, alpha=0.5, label="Original"
+        )
+        axs[i].hist(
+            hist_rec,
+            bins=bins,
+            color="C3",
+            density=True,
+            alpha=0.5,
+            label="Reconstructed",
+        )
         axs[i].set_title(f"{i + 1}: {name}", fontsize=10)
         axs[i].set_xlabel("Vote fraction per precinct")
         axs[i].set_ylabel("Density")
@@ -124,15 +182,16 @@ def plot_archetype_weights(
     candidate_labels: List[str],
     year: Union[int, str] = "",
     top_n: int = 24,
-    seat_line: Union[int, None] = 12,
-):
+    seat_line: Optional[int] = 12,
+) -> None:
     """
     Bar chart of candidate weights per archetype, one subplot per archetype.
 
     Parameters
     ----------
     endm : ndarray, shape (L, p)
-        Endmember matrix (candidates × archetypes).
+        Endmember matrix: L candidates (rows) x p archetypes (columns),
+        one archetype signature per column.
     candidate_labels : list of str
         Human-readable name for each of the L candidates (in endm row order).
     year : int or str
@@ -142,18 +201,26 @@ def plot_archetype_weights(
     seat_line : int or None
         If given, draw a dashed line after this many candidates (e.g. 12 for
         the 12 electable seats). Default 12. Pass None to omit.
+
+    Returns
+    -------
+    None
+        Draws on the current matplotlib figure.
     """
     import pandas as pd
     import seaborn as sns
 
     L, p = endm.shape
 
-    df = pd.DataFrame(
-        endm,
-        columns=list(range(p)),
-        index=candidate_labels,
-    ).reset_index().rename(columns={"index": "candidate"}).melt(
-        id_vars=["candidate"], var_name="archetype", value_name="weight"
+    df = (
+        pd.DataFrame(
+            endm,
+            columns=list(range(p)),
+            index=candidate_labels,
+        )
+        .reset_index()
+        .rename(columns={"index": "candidate"})
+        .melt(id_vars=["candidate"], var_name="archetype", value_name="weight")
     )
 
     fig, axs = plt.subplots(1, p, figsize=(8 * p, 8))
@@ -163,7 +230,9 @@ def plot_archetype_weights(
     for i, ax in zip(range(p), axs):
         sns.barplot(
             ax=ax,
-            data=df.query(f"archetype == {i}").sort_values(by="weight", ascending=False).head(top_n),
+            data=df.query(f"archetype == {i}")
+            .sort_values(by="weight", ascending=False)
+            .head(top_n),
             x="weight",
             y="candidate",
         )
