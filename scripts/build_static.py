@@ -25,14 +25,34 @@ What it writes under ``--out`` (default ``site/data``)::
                                        persist/split as p grows across the sweep
                                        (several similarity metrics per
                                        consecutive-p pair, top candidates per
-                                       node, within-p min/mean distances).
+                                       node).
+    distinctness/{year}.json           copied from data/distinctness/ (see
+                                       Prerequisites).
+    order_sensitivity/{year}.json      copied from data/order_sensitivity/ (see
+                                       Prerequisites).
 
 Aggregation, matching and geo-join all go through the shared library
 (``src.aggregation``, ``src.geo``, ``src.unmixing.matching``), so the baked
 numbers match the pipeline; ``--verify`` spot-checks a few cells against a fresh
 in-process aggregation.
 
+Prerequisites — two small committed JSON sets this script copies through but
+does not compute (it warns if either folder is empty). Both are notebooks
+ported to scripts that rerun the experiment for every year from
+configs/config_{year}.ini; rerun them after changing a year's data or its
+[preprocessing]/[unmixing] config, then rerun this script:
+
+    scripts/bake_distinctness.py       notebook 08: min/mean pairwise distance
+                                       between archetypes vs p
+                                       -> data/distinctness/.
+    scripts/bake_order_sensitivity.py  notebook 09: matched similarity to the
+                                       reference under shuffled precinct order
+                                       vs varying seed
+                                       -> data/order_sensitivity/.
+
 Run from the repo root:
+    python scripts/bake_distinctness.py        # prerequisite (~1 min/year)
+    python scripts/bake_order_sensitivity.py   # prerequisite (~5 min/year)
     python scripts/build_static.py --out site/data
 """
 
@@ -105,12 +125,73 @@ PCT_ROUND = 2  # decimals for turnout / percentages
 COALITIONS_CSV = REPO_ROOT / "data" / "elections" / "coalitions_2013-2025.csv"
 NO_ALLIANCE = "Independent / none"
 
+# Compare-tab diagnostics baked by their own scripts (notebooks 08/09, rerun per
+# year) into small committed JSONs under data/<subdir>/, copied through verbatim
+# (data/<subdir>/ -> site/data/<subdir>/) so the CI bake needn't rerun them.
+PREBAKED = {
+    "distinctness": "scripts/bake_distinctness.py",
+    "order_sensitivity": "scripts/bake_order_sensitivity.py",
+}
+
 
 def _norm_label(label: str) -> str:
     """Join key: drop the trailing election-rank "[N]" and collapse whitespace, so
     the site's candidate labels ("GO, BONG GO (PDPLBN) [3]") match the coalition
     CSV's ballot_label ("GO, BONG GO    (PDPLBN)")."""
     return re.sub(r"\s+", " ", re.sub(r"\s*\[\d+\]\s*$", "", label)).strip()
+
+
+# Display labels: "AQUINO, BENIGNO BAM (LP) [14]" -> "AQUINO, B (LP) [14]". Only the
+# first given name is kept, as an initial — later given-name tokens can't be told
+# apart from nicknames/slogans ("TULFO, BEN BITAG", "VILLANUEVA, JOEL TESDAMAN").
+# Ballot honorifics are skipped and generational suffixes kept (Enrile Jr. in 2013
+# vs Enrile Sr. in 2019). Joins (coalitions, sweep) use the full labels; these are
+# applied only when serializing.
+_HONORIFICS = {
+    "ATTY", "ATTORNEY", "DOC", "DR", "DRA", "GEN", "BRO", "MR", "MRS", "MS",
+    "KA", "TEACHER", "IDOL", "KUYA", "MANONG", "PRINCESS",
+}  # fmt: skip
+_SUFFIXES = {"JR": "JR.", "SR": "SR.", "II": "II", "III": "III", "IV": "IV"}
+# Ballot surnames with a nickname glued on front -> the real surname. Listed by
+# hand: real multi-word surnames (DELA ROSA, EJERCITO ESTRADA) look the same.
+_NICKNAME_SURNAMES = {"BONG REVILLA": "REVILLA"}
+_LABEL_RE = re.compile(
+    r"^(?P<name>.*?)\s*(?:\((?P<party>[^)]*)\))?\s*\[(?P<rank>\d+)\]\s*$"
+)
+
+
+def _display_label(label: str, keep: int = 1) -> str:
+    """'SURNAME, GIVEN NAMES (PARTY) [rank]' -> 'SURNAME, G (PARTY) [rank]', the
+    first given name cut to `keep` letters. Unparseable labels pass through."""
+    m = _LABEL_RE.match(label)
+    if not m or "," not in m["name"]:
+        return label
+    surname, given = (s.strip() for s in m["name"].split(",", 1))
+    surname = _NICKNAME_SURNAMES.get(surname, surname)
+    tokens = [t for t in re.split(r"[\s,.]+", given) if t]
+    suffix = [_SUFFIXES[t] for t in tokens if t in _SUFFIXES]
+    names = [t for t in tokens if t not in _SUFFIXES]
+    while len(names) > 1 and names[0] in _HONORIFICS:
+        names = names[1:]
+    first = names[0][:keep] if names else ""
+    out = f"{surname}, {' '.join([first, *suffix])}".rstrip(", ")
+    if m["party"]:
+        out += f" ({m['party']})"
+    return f"{out} [{m['rank']}]"
+
+
+def short_labels(labels) -> dict[str, str]:
+    """full -> display label for one year's candidates. Candidates whose surname +
+    initial would clash keep their whole first given name instead."""
+    out = {lab: _display_label(lab) for lab in labels}
+    by_name: dict[str, list[str]] = {}
+    for lab, s in out.items():
+        by_name.setdefault(re.sub(r"\s*(\([^)]*\))?\s*\[\d+\]$", "", s), []).append(lab)
+    for labs in by_name.values():
+        if len(labs) > 1:
+            for lab in labs:
+                out[lab] = _display_label(lab, keep=len(lab))
+    return out
 
 
 def _alliance_view(rows: list[dict]) -> tuple[list[str], str]:
@@ -428,32 +509,28 @@ def _rec(key: str, row, arch_cols) -> dict:
 # with the Hungarian match (`matched`, full-cosine) and the leftover-child
 # flag (`split`) from `archetype_lineage` marked on top, so the client can
 # emphasise the lineage and fade the rest. Each node bakes its top candidates
-# so the client can list the top 6–12; per-p min/mean pairwise distances
-# (notebook 08's distinctness scalars) ride along for the column readout.
+# so the client can list the top 6–12. The per-p min/mean pairwise distances
+# shown above each column come from distinctness/{year}.json
+# (scripts/bake_distinctness.py), not from here.
 # ---------------------------------------------------------------------------
 
 LINEAGE_TOP_K = 12  # candidates baked per node; the client shows the top 6–12
 
 # Edge metrics baked per archetype pair (the client's similarity selector).
-# `signed` marks [-1, 1] metrics, mapped to a 0..1 distance as (1 - s) / 2;
-# unsigned [0, 1] metrics map as 1 - s (notebook 08's `to_distance`).
 LINEAGE_METRICS = {
-    "cos12": dict(fn=cosine_topk_matrix, signed=True),
-    "cos": dict(fn=cosine_matrix, signed=True),
-    "spearman": dict(fn=spearman_matrix, signed=True),
-    "wtau": dict(fn=weighted_tau_matrix, signed=True),
-    "rbo": dict(fn=rbo_matrix, signed=False),
-    "jac12": dict(fn=topk_jaccard_matrix, signed=False),
+    "cos12": cosine_topk_matrix,
+    "cos": cosine_matrix,
+    "spearman": spearman_matrix,
+    "wtau": weighted_tau_matrix,
+    "rbo": rbo_matrix,
+    "jac12": topk_jaccard_matrix,
 }
-
-
-def _to_distance(S: np.ndarray, signed: bool) -> np.ndarray:
-    return (1.0 - S) / 2.0 if signed else 1.0 - S
 
 
 def _short_label(label: str) -> str:
     """Surname for a compact node label: 'GO, BONG GO (PDPLBN) [3]' -> 'Go'."""
-    return str(label).split(" [")[0].split(",")[0].title()
+    surname = str(label).split(" [")[0].split(",")[0].strip()
+    return _NICKNAME_SURNAMES.get(surname, surname).title()
 
 
 def _node_names(labels: list[str]) -> list[str]:
@@ -470,10 +547,10 @@ def _node_names(labels: list[str]) -> list[str]:
     return names
 
 
-def build_lineage(year: str, sweep: dict) -> dict:
+def build_lineage(year: str, sweep: dict, short: dict[str, str]) -> dict:
     """Lineage network tracing how archetypes persist or split as p grows
     across the sweep. Independent of level/weighting — driven only by
-    loadings_mean."""
+    loadings_mean. `short` maps full candidate labels to display labels."""
     ps = sorted(sweep)
     mats = {p: sweep[p]["loadings_mean"].to_numpy() for p in ps}
     lineage = {
@@ -495,7 +572,7 @@ def build_lineage(year: str, sweep: dict) -> dict:
                     "k": k,
                     "label": _short_label(top.index[0]),
                     "top": [
-                        {"name": nm, "full": str(c), "w": _round(w, ARCH_ROUND)}
+                        {"name": nm, "full": short[c], "w": _round(w, ARCH_ROUND)}
                         for nm, (c, w) in zip(names, top.items())
                     ],
                 }
@@ -504,8 +581,7 @@ def build_lineage(year: str, sweep: dict) -> dict:
     links: list[dict] = []
     for p_from, p_to in zip(ps[:-1], ps[1:]):
         sims = {
-            name: m["fn"](mats[p_from], mats[p_to])
-            for name, m in LINEAGE_METRICS.items()
+            name: fn(mats[p_from], mats[p_to]) for name, fn in LINEAGE_METRICS.items()
         }
         for i in range(p_from):
             for j in range(p_to):
@@ -520,26 +596,11 @@ def build_lineage(year: str, sweep: dict) -> dict:
                     }
                 )
 
-    # Within-p distinctness scalars (notebook 08): the p×p distance matrix of
-    # each metric collapsed to its min / mean off-diagonal, per column.
-    distinct: dict[int, dict] = {}
-    for p in ps:
-        per = {}
-        for name, m in LINEAGE_METRICS.items():
-            D = _to_distance(m["fn"](mats[p], mats[p]), m["signed"])
-            off = D[np.triu_indices(p, 1)]
-            per[name] = {
-                "min": round(float(off.min()), 3),
-                "mean": round(float(off.mean()), 3),
-            }
-        distinct[p] = per
-
     return {
         "year": year,
         "ps": ps,
         "nodes": nodes,
         "links": links,
-        "distinct": distinct,
     }
 
 
@@ -582,6 +643,11 @@ def build(out: Path, verify: bool) -> None:
         n_arch = len(arch_cols)
         arch_counts.add(n_arch)
         sweep = load_sweep(cfg)
+        short = short_labels(
+            dict.fromkeys(
+                [*endmembers.index, *(c for e in sweep.values() for c in e["loadings_mean"].index)]
+            )
+        )
 
         # --- per-(level, weighting) value tables + per-year geometry ---
         region_geo_written = muni_geo_written = False
@@ -618,7 +684,7 @@ def build(out: Path, verify: bool) -> None:
 
         # --- endmember loadings + sweep-trial std for the overview tab ---
         loadings_payload = {
-            "candidates": list(endmembers.index),
+            "candidates": [short[c] for c in endmembers.index],
             "arch_cols": arch_cols,
             "mean": {
                 c: [_round(v, ARCH_ROUND) for v in endmembers[c]] for c in arch_cols
@@ -643,7 +709,7 @@ def build(out: Path, verify: bool) -> None:
             sw = {
                 "year": year,
                 "p": p,
-                "candidates": list(lm.index),
+                "candidates": [short[c] for c in lm.index],
                 "arch_cols": arch_cols_p,
                 "loadings_mean": {
                     c: [_round(v, ARCH_ROUND) for v in lm[c]] for c in arch_cols_p
@@ -673,12 +739,12 @@ def build(out: Path, verify: bool) -> None:
         # --- archetype lineage across the whole sweep (comparison network) ---
         if len(sweep) > 1:
             sizes[f"lineage/{year}.json"] = dump_json(
-                build_lineage(year, sweep), out / "lineage" / f"{year}.json"
+                build_lineage(year, sweep, short), out / "lineage" / f"{year}.json"
             )
 
         years_meta[year] = {
             "n_archetypes": n_arch,
-            "candidate_labels": list(endmembers.index),
+            "candidate_labels": [short[c] for c in endmembers.index],
             "rmse": meta.get("rmse"),
             "sweep_ps": sorted(sweep),
         }
@@ -709,6 +775,16 @@ def build(out: Path, verify: bool) -> None:
         "years_meta": years_meta,
     }
     sizes["manifest.json"] = dump_json(manifest, out / "manifest.json")
+
+    # --- pre-baked compare-tab diagnostics (see PREBAKED) ---
+    for sub, script in PREBAKED.items():
+        files = sorted((REPO_ROOT / "data" / sub).glob("*.json"))
+        if not files:
+            print(f"WARNING: data/{sub}/ is empty — run {script} first")
+        for f in files:
+            (out / sub).mkdir(exist_ok=True)
+            shutil.copyfile(f, out / sub / f.name)
+            sizes[f"{sub}/{f.name}"] = f.stat().st_size
 
     total = sum(sizes.values())
     print(f"Wrote {len(sizes)} files to {out} ({total / 1e6:.2f} MB total)")

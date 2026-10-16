@@ -76,6 +76,8 @@ const valuesURL = (year, level) => `${DATA}/values/${year}_${level}_${wtag()}.js
 const loadingsURL = (year) => `${DATA}/loadings/${year}.json`;
 const sweepURL = (year, p) => `${DATA}/sweep/${year}_p${p}.json`;
 const lineageURL = (year) => `${DATA}/lineage/${year}.json`;
+const distinctURL = (year) => `${DATA}/distinctness/${year}.json`;
+const orderURL = (year) => `${DATA}/order_sensitivity/${year}.json`;
 
 // -------------------------------------------------------------- chart helpers
 function choropleth(divId, geo, records, colorFn, discrete) {
@@ -380,7 +382,10 @@ function lineageBoxHalfWidthPx(rows) {
 
 async function renderLineage(divId) {
   const host = document.getElementById(divId);
-  const lin = await getJSON(lineageURL(state.year)).catch(() => null);
+  const [lin, dist] = await Promise.all([
+    getJSON(lineageURL(state.year)).catch(() => null),
+    getJSON(distinctURL(state.year)).catch(() => null),
+  ]);
   if (!lin) { host.textContent = ""; return; }
   const topN = state.cmp.lineageTopN;
   const metric = state.cmp.lineageMetric, stat = state.cmp.lineageStat;
@@ -503,16 +508,18 @@ async function renderLineage(divId) {
   });
 
   // Within-p distinctness readout above each column: the min or mean pairwise
-  // distance (0 = identical … 1 = distinct) between that p's archetypes,
-  // under the selected metric (notebook 08's p-sweep scalars).
+  // distance (0 = identical … 1 = distinct) between the archetypes of a single
+  // unmixing run at that p (config seed), under the selected metric — notebook
+  // 08's p-sweep scalars, the same numbers as the distinctness line plot.
   for (const p of ps) {
-    const d = lin.distinct && lin.distinct[p] && lin.distinct[p][metric];
+    const d = dist && dist.distinct[p] && dist.distinct[p][metric];
     if (!d) continue;
     annotations.push({
       x: p, xref: "x", y: 1, yref: "paper", yanchor: "bottom", showarrow: false,
       font: { family: FONT.family, size: 9.5, color: "rgba(90,100,125,0.95)" },
       text: `${stat} d = ${d[stat].toFixed(2)}`,
       hovertext: `${stat} pairwise distance between the ${p} archetypes<br>` +
+        `of one run at the config seed<br>` +
         `(${LINEAGE_METRICS[metric]}; 0 = identical, 1 = distinct)`,
     });
   }
@@ -545,11 +552,106 @@ window.addEventListener("resize", () => {
   }, 250);
 });
 
+// --------------------------------------------- compare tab: p-choice diagnostics
+// Two small charts under the lineage network, driven by the same metric/stat
+// selectors:
+//  - notebook 08's sweep line plot: min (or mean) pairwise distance between a
+//    run's archetypes vs p, one line per metric (distinctness/{year}.json,
+//    baked per year by scripts/bake_distinctness.py);
+//  - notebook 09's order-sensitivity summary: Hungarian-matched similarity to
+//    the reference run under shuffled precinct order (Arm B) vs varying seed
+//    (Arm C), boxplots over trials × archetypes (order_sensitivity/{year}.json,
+//    baked per year by scripts/bake_order_sensitivity.py).
+const ORDER_ARMS = {
+  B: { label: "shuffled precinct order", color: "#4C72B0" },
+  C: { label: "varying seed", color: "#DD8452" },
+};
+
+function diagnosticsNote(divId, msg) {
+  const host = document.getElementById(divId);
+  Plotly.purge(host);
+  host.innerHTML = "";
+  const p = document.createElement("p");
+  p.className = "muted";
+  p.textContent = msg;
+  host.appendChild(p);
+}
+
+async function renderDiagnostics() {
+  const metric = state.cmp.lineageMetric, stat = state.cmp.lineageStat;
+
+  // --- distinctness vs p (nb08) ---
+  const dist = await getJSON(distinctURL(state.year)).catch(() => null);
+  if (dist) {
+    const ps = dist.ps;
+    const traces = Object.entries(LINEAGE_METRICS).map(([m, label]) => ({
+      type: "scatter", mode: "lines+markers", name: label,
+      x: ps,
+      y: ps.map((p) => (dist.distinct[p] && dist.distinct[p][m])
+        ? dist.distinct[p][m][stat] : null),
+      line: { width: m === metric ? 3 : 1.3 },
+      marker: { size: m === metric ? 7 : 5 },
+      opacity: m === metric ? 1 : 0.45,
+    }));
+    Plotly.react("cmp-distinct", traces, {
+      height: 330, margin: { l: 50, r: 8, t: 8, b: 40 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+      xaxis: { title: { text: "number of archetypes p" }, tickvals: ps },
+      yaxis: {
+        title: { text: `${stat} pairwise distance`, standoff: 6 },
+        rangemode: "tozero",
+      },
+      legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, xanchor: "left",
+        font: { size: 10 } },
+    }, PLOTLY_CFG);
+  } else {
+    diagnosticsNote("cmp-distinct",
+      "No distinctness data for this year — run scripts/bake_distinctness.py.");
+  }
+
+  // --- precinct-order sensitivity (nb09) ---
+  const ord = await getJSON(orderURL(state.year)).catch(() => null);
+  if (!ord) {
+    diagnosticsNote("cmp-order",
+      "No order-sensitivity data for this year — run " +
+      "scripts/bake_order_sensitivity.py.");
+    return;
+  }
+  // One box per (p, arm) over the pooled trials × archetypes samples, Tukey
+  // style like notebook 09's seaborn boxplot: quartile box, whiskers to the
+  // furthest sample within 1.5 × IQR, points beyond drawn as outliers.
+  const traces = Object.keys(ORDER_ARMS).map((arm) => {
+    const perP = ord.sims[arm][metric];
+    return {
+      type: "box", name: ORDER_ARMS[arm].label,
+      x: ord.ps.flatMap((p, i) => perP[i].map(() => `p = ${p}`)),
+      y: perP.flat(),
+      boxpoints: "outliers", boxmean: true,
+      marker: { color: ORDER_ARMS[arm].color, size: 3, opacity: 0.6 },
+      line: { width: 1.2 },
+    };
+  });
+  Plotly.react("cmp-order", traces, {
+    boxmode: "group", boxgap: 0.25, boxgroupgap: 0.15,
+    height: 330, margin: { l: 50, r: 8, t: 8, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+    xaxis: { title: { text: "number of archetypes p" } },
+    yaxis: {
+      title: {
+        text: `matched similarity (${LINEAGE_METRICS[metric]})`, standoff: 6,
+      },
+    },
+    legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, xanchor: "left",
+      font: { size: 10 } },
+  }, PLOTLY_CFG);
+}
+
 // ----------------------------------------------------------------- tab: compare
 async function renderCompare() {
   const year = state.year, level = state.level, nArch = nArchFor(year);
   const p = state.cmp.p;
   await renderLineage("cmp-lineage");
+  await renderDiagnostics();
   const [geo, sweep] = await Promise.all([
     getJSON(geoURL(year, level)),
     getJSON(sweepURL(year, p)),
@@ -715,11 +817,11 @@ async function init() {
   });
   document.getElementById("cmp-lineage-metric").addEventListener("change", (e) => {
     state.cmp.lineageMetric = e.target.value;
-    if (state.tab === "compare") renderLineage("cmp-lineage");
+    if (state.tab === "compare") { renderLineage("cmp-lineage"); renderDiagnostics(); }
   });
   document.getElementById("cmp-lineage-stat").addEventListener("change", (e) => {
     state.cmp.lineageStat = e.target.value;
-    if (state.tab === "compare") renderLineage("cmp-lineage");
+    if (state.tab === "compare") { renderLineage("cmp-lineage"); renderDiagnostics(); }
   });
   for (const [t, id] of [["map", "tabbtn-map"], ["compare", "tabbtn-compare"], ["dist", "tabbtn-dist"]]) {
     document.getElementById(id).addEventListener("click", () => switchTab(t));

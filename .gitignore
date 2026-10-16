@@ -25,6 +25,12 @@ data/shapefiles/regions/
 # unused alternative boundary source
 data/shapefiles/gadm41_PHL_2.json.zip
 
+# pre-baked compare-tab diagnostics (scripts/bake_distinctness.py,
+# scripts/bake_order_sensitivity.py): tiny JSONs the CI site bake copies into
+# site/data/ (nb09's source cache in data/notebook_experiments/ stays ignored)
+!data/distinctness/
+!data/order_sensitivity/
+
 # generated static FastHTML site (data baked by scripts/build_static.py, shell
 # by scripts/build_site.py — rebuilt in CI from the committed data/ trees)
 /site/

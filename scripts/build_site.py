@@ -18,6 +18,8 @@ This writes into the same output dir as build_static.py (default ``site``):
     site/data/...        the baked dataset (build_static.py — run that first)
 
 Run from the repo root:
+    python scripts/bake_distinctness.py              # prerequisites of build_static
+    python scripts/bake_order_sensitivity.py         #   (see its docstring)
     python scripts/build_static.py --out site/data   # data (once / on data change)
     python scripts/build_site.py   --out site        # this shell
 """
@@ -252,6 +254,38 @@ def tab_compare() -> Section:
             Div(id="cmp-lineage"),
             span="mb-4",
         ),
+        # Diagnostics for choosing p (notebooks 08 & 09). Both follow the
+        # "Similarity metric" selector above; the left one also follows
+        # "Column distance".
+        Div(
+            card(
+                H2("Archetype distinctness vs p", cls="text-sm font-semibold mb-1"),
+                P(
+                    "Pairwise distance between a run's archetypes as p grows "
+                    "(0 = identical, 1 = distinct). The min — the most-overlapping "
+                    "pair — decreases towards a floor: past it, each added "
+                    "archetype mostly duplicates an existing one. The selected "
+                    "similarity metric is highlighted.",
+                    cls="text-sm opacity-60 mb-2",
+                ),
+                Div(id="cmp-distinct"),
+            ),
+            card(
+                H2("Sensitivity to precinct order", cls="text-sm font-semibold mb-1"),
+                P(
+                    "Similarity of each trial's archetypes to the reference run "
+                    "(Hungarian-matched; one box over archetypes × trials, dashed "
+                    "line = mean, whiskers to 1.5 × IQR, dots = outliers) when the "
+                    "precinct order is shuffled vs when the seed is varied. "
+                    "Sensitivity to both grows with p: "
+                    "the decomposition turns degenerate, hopping between "
+                    "alternative solutions.",
+                    cls="text-sm opacity-60 mb-2",
+                ),
+                Div(id="cmp-order"),
+            ),
+            cls="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4",
+        ),
         # Controls below drive the succeeding per-p map and loadings, not the
         # sweep-wide lineage above.
         Div(
@@ -280,7 +314,12 @@ def tab_compare() -> Section:
             ),
             cls="flex flex-wrap gap-3 items-end mb-3",
         ),
-        Div(card(Div(id="cmp-plot")), card(Div(id="cmp-loadings")), cls="grid gap-4"),
+        # map : loadings on one row, same 2:3 split as the map tab.
+        Div(
+            card(Div(id="cmp-plot"), span="lg:col-span-2"),
+            card(Div(id="cmp-loadings"), span="lg:col-span-3"),
+            cls="grid grid-cols-1 lg:grid-cols-5 gap-4",
+        ),
         Div(
             card(
                 Div(
