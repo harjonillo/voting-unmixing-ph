@@ -20,7 +20,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 def cosine_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
-    """Cosine similarity between the columns of two matrices.
+    """
+    Cosine similarity between the columns of two matrices.
 
     Parameters
     ----------
@@ -40,7 +41,8 @@ def cosine_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
 
 
 def spearman_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
-    """Spearman rank correlation between the columns of two matrices.
+    """
+    Spearman rank correlation between the columns of two matrices.
 
     Parameters
     ----------
@@ -64,7 +66,8 @@ def spearman_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
 def _cross_pairwise(
     A: np.ndarray, B: np.ndarray, f: Callable[[np.ndarray, np.ndarray], float]
 ) -> np.ndarray:
-    """Apply a per-pair column function over the cross product of two matrices.
+    """
+    Apply a per-pair column function over the cross product of two matrices.
 
     Parameters
     ----------
@@ -87,7 +90,8 @@ def _cross_pairwise(
 
 
 def _ranked_idx(col: np.ndarray) -> np.ndarray:
-    """Candidate indices sorted by descending loading (as in notebook 08).
+    """
+    Candidate indices sorted by descending loading (as in notebook 08).
 
     Parameters
     ----------
@@ -109,7 +113,8 @@ def rbo_ext(
     pval: float = 0.9,
     k: Optional[int] = None,
 ) -> float:
-    """Extrapolated rank-biased overlap (Webber et al. 2010).
+    """
+    Extrapolated rank-biased overlap (Webber et al. 2010).
 
     Top-weighted agreement between two ranked lists: overlap is measured at
     every depth and discounted geometrically, so agreement near the top
@@ -146,7 +151,8 @@ def rbo_ext(
 
 
 def weighted_tau_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
-    """Weighted Kendall tau between the columns of two matrices.
+    """
+    Weighted Kendall tau between the columns of two matrices.
 
     Uses scipy's ``weightedtau`` with ``rank=True``: hyperbolic weights
     (exchanges near the top of the ranking cost more), symmetrised over
@@ -169,7 +175,8 @@ def weighted_tau_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
 
 
 def rbo_matrix(A: np.ndarray, B: np.ndarray, pval: float = 0.9) -> np.ndarray:
-    """Extrapolated rank-biased overlap between the columns of two matrices.
+    """
+    Extrapolated rank-biased overlap between the columns of two matrices.
 
     Each column is converted to a descending-loading candidate ranking and
     pairs are scored with `rbo_ext`.
@@ -192,7 +199,8 @@ def rbo_matrix(A: np.ndarray, B: np.ndarray, pval: float = 0.9) -> np.ndarray:
 
 
 def topk_jaccard_matrix(A: np.ndarray, B: np.ndarray, k: int = 12) -> np.ndarray:
-    """Jaccard overlap of the top-k candidate sets between columns.
+    """
+    Jaccard overlap of the top-k candidate sets between columns.
 
     Order within the top-k set is ignored — this asks only "do the two
     archetypes headline the same candidates?". The default k = 12 matches
@@ -221,7 +229,8 @@ def topk_jaccard_matrix(A: np.ndarray, B: np.ndarray, k: int = 12) -> np.ndarray
 
 
 def cosine_topk_matrix(A: np.ndarray, B: np.ndarray, k: int = 12) -> np.ndarray:
-    """Cosine similarity restricted to each pair's union of top-k candidates.
+    """
+    Cosine similarity restricted to each pair's union of top-k candidates.
 
     The cosine of two loading columns evaluated only on the candidates that
     appear in either column's top-k, so the near-zero tail shared by all
@@ -264,7 +273,8 @@ def similarity_matrix(
     B: np.ndarray,
     similarity: Union[str, Callable[[np.ndarray, np.ndarray], np.ndarray]] = "cosine",
 ) -> np.ndarray:
-    """Column-similarity matrix between two archetype matrices.
+    """
+    Column-similarity matrix between two archetype matrices.
 
     Parameters
     ----------
@@ -298,7 +308,8 @@ def match_to_reference(
     M_other: np.ndarray,
     similarity: Union[str, Callable[[np.ndarray, np.ndarray], np.ndarray]] = "cosine",
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Hungarian alignment of `M_other` columns to `M_ref` columns by column similarity.
+    """
+    Hungarian alignment of `M_other` columns to `M_ref` columns by column similarity.
 
     Parameters
     ----------
@@ -326,7 +337,8 @@ def match_to_reference(
 
 
 def archetype_lineage(loadings_by_p: Dict[int, np.ndarray]) -> List[dict]:
-    """Trace how archetypes split as the endmember count p increases.
+    """
+    Trace how archetypes split as the endmember count p increases.
 
     For each consecutive pair (p, p+1), the p+1 columns are Hungarian-matched
     to the p columns by cosine similarity; the one leftover column in p+1 is

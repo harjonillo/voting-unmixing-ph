@@ -3,7 +3,8 @@ from numpy.typing import ArrayLike
 
 
 def resolution(k_s: ArrayLike) -> float:
-    """Shannon entropy of the empirical state distribution (resolution).
+    """
+    Shannon entropy of the empirical state distribution (resolution).
 
     Following Marsili et al., the resolution of a sample is the entropy
     of the frequencies with which each state s is observed:
@@ -25,7 +26,8 @@ def resolution(k_s: ArrayLike) -> float:
 
 
 def relevance(m_k: ArrayLike, k_s: ArrayLike) -> float:
-    """Relevance H[k] of a sample (NOT YET IMPLEMENTED).
+    """
+    Relevance H[k] of a sample (NOT YET IMPLEMENTED).
 
     Parameters
     ----------

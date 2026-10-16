@@ -12,7 +12,8 @@ def match_endmembers(
     metric: str = "euclidean",
     algo: str = "linear_sum",
 ) -> np.ndarray:
-    """Match extracted endmembers to true (reference) endmembers.
+    """
+    Match extracted endmembers to true (reference) endmembers.
 
     Note the row orientation: unlike most of this package, the endmember
     matrices here carry one endmember per ROW (``cdist`` compares rows).
