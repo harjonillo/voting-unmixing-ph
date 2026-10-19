@@ -13,9 +13,9 @@ const MAP_VIEW = { style: "white-bg", center: { lon: 122.0, lat: 12.8 }, zoom: 4
 
 // ---------------------------------------------------------------- data cache
 const _cache = new Map();
-async function getJSON(url) {
+async function getJSON(url, init) {
   if (!_cache.has(url)) {
-    _cache.set(url, fetch(url).then((r) => {
+    _cache.set(url, fetch(url, init).then((r) => {
       if (!r.ok) throw new Error(`${url}: ${r.status}`);
       return r.json();
     }));
@@ -348,7 +348,7 @@ async function renderMap() {
   choropleth("map-plot", geo, vals.records, colorFn, discrete);
 
   const cap = loadings.std
-    ? "Error bars: std across the sweep's trials at this archetype count."
+    ? "Error bars: 1 SD across the sweep's trials at this archetype count."
     : "Run the sweep for this year to add trial-based error bars.";
   loadingsGrid("map-loadings", loadings, cols, nArch, state.topN,
     `Candidate weights per endmember (${methodLabel()}, national-level). ` + cap);
@@ -676,7 +676,7 @@ async function renderCompare() {
 
   loadingsGrid("cmp-loadings",
     { candidates: sweep.candidates, mean: sweep.loadings_mean, std: sweep.loadings_std },
-    cols, p, state.cmp.topN, "Loadings (mean ± std over trials) at p = " + p);
+    cols, p, state.cmp.topN, "Loadings (mean ± 1 SD over trials) at p = " + p);
 
   const cgb = state.cmp.groupBy;
   partylistMixing("cmp-partylist", "cmp-partylist-table",
@@ -775,7 +775,8 @@ function switchTab(tab) {
 
 // ------------------------------------------------------------------------- init
 async function init() {
-  MANIFEST = await getJSON(`${DATA}/manifest.json`);
+  // always revalidate: the manifest describes the data tree app.js expects
+  MANIFEST = await getJSON(`${DATA}/manifest.json`, { cache: "no-cache" });
   state.year = MANIFEST.default_year;
   state.method = MANIFEST.default_method;
 
