@@ -27,6 +27,7 @@ Run from the repo root:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -95,6 +96,17 @@ def sidebar() -> Aside:
         ),
         P(id="sidebar-caption", cls="text-xs opacity-60 mb-4"),
         field("Election year", Select(id="year", cls=f"{SELECT} w-full")),
+        # Options come from the manifest's "methods" (MVSA / NMF); every tab
+        # reads that method's baked tree. Abundances are SUNSAL either way.
+        field(
+            "Endmember extraction",
+            Select(
+                Option("MVSA", value="mvsa"),
+                Option("NMF", value="nmf"),
+                id="method",
+                cls=f"{SELECT} w-full",
+            ),
+        ),
         Div(
             Label("Aggregation level", cls="block text-sm font-medium mb-1"),
             Div(id="levels", cls="space-y-1"),
@@ -165,7 +177,8 @@ def tab_map() -> Section:
                 P(
                     "Endmember loadings summed by party or by alliance/coalition (the "
                     "grouping over parties), showing how each group's candidates distribute "
-                    "across the voting archetypes. National-level MVSA loadings.",
+                    "across the voting archetypes. National-level loadings from the "
+                    "sidebar's endmember-extraction method.",
                     cls="text-sm opacity-60 mb-2",
                     style="flex-grow:0",
                 ),
@@ -193,7 +206,7 @@ def tab_compare() -> Section:
     return Section(
         H2("Endmember-count comparison", cls="text-base font-semibold mb-2"),
         P(
-            "Trial mean/std at a chosen archetype count p (precomputed by the sweep). "
+            "Trial mean / 1 SD at a chosen archetype count p (precomputed by the sweep). "
             "The map follows the sidebar level and weighting.",
             cls="text-sm opacity-60 mb-3",
         ),
@@ -295,7 +308,7 @@ def tab_compare() -> Section:
                 "Map shows",
                 Select(
                     Option("Mean abundance", value="mean"),
-                    Option("Std across trials", value="std"),
+                    Option("1 SD across trials", value="std"),
                     id="cmp-stat",
                     cls=SELECT,
                 ),
@@ -377,6 +390,13 @@ def tab_dist() -> Section:
     )
 
 
+def asset_url(name: str) -> str:
+    """``./<name>?v=<content hash>`` so a rebuilt asset is never served stale
+    from the browser cache alongside a newer shell / manifest."""
+    digest = hashlib.sha256((WEB / name).read_bytes()).hexdigest()[:10]
+    return f"./{name}?v={digest}"
+
+
 def page() -> Html:
     return Html(
         Head(
@@ -396,7 +416,7 @@ def page() -> Html:
             Link(rel="stylesheet", href=DAISYUI_CDN),
             Script(src=TAILWIND_CDN),
             Link(
-                rel="stylesheet", href="./styles.css"
+                rel="stylesheet", href=asset_url("styles.css")
             ),  # our overrides, after Tailwind/daisyUI
             Script(src=PLOTLY_CDN),
         ),
@@ -430,7 +450,7 @@ def page() -> Html:
                 ),
                 cls="flex",
             ),
-            Script(src="./app.js"),
+            Script(src=asset_url("app.js")),
             cls="min-h-screen bg-base-100",
         ),
         lang="en",

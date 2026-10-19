@@ -13,9 +13,9 @@ const MAP_VIEW = { style: "white-bg", center: { lon: 122.0, lat: 12.8 }, zoom: 4
 
 // ---------------------------------------------------------------- data cache
 const _cache = new Map();
-async function getJSON(url) {
+async function getJSON(url, init) {
   if (!_cache.has(url)) {
-    _cache.set(url, fetch(url).then((r) => {
+    _cache.set(url, fetch(url, init).then((r) => {
       if (!r.ok) throw new Error(`${url}: ${r.status}`);
       return r.json();
     }));
@@ -26,7 +26,7 @@ async function getJSON(url) {
 // ------------------------------------------------------------------- globals
 let MANIFEST = null;
 const state = {
-  year: null, level: "province", weighted: true, topN: 5, tab: "map",
+  year: null, method: "mvsa", level: "province", weighted: true, topN: 5, tab: "map",
   map: { quantity: "Archetype abundance", arch: "arch_0", groupBy: "party" },
   cmp: { p: 5, arch: "arch_0", stat: "mean", topN: 15, groupBy: "party",
     lineageTopN: 8, lineageMetric: "cos12", lineageStat: "min" },
@@ -43,8 +43,13 @@ function archColor(archCol, nArch) {
   const pal = palette(nArch);
   return pal ? pal[archIndex(archCol) % nArch] : FALLBACK_COLOR;
 }
+// Endmember-extraction method (sidebar): MANIFEST.methods[key] =
+// {label, base, years, years_meta}; each method has its own baked data tree.
+const methodMeta = () => MANIFEST.methods[state.method];
+const methodLabel = () => methodMeta().label;
+const yearMeta = (year) => methodMeta().years_meta[year];
 function nArchFor(year) {
-  return MANIFEST.years_meta[year].n_archetypes;
+  return yearMeta(year).n_archetypes;
 }
 function archCols(year) {
   return Array.from({ length: nArchFor(year) }, (_, i) => `arch_${i}`);
@@ -72,12 +77,15 @@ function geoURL(year, level) {
   return `${DATA}/geo/${year}_${level}.geojson`;
 }
 const wtag = () => (state.weighted ? "w" : "u");
-const valuesURL = (year, level) => `${DATA}/values/${year}_${level}_${wtag()}.json`;
-const loadingsURL = (year) => `${DATA}/loadings/${year}.json`;
-const sweepURL = (year, p) => `${DATA}/sweep/${year}_p${p}.json`;
-const lineageURL = (year) => `${DATA}/lineage/${year}.json`;
-const distinctURL = (year) => `${DATA}/distinctness/${year}.json`;
-const orderURL = (year) => `${DATA}/order_sensitivity/${year}.json`;
+// Per-method data root (MVSA at the top of data/, others in data/<method>/);
+// geometry is shared, so geoURL stays on DATA.
+const mdata = () => (methodMeta().base ? `${DATA}/${methodMeta().base}` : DATA);
+const valuesURL = (year, level) => `${mdata()}/values/${year}_${level}_${wtag()}.json`;
+const loadingsURL = (year) => `${mdata()}/loadings/${year}.json`;
+const sweepURL = (year, p) => `${mdata()}/sweep/${year}_p${p}.json`;
+const lineageURL = (year) => `${mdata()}/lineage/${year}.json`;
+const distinctURL = (year) => `${mdata()}/distinctness/${year}.json`;
+const orderURL = (year) => `${mdata()}/order_sensitivity/${year}.json`;
 
 // -------------------------------------------------------------- chart helpers
 function choropleth(divId, geo, records, colorFn, discrete) {
@@ -340,10 +348,10 @@ async function renderMap() {
   choropleth("map-plot", geo, vals.records, colorFn, discrete);
 
   const cap = loadings.std
-    ? "Error bars: std across the sweep's trials at this archetype count."
+    ? "Error bars: 1 SD across the sweep's trials at this archetype count."
     : "Run the sweep for this year to add trial-based error bars.";
   loadingsGrid("map-loadings", loadings, cols, nArch, state.topN,
-    "Candidate weights per endmember (MVSA, national-level). " + cap);
+    `Candidate weights per endmember (${methodLabel()}, national-level). ` + cap);
 
   const mgb = state.map.groupBy;
   partylistMixing("map-partylist", "map-partylist-table", loadings, cols, nArch,
@@ -668,7 +676,7 @@ async function renderCompare() {
 
   loadingsGrid("cmp-loadings",
     { candidates: sweep.candidates, mean: sweep.loadings_mean, std: sweep.loadings_std },
-    cols, p, state.cmp.topN, "Loadings (mean ± std over trials) at p = " + p);
+    cols, p, state.cmp.topN, "Loadings (mean ± 1 SD over trials) at p = " + p);
 
   const cgb = state.cmp.groupBy;
   partylistMixing("cmp-partylist", "cmp-partylist-table",
@@ -717,10 +725,27 @@ async function renderActive() {
 }
 
 function updateCaption() {
-  const m = MANIFEST.years_meta[state.year];
+  const m = yearMeta(state.year);
   document.getElementById("sidebar-caption").textContent =
-    `${state.year} senatorial race · ${m.n_archetypes} endmembers · ` +
-    `${m.candidate_labels.length} candidates`;
+    `${state.year} senatorial race · ${m.n_archetypes} ${methodLabel()} ` +
+    `endmembers · ${m.candidate_labels.length} candidates`;
+}
+
+// Keep the year and compare-tab p valid for the current method/year (a method
+// may lack a year; years differ in their sweep's p range), then refill both.
+function syncYearAndP() {
+  const years = methodMeta().years;
+  if (!years.includes(state.year)) {
+    state.year = years.includes(MANIFEST.default_year) ? MANIFEST.default_year : years[0];
+  }
+  fillSelect("year", years, state.year);
+  const ps = yearMeta(state.year).sweep_ps;
+  if (ps.length && !ps.includes(state.cmp.p)) {
+    // nearest available p
+    state.cmp.p = ps.reduce((a, b) =>
+      Math.abs(b - state.cmp.p) < Math.abs(a - state.cmp.p) ? b : a);
+  }
+  fillSelect("cmp-p", ps, state.cmp.p);
 }
 
 // --------------------------------------------------------------------- controls
@@ -750,11 +775,15 @@ function switchTab(tab) {
 
 // ------------------------------------------------------------------------- init
 async function init() {
-  MANIFEST = await getJSON(`${DATA}/manifest.json`);
+  // always revalidate: the manifest describes the data tree app.js expects
+  MANIFEST = await getJSON(`${DATA}/manifest.json`, { cache: "no-cache" });
   state.year = MANIFEST.default_year;
+  state.method = MANIFEST.default_method;
 
-  fillSelect("year", MANIFEST.years, state.year);
-  fillSelect("cmp-p", MANIFEST.years_meta[state.year].sweep_ps, state.cmp.p);
+  // only the methods actually baked (e.g. NMF absent until its pipeline runs)
+  fillSelect("method", Object.keys(MANIFEST.methods), state.method,
+    (m) => MANIFEST.methods[m].label);
+  syncYearAndP();
 
   // level radio
   const levels = document.getElementById("levels");
@@ -777,8 +806,11 @@ async function init() {
   // wire controls
   document.getElementById("year").addEventListener("change", (e) => {
     state.year = e.target.value;
-    fillSelect("cmp-p", MANIFEST.years_meta[state.year].sweep_ps, state.cmp.p);
-    updateCaption(); renderActive();
+    syncYearAndP(); updateCaption(); renderActive();
+  });
+  document.getElementById("method").addEventListener("change", (e) => {
+    state.method = e.target.value;
+    syncYearAndP(); updateCaption(); renderActive();
   });
   document.getElementById("topN").addEventListener("change", (e) => {
     state.topN = +e.target.value; if (state.tab === "map") renderActive();

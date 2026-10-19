@@ -20,6 +20,9 @@ archetypes × trials per (p, arm, metric) — the samples behind notebook 09's
 boxplots, baked raw so the site can draw the same boxes (quartiles, 1.5 × IQR
 whiskers, outliers).
 
+``--method nmf`` runs the same design with NMF endmembers (notebook 10; the
+config's ``nmf_*`` parameters, seeded through ``random_state``) instead of MVSA.
+
 Only the endmembers enter the summary, so each run is seed → MVSA: est_noise and
 HySime don't touch the RNG and only matter when p is left to HySime, and SUNSAL
 (abundances) runs after MVSA, so dropping them leaves the endmembers bitwise
@@ -33,11 +36,13 @@ Runs go in parallel (``[sweep] n_jobs`` of that year's config unless
 ``data/notebook_experiments/09_precinct_order/{year}/`` (gitignored); delete a
 file or pass ``--recompute`` to rerun.
 
-Writes ``data/order_sensitivity/{year}.json`` — small, *committed* files that
+Writes ``data/order_sensitivity/{year}.json`` (NMF:
+``data/order_sensitivity/nmf/{year}.json``) — small, *committed* files that
 scripts/build_static.py copies into site/data/::
 
     {
-      "year": "2025", "ps": [2, ...], "n_trials": 50, "arm_a_trials": 2,
+      "year": "2025", "method": "mvsa", "ps": [2, ...], "n_trials": 50,
+      "arm_a_trials": 2,
       "seed": 42, "perm_seed": 1000,
       "deterministic": [true, ...],          # Arm A bitwise == reference, per p
       "arms": {"B": "shuffled precinct order", "C": "varying seed"},
@@ -52,13 +57,12 @@ the site's one "Similarity metric" selector drives every compare-tab chart.
 Run from the repo root (several minutes per year), before build_static.py:
     python scripts/bake_order_sensitivity.py                    # all years
     python scripts/bake_order_sensitivity.py --years 2025 --trials 10
+    python scripts/bake_order_sensitivity.py --method nmf    # NMF endmembers
 """
 
 from __future__ import annotations
 
 import argparse
-import contextlib
-import io
 import json
 import sys
 import time
@@ -74,7 +78,8 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.config import load_config
 from src.data import load_complete
 from src.data.preprocessing import preprocess_from_config
-from src.unmixing import mvsa
+from src.unmixing import METHODS, extract_endmembers, method_params
+from src.unmixing.methods import params_tag
 from src.unmixing.matching import match_to_reference
 
 YEARS = ["2025", "2022", "2019", "2016", "2013"]
@@ -93,14 +98,6 @@ METRICS = {
 }
 ARMS = {"B": "shuffled precinct order", "C": "varying seed"}
 ROUND = 4
-
-
-def endmembers(Y: np.ndarray, p: int, seed: int, mm_iters: int) -> np.ndarray:
-    """(L, p) MVSA endmembers — the notebooks' run_pipeline(...)['endm']."""
-    np.random.seed(seed)
-    with contextlib.redirect_stdout(io.StringIO()):  # VCA's per-run SNR chatter
-        M, *_ = mvsa(Y, p=p, MM_iters=mm_iters, spherize="yes", verbose=0)
-    return M
 
 
 def shuffle_permutations(df, config, Y_ref, pre_ref, n_trials, perm_seed):
@@ -130,18 +127,13 @@ def shuffled(Y_ref: np.ndarray, pos: np.ndarray) -> np.ndarray:
     return np.array(Y_ref[:, pos], order="F" if Y_ref.flags.f_contiguous else "C")
 
 
-def run_experiment(Y_ref, perms, p, seed, mm_iters, n_trials, arm_a, n_jobs):
+def run_experiment(Y_ref, perms, p, seed, method, params, n_trials, arm_a, n_jobs):
     """Reference + arms A/B/C endmembers at one p, all runs in parallel."""
+    run = delayed(extract_endmembers)
     jobs = (
-        [delayed(endmembers)(Y_ref, p, seed, mm_iters) for _ in range(1 + arm_a)]
-        + [
-            delayed(endmembers)(shuffled(Y_ref, pos), p, seed, mm_iters)
-            for pos in perms
-        ]
-        + [
-            delayed(endmembers)(Y_ref, p, seed + 1 + t, mm_iters)
-            for t in range(n_trials)
-        ]
+        [run(Y_ref, p, seed, method, params) for _ in range(1 + arm_a)]
+        + [run(shuffled(Y_ref, pos), p, seed, method, params) for pos in perms]
+        + [run(Y_ref, p, seed + 1 + t, method, params) for t in range(n_trials)]
     )
     mats = Parallel(n_jobs=n_jobs)(jobs)
     return {
@@ -152,17 +144,19 @@ def run_experiment(Y_ref, perms, p, seed, mm_iters, n_trials, arm_a, n_jobs):
     }
 
 
-def bake_year(year, ps, n_trials, arm_a, perm_seed, n_jobs, recompute) -> dict:
+def bake_year(
+    year, ps, method, n_trials, arm_a, perm_seed, n_jobs, recompute
+) -> dict:
     config = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
     seed = config["unmixing"].getint("seed")
-    mm_iters = config["unmixing"].getint("mvsa_mm_iters")
+    params = method_params(config["unmixing"], method)
     n_jobs = n_jobs or config["sweep"].getint("n_jobs")
 
     cache = CACHE_DIR / year
     cache.mkdir(parents=True, exist_ok=True)
     path = {
         p: cache / f"endm_p{p}_seed{seed}_permseed{perm_seed}_trials{n_trials}"
-        f"_a{arm_a}_mm{mm_iters}.npz"
+        f"_a{arm_a}_{params_tag(method, params)}.npz"
         for p in ps
     }
     todo = [p for p in ps if recompute or not path[p].exists()]
@@ -177,11 +171,11 @@ def bake_year(year, ps, n_trials, arm_a, perm_seed, n_jobs, recompute) -> dict:
         for p in todo:
             t0 = time.time()
             e = run_experiment(
-                Y_ref, perms, p, seed, mm_iters, n_trials, arm_a, n_jobs
+                Y_ref, perms, p, seed, method, params, n_trials, arm_a, n_jobs
             )
             np.savez(path[p], **e)
             print(
-                f"{year} p={p}: {1 + arm_a + 2 * n_trials} runs in "
+                f"{year} p={p}: {1 + arm_a + 2 * n_trials} {METHODS[method]} runs in "
                 f"{time.time() - t0:.0f}s (n_jobs={n_jobs})"
             )
     else:
@@ -205,6 +199,7 @@ def bake_year(year, ps, n_trials, arm_a, perm_seed, n_jobs, recompute) -> dict:
 
     return {
         "year": year,
+        "method": method,
         "ps": ps,
         "n_trials": n_trials,
         "arm_a_trials": arm_a,
@@ -221,6 +216,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--years", nargs="+", default=YEARS)
     ap.add_argument("--ps", nargs="+", type=int, default=[2, 3, 4, 5, 6])
+    ap.add_argument(
+        "--method",
+        choices=list(METHODS),
+        default="mvsa",
+        help="endmember extraction method (default: mvsa)",
+    )
     ap.add_argument("--trials", type=int, default=50, help="trials per arm B / C")
     ap.add_argument(
         "--arm-a-trials", type=int, default=2, help="determinism reruns (Arm A)"
@@ -236,11 +237,14 @@ def main() -> None:
     args = ap.parse_args()
 
     out_dir = args.out / "order_sensitivity"
+    if args.method != "mvsa":
+        out_dir = out_dir / args.method
     out_dir.mkdir(parents=True, exist_ok=True)
     for year in args.years:
         payload = bake_year(
             year,
             sorted(args.ps),
+            args.method,
             args.trials,
             args.arm_a_trials,
             args.perm_seed,

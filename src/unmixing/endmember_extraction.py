@@ -822,3 +822,79 @@ def mvsa(
     Sest = Q @ Y  # (p, N) abundances in proj. space
 
     return M_out, Sest, Up, my, sing_values
+
+
+def nmf(
+    Y: np.ndarray,
+    p: int,
+    random_state: Optional[int] = None,
+    init: str = "random",
+    beta_loss: str = "kullback-leibler",
+    solver: str = "mu",
+    max_iter: int = 1000,
+    tol: float = 1e-4,
+    rescale: bool = True,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Non-negative matrix factorization (NMF) endmember extraction.
+
+    Factorizes Y ≈ W @ H with W, H >= 0 (scikit-learn's ``NMF``, candidates
+    as samples — notebook 10) and returns W as the endmember matrix, so every
+    loading is non-negative by construction (unlike MVSA, whose simplex
+    vertices may leave the positive orthant).
+
+    NMF fixes each component only up to scale (W_k * c, H_k / c), but the
+    sum-to-one constraint SUNSAL puts on the abundances is not scale-free: an
+    arbitrarily scaled W cannot reconstruct the data with abundances on the
+    simplex. With ``rescale`` each column of W is therefore scaled to the mean
+    column sum of Y, putting every archetype on the data's scale (a "pure"
+    precinct with abundance 1 on it), as MVSA's vertices are; H is
+    counter-scaled so W @ H is unchanged. The column direction — what the
+    loadings mean — is untouched.
+
+    Parameters
+    ----------
+    Y : ndarray, shape (L, N)
+        Non-negative data matrix: L candidates (rows) x N precincts (columns).
+    p : int
+        Number of components (archetypes).
+    random_state : int or None, optional
+        Seed of the initialization (``init="random"`` / ``"nndsvdar"``); the
+        multi-trial scripts vary it per trial. Default: None.
+    init, beta_loss, solver, max_iter, tol : optional
+        Passed to ``sklearn.decomposition.NMF``. ``init="random"`` (default)
+        makes runs genuinely seed-dependent; the deterministic ``"nndsvd"``
+        ignores the seed (and stalls the ``"mu"`` solver on its zeros).
+    rescale : bool, optional
+        Scale W's columns to the mean column sum of Y (see above).
+        Default: True.
+
+    Returns
+    -------
+    M : ndarray, shape (L, p)
+        Endmember (mixing) matrix W, one archetype per column.
+    H : ndarray, shape (p, N)
+        NMF coefficients (not simplex-constrained; the pipeline re-estimates
+        the abundances from M with SUNSAL).
+    """
+    from sklearn.decomposition import NMF
+
+    model = NMF(
+        n_components=p,
+        init=init,
+        beta_loss=beta_loss,
+        solver=solver,
+        max_iter=max_iter,
+        tol=tol,
+        random_state=random_state,
+    )
+    with warnings.catch_warnings():
+        # max_iter is a deliberate budget; hitting it is not an error here
+        warnings.filterwarnings("ignore", message="Maximum number of iterations")
+        W = model.fit_transform(np.asarray(Y, dtype=float))
+    H = model.components_
+    if rescale:
+        scale = Y.sum(axis=0).mean() / np.maximum(W.sum(axis=0), 1e-12)
+        W = W * scale
+        H = H / scale[:, None]
+    return W, H

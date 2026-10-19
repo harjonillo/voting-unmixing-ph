@@ -16,14 +16,16 @@ data/                   mostly gitignored — provenance in data/README.md, with
 src/
   config.py             config + path helpers
   data/                 loading.py (CSV/MATLAB/processed IO), preprocessing.py
-  unmixing/             VCA, N-FINDR, MVSA, SUNSAL, HySime, noise, matching, tools
+  unmixing/             VCA, N-FINDR, MVSA, NMF, SUNSAL, HySime, noise, matching, tools
   aggregation.py        precinct -> region/province/municipality aggregation
   geo.py                shapefile loading + COMELEC<->shapefile name matching
   figures/              archetype/abundance plots + choropleth helpers
 scripts/
   run_pipeline.py       CSV -> HySime -> MVSA -> SUNSAL -> data/processed/
+                        (--method nmf: NMF endmembers -> data/processed/<year>/nmf/)
   run_sweep.py          multi-trial sweep over p = p_min..p_max (error bars,
                         stability, lineage) -> data/processed/sweep/p{p}/
+                        (--method nmf as above)
   fetch_boundaries.py   downloads municipal boundaries (GADM, optional)
   build_static.py       bakes data/processed -> site/data JSON + GeoJSON
   build_site.py         renders the static FastHTML site shell (site/index.html)
@@ -48,6 +50,11 @@ python scripts/fetch_boundaries.py   # optional: municipal-level maps
 python scripts/run_pipeline.py       # writes data/processed/
 python scripts/run_sweep.py          # ~5 min: powers the Model-comparison tab
 ```
+
+Each of `run_pipeline.py`, `run_sweep.py`, `bake_distinctness.py` and
+`bake_order_sensitivity.py` takes `--method nmf` to use NMF endmembers
+(notebook 10; non-negative loadings) instead of MVSA — abundances are SUNSAL
+either way. The site's sidebar switches between the two.
 
 Then build the static site (see **Web deployment** below) to explore the results.
 

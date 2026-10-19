@@ -1,13 +1,20 @@
 """End-to-end unmixing pipeline.
 
-load complete CSV -> filter/normalize -> noise + HySime -> MVSA -> SUNSAL
+load complete CSV -> filter/normalize -> noise + HySime -> MVSA | NMF -> SUNSAL
 -> write <processed_path>/{endmembers.csv, abundances.parquet, meta.json}
+
+--method picks the endmember extraction: mvsa (default) or nmf (notebook 10:
+non-negative loadings by construction). Either way the abundances come from
+SUNSAL (positivity + sum-to-one). NMF outputs go to <processed_path>/nmf/ so
+both methods can coexist; the run uses the config's [unmixing] seed (the
+multi-trial, seed-varying runs are scripts/run_sweep.py's job).
 
 The input CSV and output directory are taken from the per-year config passed
 via --config (e.g. configs/config_2025.ini).
 
 Run from the repo root:
     python scripts/run_pipeline.py --config configs/config_2025.ini [--n-archetypes 7]
+    python scripts/run_pipeline.py --config configs/config_2025.ini --method nmf
 """
 
 import argparse
@@ -23,7 +30,14 @@ from src.config import load_config
 from src.data import load_complete
 from src.data.loading import save_processed
 from src.data.preprocessing import preprocess_from_config
-from src.unmixing import est_noise, hysime, mvsa, sunsal_mod
+from src.unmixing import (
+    METHODS,
+    est_noise,
+    extract_endmembers,
+    hysime,
+    method_params,
+    sunsal_mod,
+)
 
 
 def main():
@@ -36,6 +50,12 @@ def main():
         type=int,
         default=None,
         help="override [unmixing] n_archetypes (0 = use HySime kf)",
+    )
+    parser.add_argument(
+        "--method",
+        choices=list(METHODS),
+        default="mvsa",
+        help="endmember extraction method (default: mvsa)",
     )
     args = parser.parse_args()
 
@@ -63,15 +83,10 @@ def main():
         n_archetypes = kf
     print(f"n_archetypes = {n_archetypes}")
 
-    print("\n== MVSA ==")
+    print(f"\n== {METHODS[args.method]} ==")
     t0 = time.time()
-    endmembers, *_ = mvsa(
-        Y,
-        p=n_archetypes,
-        MM_iters=unmix.getint("mvsa_mm_iters"),
-        spherize="yes",
-        verbose=0,
-    )
+    params = method_params(unmix, args.method)
+    endmembers = extract_endmembers(Y, n_archetypes, seed, args.method, params)
     print(f"M: {endmembers.shape}  ({time.time() - t0:.1f}s)")
 
     print("\n== SUNSAL ==")
@@ -97,11 +112,13 @@ def main():
         "preprocessing": pre.params,
         "hysime_kf": int(kf),
         "n_archetypes": int(n_archetypes),
+        "method": args.method,
+        "method_params": params,
         "seed": seed,
         "rmse": rmse,
         "candidate_labels": pre.candidate_labels,
     }
-    out = save_processed(pre, endmembers, abundances, meta, config)
+    out = save_processed(pre, endmembers, abundances, meta, config, args.method)
     print(f"\nwrote {out}/endmembers.csv, abundances.parquet, meta.json")
 
 
