@@ -70,6 +70,34 @@ def processed_path(config: configparser.ConfigParser, *parts: Union[str, Path]) 
     return REPO_ROOT / config["DEFAULT"]["processed_path"] / Path(*parts)
 
 
+def method_path(
+    config: configparser.ConfigParser, method: str, *parts: Union[str, Path]
+) -> Path:
+    """Absolute path inside one extraction method's processed-outputs folder.
+
+    MVSA (the original method) keeps the top of ``processed_path``; every other
+    method gets its own subfolder (``processed_path``/<method>/), with the same
+    layout inside (endmembers.csv, abundances.parquet, meta.json, sweep/).
+
+    Parameters
+    ----------
+    config : configparser.ConfigParser
+        Loaded config; ``[DEFAULT] processed_path`` names the folder.
+    method : str
+        Extraction method key ("mvsa", "nmf", ...).
+    *parts : str or pathlib.Path
+        Path components appended below the method's folder.
+
+    Returns
+    -------
+    pathlib.Path
+        The absolute path.
+    """
+    if method == "mvsa":
+        return processed_path(config, *parts)
+    return processed_path(config, method, *parts)
+
+
 def shapefile_path(config: configparser.ConfigParser, *parts: Union[str, Path]) -> Path:
     """Absolute path inside the shapefile folder.
 

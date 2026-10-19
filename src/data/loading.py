@@ -49,6 +49,7 @@ def save_processed(
     abundances: np.ndarray,
     meta: dict,
     config: configparser.ConfigParser,
+    method: str = "mvsa",
 ) -> Path:
     """Write the pipeline outputs the app and notebooks read.
 
@@ -72,6 +73,9 @@ def save_processed(
         Run parameters and fit metrics, JSON-serialized as-is.
     config : configparser.ConfigParser
         Loaded config; its ``processed_path`` names the output folder.
+    method : str, default "mvsa"
+        Extraction method; non-MVSA outputs go to ``processed_path``/<method>/
+        (see ``src.config.method_path``).
 
     Returns
     -------
@@ -80,9 +84,9 @@ def save_processed(
     """
     import json
 
-    from src.config import processed_path
+    from src.config import method_path
 
-    out = processed_path(config)
+    out = method_path(config, method)
     out.mkdir(parents=True, exist_ok=True)
 
     p = endmembers.shape[1]
@@ -104,7 +108,7 @@ def save_processed(
 
 
 def load_processed(
-    config: configparser.ConfigParser,
+    config: configparser.ConfigParser, method: str = "mvsa"
 ) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Load the pipeline outputs written by ``save_processed``.
 
@@ -112,6 +116,8 @@ def load_processed(
     ----------
     config : configparser.ConfigParser
         Loaded config; its ``processed_path`` names the folder to read.
+    method : str, default "mvsa"
+        Extraction method whose outputs to read (see ``save_processed``).
 
     Returns
     -------
@@ -127,9 +133,9 @@ def load_processed(
     """
     import json
 
-    from src.config import processed_path
+    from src.config import method_path
 
-    out = processed_path(config)
+    out = method_path(config, method)
     endmembers = pd.read_csv(out / "endmembers.csv", index_col="candidate")
     abundances = pd.read_parquet(out / "abundances.parquet")
     with open(out / "meta.json") as f:
@@ -138,7 +144,9 @@ def load_processed(
 
 
 def load_sweep(
-    config: configparser.ConfigParser, full_resolution: bool = False
+    config: configparser.ConfigParser,
+    full_resolution: bool = False,
+    method: str = "mvsa",
 ) -> Dict[int, dict]:
     """Load the endmember-count sweep written by ``scripts/run_sweep.py``.
 
@@ -149,6 +157,8 @@ def load_sweep(
     full_resolution : bool, default False
         Also load the per-precinct reference abundances
         (``abundances_ref``), which are much larger than the aggregates.
+    method : str, default "mvsa"
+        Extraction method whose sweep to read (``run_sweep.py --method``).
 
     Returns
     -------
@@ -162,9 +172,9 @@ def load_sweep(
     """
     import json
 
-    from src.config import processed_path
+    from src.config import method_path
 
-    root = processed_path(config, "sweep")
+    root = method_path(config, method, "sweep")
     out = {}
     if not root.exists():
         return out
