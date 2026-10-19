@@ -95,6 +95,17 @@ def sidebar() -> Aside:
         ),
         P(id="sidebar-caption", cls="text-xs opacity-60 mb-4"),
         field("Election year", Select(id="year", cls=f"{SELECT} w-full")),
+        # Options come from the manifest's "methods" (MVSA / NMF); every tab
+        # reads that method's baked tree. Abundances are SUNSAL either way.
+        field(
+            "Endmember extraction",
+            Select(
+                Option("MVSA", value="mvsa"),
+                Option("NMF", value="nmf"),
+                id="method",
+                cls=f"{SELECT} w-full",
+            ),
+        ),
         Div(
             Label("Aggregation level", cls="block text-sm font-medium mb-1"),
             Div(id="levels", cls="space-y-1"),
@@ -165,7 +176,8 @@ def tab_map() -> Section:
                 P(
                     "Endmember loadings summed by party or by alliance/coalition (the "
                     "grouping over parties), showing how each group's candidates distribute "
-                    "across the voting archetypes. National-level MVSA loadings.",
+                    "across the voting archetypes. National-level loadings from the "
+                    "sidebar's endmember-extraction method.",
                     cls="text-sm opacity-60 mb-2",
                     style="flex-grow:0",
                 ),
