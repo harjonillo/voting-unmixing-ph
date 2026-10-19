@@ -1,7 +1,7 @@
 """Multi-trial endmember-count sweep.
 
-For each p in [sweep] p_min..p_max, run n_trials MVSA+SUNSAL trials
-(different seeds), align archetypes across trials by linear sum assignment (cosine
+For each p in [sweep] p_min..p_max, run n_trials MVSA+SUNSAL (or, with
+--method nmf, NMF+SUNSAL) trials, trial t seeded base_seed + t, align archetypes across trials by linear sum assignment (cosine
 similarity, reference = lowest-RMSE trial), and write per-p artifacts under
 <processed_path>/sweep/p{p}/:
 
@@ -12,6 +12,8 @@ similarity, reference = lowest-RMSE trial), and write per-p artifacts under
                                            resolution (geography + arch cols)
     meta.json                              seeds, rmse_trials, stability, ...
 
+NMF sweeps are written to <processed_path>/nmf/sweep/p{p}/ instead (same files).
+
 Municipality-level aggregates carry summed ballot weights, so province- and
 region-level means can be re-derived exactly (weighted mean of weighted means).
 
@@ -20,6 +22,7 @@ via --config (e.g. configs/config_2025.ini).
 
 Run from the repo root (takes a few minutes; trials run in parallel):
     python scripts/run_sweep.py --config configs/config_2025.ini
+    python scripts/run_sweep.py --config configs/config_2025.ini --method nmf
 """
 
 import argparse
@@ -35,10 +38,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from joblib import Parallel, delayed
 
-from src.config import load_config, processed_path
+from src.config import load_config, method_path
 from src.data import load_complete
 from src.data.preprocessing import preprocess_from_config
-from src.unmixing import mvsa, sunsal_mod, match_to_reference
+from src.unmixing import (
+    METHODS,
+    extract_endmembers,
+    match_to_reference,
+    method_params,
+    sunsal_mod,
+)
 
 MUNI_COLS = ["REGION", "PROVINCE", "CITY_MUNICIPALITY"]
 WEIGHT_COL = "information.numberOfValidBallot"
@@ -101,9 +110,8 @@ def level_stats_from_trials(
     return pd.concat(frames, ignore_index=True)
 
 
-def run_one_trial(Y, p, seed, mvsa_mm_iters, sunsal_al_iters, sunsal_tol):
-    np.random.seed(seed)
-    M, *_ = mvsa(Y, p=p, MM_iters=mvsa_mm_iters, spherize="yes", verbose=0)
+def run_one_trial(Y, p, seed, method, params, sunsal_al_iters, sunsal_tol):
+    M = extract_endmembers(Y, p, seed, method, params)
     A, _, _ = sunsal_mod(
         M,
         Y,
@@ -138,6 +146,12 @@ def main():
         "--config", required=True, help="per-year config, e.g. configs/config_2025.ini"
     )
     parser.add_argument("--n-trials", type=int, default=None)
+    parser.add_argument(
+        "--method",
+        choices=list(METHODS),
+        default="mvsa",
+        help="endmember extraction method (default: mvsa)",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -147,6 +161,7 @@ def main():
     n_trials = args.n_trials or sweep.getint("n_trials")
     base_seed = sweep.getint("base_seed")
     n_jobs = sweep.getint("n_jobs")
+    params = method_params(unmix, args.method)
 
     print("== loading ==")
     df = load_complete(config)
@@ -170,17 +185,20 @@ def main():
     n_units = len(muni_table)
     print(f"{n_units} municipalities")
 
-    sweep_root = processed_path(config, "sweep")
+    sweep_root = method_path(config, args.method, "sweep")
 
     for p in p_range:
         t0 = time.time()
-        print(f"\n== p = {p}: {n_trials} trials (n_jobs={n_jobs}) ==")
+        print(
+            f"\n== p = {p}: {n_trials} {METHODS[args.method]} trials (n_jobs={n_jobs}) =="
+        )
         results = Parallel(n_jobs=n_jobs)(
             delayed(run_one_trial)(
                 Y,
                 p,
                 base_seed + t,
-                unmix.getint("mvsa_mm_iters"),
+                args.method,
+                params,
                 unmix.getint("sunsal_al_iters"),
                 unmix.getfloat("sunsal_tol"),
             )
@@ -241,6 +259,8 @@ def main():
                 {
                     "p": p,
                     "n_trials": n_trials,
+                    "method": args.method,
+                    "method_params": params,
                     "base_seed": base_seed,
                     "reference_trial": ref,
                     "rmse_trials": rmse_trials.tolist(),
@@ -248,7 +268,11 @@ def main():
                     "rmse_std": float(rmse_trials.std(ddof=1)),
                     "stability_per_archetype": stability.tolist(),
                     "stability_mean": float(stability.mean()),
-                    "preprocessing": pre.params,
+                    # precinct_ids (one per precinct, an ndarray) isn't JSON
+                    # and is recoverable from the preprocessing settings
+                    "preprocessing": {
+                        k: v for k, v in pre.params.items() if k != "precinct_ids"
+                    },
                     "candidate_labels": pre.candidate_labels,
                 },
                 f,
