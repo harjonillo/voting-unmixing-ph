@@ -30,6 +30,12 @@ What it writes under ``--out`` (default ``site/data``)::
                                        Prerequisites).
     order_sensitivity/{year}.json      copied from data/order_sensitivity/ (see
                                        Prerequisites).
+    nmf/...                            the same per-year tree (values/, loadings/,
+                                       sweep/, lineage/, distinctness/,
+                                       order_sensitivity/) for NMF endmembers —
+                                       the sidebar's extraction-method switch.
+                                       Geometry stays shared at the top level.
+                                       Years without NMF outputs are skipped.
 
 Aggregation, matching and geo-join all go through the shared library
 (``src.aggregation``, ``src.geo``, ``src.unmixing.matching``), so the baked
@@ -50,9 +56,15 @@ configs/config_{year}.ini; rerun them after changing a year's data or its
                                        vs varying seed
                                        -> data/order_sensitivity/.
 
+NMF counterparts come from the same scripts with ``--method nmf`` (outputs
+under data/processed/<year>/nmf/, data/distinctness/nmf/,
+data/order_sensitivity/nmf/).
+
 Run from the repo root:
     python scripts/bake_distinctness.py        # prerequisite (~1 min/year)
     python scripts/bake_order_sensitivity.py   # prerequisite (~5 min/year)
+    python scripts/bake_distinctness.py --method nmf       # NMF prerequisites
+    python scripts/bake_order_sensitivity.py --method nmf
     python scripts/build_static.py --out site/data
 """
 
@@ -73,7 +85,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.aggregation import LEVEL_COLS, aggregate_abundances, dominant_archetype
-from src.config import load_config
+from src.config import load_config, method_path
 from src.data.loading import load_processed, load_sweep
 from src.geo import (
     canonical_province,
@@ -83,6 +95,7 @@ from src.geo import (
     load_municipalities,
     load_provinces,
 )
+from src.unmixing import METHODS
 from src.unmixing.matching import (
     archetype_lineage,
     cosine_matrix,
@@ -413,17 +426,15 @@ def theme_payload(arch_counts: set[int]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def load_level_stats(cfg, p: int) -> pd.DataFrame:
+def load_level_stats(cfg, p: int, method: str = "mvsa") -> pd.DataFrame:
     """The long-format per-level trial mean/std for sweep p, written by
     scripts/run_sweep.py:level_stats_from_trials."""
-    from src.config import processed_path
-
-    path = processed_path(cfg, "sweep", f"p{p}", "level_stats.parquet")
+    path = method_path(cfg, method, "sweep", f"p{p}", "level_stats.parquet")
     if not path.exists():
         raise FileNotFoundError(
             f"Missing {path}. Re-run `python scripts/run_sweep.py "
-            "--config configs/config_<year>.ini` — it now writes the per-level "
-            "trial stats the site build serializes."
+            f"--config configs/config_<year>.ini --method {method}` — it writes "
+            "the per-level trial stats the site build serializes."
         )
     return pd.read_parquet(path)
 
@@ -609,7 +620,149 @@ def build_lineage(year: str, sweep: dict, short: dict[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def build(out: Path, verify: bool) -> None:
+def method_dir(out: Path, method: str) -> Path:
+    """Where one method's per-year data lives: MVSA at the top of ``out`` (the
+    original layout), every other method in ``out``/<method>/ (same layout)."""
+    return out if method == "mvsa" else out / method
+
+
+def bake_year(
+    year: str,
+    method: str,
+    out: Path,
+    provinces,
+    municipalities,
+    amap: dict,
+    sizes: dict[str, int],
+    arch_counts: set[int],
+    geo: dict | None,
+) -> dict | None:
+    """Bake one (year, method): value tables, loadings, sweep detail and lineage
+    under ``method_dir(out, method)``. Returns the manifest's years_meta entry,
+    or None when that method's pipeline outputs don't exist for the year.
+
+    `geo` (MVSA pass only) collects the year's region GeoJSON + municipal
+    geometry; geometry is method-independent, so other methods skip it."""
+    cfg = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
+    if not method_path(cfg, method, "endmembers.csv").exists():
+        if method == "mvsa":
+            raise FileNotFoundError(f"no MVSA pipeline outputs for {year}")
+        print(
+            f"  (!) {year}: no {METHODS[method]} outputs — run `python "
+            f"scripts/run_pipeline.py --config configs/config_{year}.ini --method "
+            f"{method}` (and run_sweep.py) to add it; skipped"
+        )
+        return None
+    root = method_dir(out, method)
+    rel_root = root.relative_to(out)
+    endmembers, abundances, meta = load_processed(cfg, method)
+    arch_cols = list(endmembers.columns)
+    n_arch = len(arch_cols)
+    arch_counts.add(n_arch)
+    sweep = load_sweep(cfg, method=method)
+    short = short_labels(
+        dict.fromkeys(
+            [*endmembers.index, *(c for e in sweep.values() for c in e["loadings_mean"].index)]
+        )
+    )
+
+    def write(rel: str, obj) -> None:
+        sizes[str(rel_root / rel)] = dump_json(obj, root / rel)
+
+    # --- per-(level, weighting) value tables + per-year geometry ---
+    for level in LEVELS:
+        for weighted in WEIGHTINGS:
+            agg = build_level_agg(abundances, level, weighted)
+            gdf, key_col = join_agg_to_boundaries(
+                abundances, agg, level, weighted, provinces, municipalities
+            )
+            recs = records_from_gdf(gdf, key_col, arch_cols)
+            payload = {
+                "year": year,
+                "level": level,
+                "weighted": weighted,
+                "arch_cols": arch_cols,
+                "records": recs,
+            }
+            write(f"values/{year}_{level}_{w_tag(weighted)}.json", payload)
+
+            # geometry (year-specific for region/municipality) — written once,
+            # from the MVSA weighted pass (geometry is method- and
+            # weighting-independent).
+            if geo is not None and weighted and level == "region":
+                sizes[f"geo/{year}_region.geojson"] = write_geojson(
+                    gdf, key_col, level, out / "geo" / f"{year}_region.geojson"
+                )
+            if geo is not None and weighted and level == "municipality":
+                # Polygons are identical per MUNI_ID across years, so the
+                # geometry is pooled and written once (see build) instead of
+                # one ~1.4 MB file per year.
+                geo["muni_gdfs"].append(
+                    gdf[["PROV_KEY", "CITY_MUNICIPALITY", "geometry"]]
+                )
+
+    # --- endmember loadings + sweep-trial std for the overview tab ---
+    loadings_payload = {
+        "candidates": [short[c] for c in endmembers.index],
+        "arch_cols": arch_cols,
+        "mean": {c: [_round(v, ARCH_ROUND) for v in endmembers[c]] for c in arch_cols},
+        **alliance_arrays(year, list(endmembers.index), amap),
+    }
+    std_df = _loading_std(endmembers, sweep, meta)
+    if std_df is not None:
+        loadings_payload["std"] = {
+            c: [_round(v, ARCH_ROUND) for v in std_df[c]] for c in arch_cols
+        }
+    write(f"loadings/{year}.json", loadings_payload)
+
+    # --- sweep detail per p (comparison tab) ---
+    for p, entry in sweep.items():
+        arch_counts.add(p)  # the comparison tab colors p-archetype loadings
+        arch_cols_p = [f"arch_{j}" for j in range(p)]
+        lm, ls = entry["loadings_mean"], entry["loadings_std"]
+        level_stats = load_level_stats(cfg, p, method)  # precomputed by run_sweep.py
+        sw = {
+            "year": year,
+            "p": p,
+            "candidates": [short[c] for c in lm.index],
+            "arch_cols": arch_cols_p,
+            "loadings_mean": {
+                c: [_round(v, ARCH_ROUND) for v in lm[c]] for c in arch_cols_p
+            },
+            "loadings_std": {
+                c: [_round(v, ARCH_ROUND) for v in ls[c]] for c in arch_cols_p
+            },
+            **alliance_arrays(year, list(lm.index), amap),
+            "levels": {},
+        }
+        for level in LEVELS:
+            lvl = {}
+            for weighted in WEIGHTINGS:
+                mean_recs, std_recs = sweep_records(
+                    level_stats,
+                    arch_cols_p,
+                    level,
+                    weighted,
+                    provinces,
+                    municipalities,
+                )
+                lvl[w_tag(weighted)] = {"mean": mean_recs, "std": std_recs}
+            sw["levels"][level] = lvl
+        write(f"sweep/{year}_p{p}.json", sw)
+
+    # --- archetype lineage across the whole sweep (comparison network) ---
+    if len(sweep) > 1:
+        write(f"lineage/{year}.json", build_lineage(year, sweep, short))
+
+    return {
+        "n_archetypes": n_arch,
+        "candidate_labels": [short[c] for c in endmembers.index],
+        "rmse": meta.get("rmse"),
+        "sweep_ps": sorted(sweep),
+    }
+
+
+def build(out: Path, verify: bool, methods: list[str] | None = None) -> None:
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
@@ -623,8 +776,7 @@ def build(out: Path, verify: bool) -> None:
 
     sizes: dict[str, int] = {}
     arch_counts: set[int] = set()
-    years_meta: dict[str, dict] = {}
-    muni_gdfs: list = []  # per-year matched municipal geometries (deduped later)
+    geo = {"muni_gdfs": []}  # per-year matched municipal geometries (deduped later)
 
     # Province geometry is shared across years (full shapefile, left-joined).
     sizes["geo/province.geojson"] = write_geojson(
@@ -636,122 +788,38 @@ def build(out: Path, verify: bool) -> None:
 
     amap = load_alliance_map()
 
-    for year in YEARS:
-        cfg = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
-        endmembers, abundances, meta = load_processed(cfg)
-        arch_cols = list(endmembers.columns)
-        n_arch = len(arch_cols)
-        arch_counts.add(n_arch)
-        sweep = load_sweep(cfg)
-        short = short_labels(
-            dict.fromkeys(
-                [*endmembers.index, *(c for e in sweep.values() for c in e["loadings_mean"].index)]
+    methods_meta: dict[str, dict] = {}
+    for method, label in METHODS.items():
+        if methods and method not in methods:
+            continue
+        print(f"== {label} ==")
+        years_meta: dict[str, dict] = {}
+        for year in YEARS:
+            entry = bake_year(
+                year,
+                method,
+                out,
+                provinces,
+                municipalities,
+                amap,
+                sizes,
+                arch_counts,
+                geo if method == "mvsa" else None,
             )
-        )
-
-        # --- per-(level, weighting) value tables + per-year geometry ---
-        region_geo_written = muni_geo_written = False
-        for level in LEVELS:
-            for weighted in WEIGHTINGS:
-                agg = build_level_agg(abundances, level, weighted)
-                gdf, key_col = join_agg_to_boundaries(
-                    abundances, agg, level, weighted, provinces, municipalities
-                )
-                recs = records_from_gdf(gdf, key_col, arch_cols)
-                payload = {
-                    "year": year,
-                    "level": level,
-                    "weighted": weighted,
-                    "arch_cols": arch_cols,
-                    "records": recs,
-                }
-                rel = f"values/{year}_{level}_{w_tag(weighted)}.json"
-                sizes[rel] = dump_json(payload, out / rel)
-
-                # geometry (year-specific for region/municipality) — write once,
-                # from the weighted pass (geometry is weighting-independent).
-                if weighted and level == "region" and not region_geo_written:
-                    sizes[f"geo/{year}_region.geojson"] = write_geojson(
-                        gdf, key_col, level, out / "geo" / f"{year}_region.geojson"
-                    )
-                    region_geo_written = True
-                if weighted and level == "municipality" and not muni_geo_written:
-                    # Polygons are identical per MUNI_ID across years, so the
-                    # geometry is pooled and written once (see below) instead of
-                    # one ~1.4 MB file per year.
-                    muni_gdfs.append(gdf[["PROV_KEY", "CITY_MUNICIPALITY", "geometry"]])
-                    muni_geo_written = True
-
-        # --- endmember loadings + sweep-trial std for the overview tab ---
-        loadings_payload = {
-            "candidates": [short[c] for c in endmembers.index],
-            "arch_cols": arch_cols,
-            "mean": {
-                c: [_round(v, ARCH_ROUND) for v in endmembers[c]] for c in arch_cols
-            },
-            **alliance_arrays(year, list(endmembers.index), amap),
-        }
-        std_df = _loading_std(endmembers, sweep, meta)
-        if std_df is not None:
-            loadings_payload["std"] = {
-                c: [_round(v, ARCH_ROUND) for v in std_df[c]] for c in arch_cols
+            if entry is not None:
+                years_meta[year] = entry
+        if years_meta:
+            methods_meta[method] = {
+                "label": label,
+                "base": "" if method == "mvsa" else method,
+                "years": [y for y in YEARS if y in years_meta],
+                "years_meta": years_meta,
             }
-        sizes[f"loadings/{year}.json"] = dump_json(
-            loadings_payload, out / "loadings" / f"{year}.json"
-        )
-
-        # --- sweep detail per p (comparison tab) ---
-        for p, entry in sweep.items():
-            arch_counts.add(p)  # the comparison tab colors p-archetype loadings
-            arch_cols_p = [f"arch_{j}" for j in range(p)]
-            lm, ls = entry["loadings_mean"], entry["loadings_std"]
-            level_stats = load_level_stats(cfg, p)  # precomputed by run_sweep.py
-            sw = {
-                "year": year,
-                "p": p,
-                "candidates": [short[c] for c in lm.index],
-                "arch_cols": arch_cols_p,
-                "loadings_mean": {
-                    c: [_round(v, ARCH_ROUND) for v in lm[c]] for c in arch_cols_p
-                },
-                "loadings_std": {
-                    c: [_round(v, ARCH_ROUND) for v in ls[c]] for c in arch_cols_p
-                },
-                **alliance_arrays(year, list(lm.index), amap),
-                "levels": {},
-            }
-            for level in LEVELS:
-                lvl = {}
-                for weighted in WEIGHTINGS:
-                    mean_recs, std_recs = sweep_records(
-                        level_stats,
-                        arch_cols_p,
-                        level,
-                        weighted,
-                        provinces,
-                        municipalities,
-                    )
-                    lvl[w_tag(weighted)] = {"mean": mean_recs, "std": std_recs}
-                sw["levels"][level] = lvl
-            rel = f"sweep/{year}_p{p}.json"
-            sizes[rel] = dump_json(sw, out / rel)
-
-        # --- archetype lineage across the whole sweep (comparison network) ---
-        if len(sweep) > 1:
-            sizes[f"lineage/{year}.json"] = dump_json(
-                build_lineage(year, sweep, short), out / "lineage" / f"{year}.json"
-            )
-
-        years_meta[year] = {
-            "n_archetypes": n_arch,
-            "candidate_labels": [short[c] for c in endmembers.index],
-            "rmse": meta.get("rmse"),
-            "sweep_ps": sorted(sweep),
-        }
 
     # --- shared municipality geometry (union across years) ---
     import geopandas as gpd
 
+    muni_gdfs = geo["muni_gdfs"]
     pooled = gpd.GeoDataFrame(
         pd.concat(muni_gdfs, ignore_index=True),
         geometry="geometry",
@@ -772,19 +840,30 @@ def build(out: Path, verify: bool) -> None:
         "value_kinds": VALUE_KINDS,
         "weightings": [w_tag(w) for w in WEIGHTINGS],
         "theme": theme_payload(arch_counts),
-        "years_meta": years_meta,
+        # extraction method -> {label, base (data subdir, "" = top level),
+        # years (those with data), years_meta}
+        "default_method": "mvsa",
+        "methods": methods_meta,
     }
     sizes["manifest.json"] = dump_json(manifest, out / "manifest.json")
 
     # --- pre-baked compare-tab diagnostics (see PREBAKED) ---
+    # data/<sub>/*.json (MVSA) -> <out>/<sub>/, data/<sub>/<method>/*.json ->
+    # <out>/<method>/<sub>/, mirroring method_dir.
     for sub, script in PREBAKED.items():
-        files = sorted((REPO_ROOT / "data" / sub).glob("*.json"))
-        if not files:
-            print(f"WARNING: data/{sub}/ is empty — run {script} first")
-        for f in files:
-            (out / sub).mkdir(exist_ok=True)
-            shutil.copyfile(f, out / sub / f.name)
-            sizes[f"{sub}/{f.name}"] = f.stat().st_size
+        for method in methods_meta:
+            src = REPO_ROOT / "data" / sub
+            if method != "mvsa":
+                src = src / method
+            files = sorted(src.glob("*.json"))
+            if not files:
+                flag = "" if method == "mvsa" else f" --method {method}"
+                print(f"WARNING: {src.relative_to(REPO_ROOT)}/ is empty — run {script}{flag} first")
+            dest = method_dir(out, method) / sub
+            for f in files:
+                dest.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(f, dest / f.name)
+                sizes[str((dest / f.name).relative_to(out))] = f.stat().st_size
 
     total = sum(sizes.values())
     print(f"Wrote {len(sizes)} files to {out} ({total / 1e6:.2f} MB total)")
@@ -792,7 +871,7 @@ def build(out: Path, verify: bool) -> None:
         print(f"  {sizes[rel] / 1e3:8.1f} KB  {rel}")
 
     if verify:
-        _verify(out, provinces, municipalities)
+        _verify(out, provinces, municipalities, methods_meta)
 
 
 def _loading_std(endmembers, sweep, meta):
@@ -811,28 +890,30 @@ def _loading_std(endmembers, sweep, meta):
     return std_aligned
 
 
-def _verify(out: Path, provinces, municipalities) -> None:
+def _verify(out: Path, provinces, municipalities, methods_meta: dict) -> None:
     """Spot-check baked values against a fresh in-process aggregation."""
     print("\n== verify ==")
     ok = True
-    for year in YEARS:
-        cfg = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
-        _, abundances, _ = load_processed(cfg)
-        for level in LEVELS:
-            for weighted in WEIGHTINGS:
-                agg = build_level_agg(abundances, level, weighted)
-                gdf, key_col = join_agg_to_boundaries(
-                    abundances, agg, level, weighted, provinces, municipalities
-                )
-                recs = records_from_gdf(
-                    gdf, key_col, [c for c in agg if c.startswith("arch_")]
-                )
-                baked = json.loads(
-                    (out / f"values/{year}_{level}_{w_tag(weighted)}.json").read_text()
-                )["records"]
-                if recs != baked:
-                    ok = False
-                    print(f"  MISMATCH {year} {level} {w_tag(weighted)}")
+    for method, mm in methods_meta.items():
+        for year in mm["years"]:
+            cfg = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
+            _, abundances, _ = load_processed(cfg, method)
+            root = method_dir(out, method)
+            for level in LEVELS:
+                for weighted in WEIGHTINGS:
+                    agg = build_level_agg(abundances, level, weighted)
+                    gdf, key_col = join_agg_to_boundaries(
+                        abundances, agg, level, weighted, provinces, municipalities
+                    )
+                    recs = records_from_gdf(
+                        gdf, key_col, [c for c in agg if c.startswith("arch_")]
+                    )
+                    baked = json.loads(
+                        (root / f"values/{year}_{level}_{w_tag(weighted)}.json").read_text()
+                    )["records"]
+                    if recs != baked:
+                        ok = False
+                        print(f"  MISMATCH {method} {year} {level} {w_tag(weighted)}")
     print(
         "  all baked value tables reproduce the in-process aggregation"
         if ok
@@ -846,10 +927,22 @@ def main() -> None:
         "--out", default="site/data", help="output dir (default: site/data)"
     )
     ap.add_argument("--verify", action="store_true", help="spot-check baked values")
+    ap.add_argument(
+        "--methods",
+        nargs="+",
+        choices=list(METHODS),
+        default=None,
+        help="extraction methods to bake (default: all; mvsa is always needed "
+        "for the shared geometry)",
+    )
     args = ap.parse_args()
+    if args.methods and "mvsa" not in args.methods:
+        ap.error("--methods must include mvsa (it writes the shared geometry)")
     target = Path(args.out)
     build(
-        target if target.is_absolute() else (REPO_ROOT / target).resolve(), args.verify
+        target if target.is_absolute() else (REPO_ROOT / target).resolve(),
+        args.verify,
+        args.methods,
     )
 
 
