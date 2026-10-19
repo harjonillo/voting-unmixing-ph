@@ -12,6 +12,20 @@ from src.config import data_path
 if TYPE_CHECKING:
     from src.data.preprocessing import PreprocessedData
 
+# Committed abundance tables keep archetype columns at this many decimals (what
+# the site bakes anyway; see scripts/build_static.py:ARCH_ROUND) and are
+# zstd-compressed: full float64 noise barely compresses, rounded values do (~3x).
+ARCH_DECIMALS = 4
+PARQUET_COMPRESSION = "zstd"
+
+
+def round_arch(df: pd.DataFrame, decimals: int = ARCH_DECIMALS) -> pd.DataFrame:
+    """Copy of `df` with its ``arch_*`` columns rounded to `decimals`."""
+    out = df.copy()
+    cols = [c for c in out.columns if str(c).startswith("arch_")]
+    out[cols] = out[cols].round(decimals)
+    return out
+
 
 def load_complete(config: configparser.ConfigParser) -> pd.DataFrame:
     """Load the per-clustered-precinct results table (geography + stats + votes).
@@ -55,7 +69,8 @@ def save_processed(
 
     - endmembers.csv    candidates (rows, labelled) x archetypes
     - abundances.parquet  one row per precinct: geography/info columns + one
-      column per archetype ("arch_0", ...) — row-aligned by construction
+      column per archetype ("arch_0", ...) — row-aligned by construction;
+      archetype columns rounded to ``ARCH_DECIMALS``
     - meta.json         parameters + fit metrics
 
     Parameters
@@ -99,7 +114,9 @@ def save_processed(
     df_ab = pre.df_geo.reset_index(drop=True).copy()
     for j, col in enumerate(arch_cols):
         df_ab[col] = abundances[j, :]
-    df_ab.to_parquet(out / "abundances.parquet", index=False)
+    round_arch(df_ab).to_parquet(
+        out / "abundances.parquet", index=False, compression=PARQUET_COMPRESSION
+    )
 
     with open(out / "meta.json", "w") as f:
         json.dump(meta, f, indent=2, default=str)
@@ -147,6 +164,7 @@ def load_sweep(
     config: configparser.ConfigParser,
     full_resolution: bool = False,
     method: str = "mvsa",
+    include_trials: bool = False,
 ) -> Dict[int, dict]:
     """Load the endmember-count sweep written by ``scripts/run_sweep.py``.
 
@@ -159,14 +177,18 @@ def load_sweep(
         (``abundances_ref``), which are much larger than the aggregates.
     method : str, default "mvsa"
         Extraction method whose sweep to read (``run_sweep.py --method``).
+    include_trials : bool, default False
+        Also load the per-trial municipality aggregates (``agg_trials``).
+        That file is local-only (gitignored, ~10x the rest of the sweep), so
+        a fresh checkout doesn't have it; re-run run_sweep.py to regenerate.
 
     Returns
     -------
     dict of {int: dict}
         Keyed by endmember count p. Each entry has ``loadings_mean`` and
         ``loadings_std`` ((L, p) DataFrames indexed by candidate, one
-        column per archetype), ``agg_trials`` (per-trial municipality
-        aggregates), ``meta`` (dict), and — when `full_resolution` —
+        column per archetype), ``meta`` (dict), ``agg_trials`` (per-trial
+        municipality aggregates) when `include_trials`, and — when `full_resolution` —
         ``abundances_ref`` (one row per precinct, one column per
         archetype). Empty dict if the sweep has not been run.
     """
@@ -190,8 +212,11 @@ def load_sweep(
             "loadings_std": pd.read_csv(
                 sub / "loadings_std.csv", index_col="candidate"
             ),
-            "agg_trials": pd.read_parquet(sub / "agg_municipality_trials.parquet"),
         }
+        if include_trials:
+            entry["agg_trials"] = pd.read_parquet(
+                sub / "agg_municipality_trials.parquet"
+            )
         with open(sub / "meta.json") as f:
             entry["meta"] = json.load(f)
         if full_resolution:

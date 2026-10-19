@@ -8,6 +8,11 @@ similarity, reference = lowest-RMSE trial), and write per-p artifacts under
     loadings_mean.csv / loadings_std.csv   consensus loadings (aligned)
     agg_municipality_trials.parquet        per-trial ballot-weighted mean
                                            abundance per municipality
+                                           (local only: gitignored, ~10x
+                                           the rest of the sweep)
+    level_stats.parquet                    per-level trial mean/std (what
+                                           the site build reads; archetype
+                                           columns rounded to ARCH_DECIMALS)
     abundances_ref.parquet                 reference trial, full precinct
                                            resolution (geography + arch cols)
     meta.json                              seeds, rmse_trials, stability, ...
@@ -40,6 +45,7 @@ from joblib import Parallel, delayed
 
 from src.config import load_config, method_path
 from src.data import load_complete
+from src.data.loading import PARQUET_COMPRESSION, round_arch
 from src.data.preprocessing import preprocess_from_config
 from src.unmixing import (
     METHODS,
@@ -250,8 +256,8 @@ def main():
         agg_trials.to_parquet(out / "agg_municipality_trials.parquet", index=False)
         # Per-level trial mean/std the site build serializes (so build_static.py
         # reads these instead of re-aggregating the trials itself).
-        level_stats_from_trials(agg_trials, arch_cols).to_parquet(
-            out / "level_stats.parquet", index=False
+        round_arch(level_stats_from_trials(agg_trials, arch_cols)).to_parquet(
+            out / "level_stats.parquet", index=False, compression=PARQUET_COMPRESSION
         )
         df_ref.to_parquet(out / "abundances_ref.parquet", index=False)
         with open(out / "meta.json", "w") as f:
