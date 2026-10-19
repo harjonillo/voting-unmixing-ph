@@ -1,4 +1,4 @@
-from .endmember_extraction import nfindr, vca, mvsa
+from .endmember_extraction import nfindr, vca, mvsa, nmf
 from .abundance_estimation import ucls, fcls, hyperFcls, sunsal_mod
 from .est_noise import est_noise
 from .hysime import hysime
@@ -11,12 +11,14 @@ from .matching import (
     relabel_density_to_reference,
 )
 from .metrics import resolution
+from .methods import METHODS, method_params, extract_endmembers
 
 __all__ = [
     # Endmember extraction
     "nfindr",
     "vca",
     "mvsa",
+    "nmf",
     # Abundance estimation
     "ucls",
     "fcls",
@@ -37,4 +39,8 @@ __all__ = [
     "relabel_density_to_reference",
     # Metrics
     "resolution",
+    # Method switch (MVSA / NMF) shared by the pipeline scripts
+    "METHODS",
+    "method_params",
+    "extract_endmembers",
 ]
