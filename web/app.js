@@ -118,8 +118,15 @@ function choropleth(divId, geo, records, colorFn, discrete) {
   Plotly.react(divId, [trace], layout, PLOTLY_CFG);
 }
 
+// Overlay for NMF's deterministic NNDSVD-initialized run on the (random-init)
+// loadings bars: dark circles joined bar-to-bar by a dotted line, so it reads
+// apart from the bars' error whiskers.
+const NNDSVD_COLOR = "#1f2937";
+const NNDSVD_CAPTION = " Dark dots (dotted line): the deterministic NNDSVD-initialized" +
+  " run, archetypes matched to the random-init trials.";
+
 function loadingsGrid(divId, payload, arch_cols, nArch, topN, title) {
-  // payload: {candidates, mean:{arch:[...]}, std?:{arch:[...]}}
+  // payload: {candidates, mean:{arch:[...]}, std?:{arch:[...]}, nndsvd?:{arch:[...]}}
   const host = document.getElementById(divId);
   host.innerHTML = "";
   if (title) {
@@ -145,7 +152,19 @@ function loadingsGrid(divId, payload, arch_cols, nArch, topN, title) {
       marker: { color: archColor(c, nArch) },
     };
     if (std) trace.error_x = { type: "data", array: order.map((o) => std[o[2]]), visible: true };
-    Plotly.react(cell, [trace], {
+    const traces = [trace];
+    if (payload.nndsvd) {
+      const nn = payload.nndsvd[c];
+      traces.push({
+        type: "scatter", mode: "lines+markers", name: "NNDSVD",
+        x: order.map((o) => nn[o[2]]), y: order.map((o) => o[1]),
+        line: { color: NNDSVD_COLOR, width: 1.2, dash: "dot" },
+        marker: { color: NNDSVD_COLOR, size: 6, line: { color: "#ffffff", width: 1 } },
+        hovertemplate: "%{y}<br>NNDSVD %{x}<extra></extra>",
+      });
+    }
+    Plotly.react(cell, traces, {
+      showlegend: false,
       title: { text: archLabel(c) }, height: Math.max(300, 24 * topN),
       margin: { l: 4, r: 4, t: 34, b: 40 }, paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
@@ -347,9 +366,10 @@ async function renderMap() {
   }
   choropleth("map-plot", geo, vals.records, colorFn, discrete);
 
-  const cap = loadings.std
+  const cap = (loadings.std
     ? "Error bars: 1 SD across the sweep's trials at this archetype count."
-    : "Run the sweep for this year to add trial-based error bars.";
+    : "Run the sweep for this year to add trial-based error bars.") +
+    (loadings.nndsvd ? NNDSVD_CAPTION : "");
   loadingsGrid("map-loadings", loadings, cols, nArch, state.topN,
     `Candidate weights per endmember (${methodLabel()}, national-level). ` + cap);
 
@@ -675,8 +695,10 @@ async function renderCompare() {
     { colorscale: MANIFEST.theme.sequential });
 
   loadingsGrid("cmp-loadings",
-    { candidates: sweep.candidates, mean: sweep.loadings_mean, std: sweep.loadings_std },
-    cols, p, state.cmp.topN, "Loadings (mean ± 1 SD over trials) at p = " + p);
+    { candidates: sweep.candidates, mean: sweep.loadings_mean, std: sweep.loadings_std,
+      nndsvd: sweep.loadings_nndsvd },
+    cols, p, state.cmp.topN, "Loadings (mean ± 1 SD over trials) at p = " + p + "." +
+    (sweep.loadings_nndsvd ? NNDSVD_CAPTION : ""));
 
   const cgb = state.cmp.groupBy;
   partylistMixing("cmp-partylist", "cmp-partylist-table",

@@ -26,6 +26,8 @@ scripts/
   run_sweep.py          multi-trial sweep over p = p_min..p_max (error bars,
                         stability, lineage) -> data/processed/sweep/p{p}/
                         (--method nmf as above)
+  run_nndsvd.py         deterministic NNDSVD-init NMF run per p, aligned to the
+                        NMF sweep (overlaid on the NMF loadings bars)
   fetch_boundaries.py   downloads municipal boundaries (GADM, optional)
   build_static.py       bakes data/processed -> site/data JSON + GeoJSON
   build_site.py         renders the static FastHTML site shell (site/index.html)
@@ -55,6 +57,9 @@ Each of `run_pipeline.py`, `run_sweep.py`, `bake_distinctness.py` and
 `bake_order_sensitivity.py` takes `--method nmf` to use NMF endmembers
 (notebook 10; non-negative loadings) instead of MVSA — abundances are SUNSAL
 either way. The site's sidebar switches between the two.
+`run_nndsvd.py --config ...` (after the NMF sweep) adds the deterministic
+NNDSVD-initialized NMF result, drawn as dotted-line dots over the random-init
+trials' loadings bars.
 
 Then build the static site (see **Web deployment** below) to explore the results.
 
@@ -103,6 +108,8 @@ change. `site/` is generated (gitignored) and rebuilt in CI from the committed
 | `05_model_comparison` | RMSE/stability vs p, archetype lineage, loadings ± std over trials |
 | `06_candidate_sensitivity` | how archetypes shift when each top candidate's row is dropped and the pipeline re-run |
 | `07_cross_year_sanity_checks` | side-by-side per-year summary stats (counts, turnout, top vote-getters) to sanity-check the inputs |
+| `10_nmf_nndsvd_init` | deterministic NNDSVD-init NMF vs the random-init sweep: frozen zeros under `mu`, fit and archetype agreement, `nndsvda`/`nndsvdar`/`cd` alternatives |
+| `11_pure_precincts` | "pure pixel" precincts: top-12/15/18 vote concentration vs chance, identical-ballot bound, where they are, which slates, and where they sit in the MVSA/NMF simplex |
 
 ## Notes
 
@@ -111,3 +118,11 @@ change. `site/` is generated (gitignored) and rebuilt in CI from the committed
   render correctly despite the older shapefiles.
 - Normalization of the vote matrix is configurable
   (`[preprocessing] normalization`): `valid_ballots` (default), `row_max`, `none`.
+- **NMF with NNDSVD initialization (`run_nndsvd.py`): caveat for the paper.**
+  With the KL loss, sklearn only offers the multiplicative-update (`mu`) solver,
+  which can never move entries that start at 0. So 18–45% of the NNDSVD loadings
+  stay pinned at the init's zeros, and its RMSE is 1–7% above the random-init
+  trials' mean. The archetypes still largely agree with the random-init
+  consensus. Filling the zeros first (`--init nndsvda`) removed the fit penalty
+  in the 2016 test.
+  Details, numbers and the rerunnable comparison: `notebooks/10_nmf_nndsvd_init`.

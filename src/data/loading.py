@@ -188,7 +188,10 @@ def load_sweep(
         Keyed by endmember count p. Each entry has ``loadings_mean`` and
         ``loadings_std`` ((L, p) DataFrames indexed by candidate, one
         column per archetype), ``meta`` (dict), ``agg_trials`` (per-trial
-        municipality aggregates) when `include_trials`, and — when `full_resolution` —
+        municipality aggregates) when `include_trials`, ``loadings_nndsvd`` /
+        ``nndsvd_meta`` (the deterministic NNDSVD run, columns aligned to
+        ``loadings_mean``) when ``scripts/run_nndsvd.py`` has written them,
+        and — when `full_resolution` —
         ``abundances_ref`` (one row per precinct, one column per
         archetype). Empty dict if the sweep has not been run.
     """
@@ -219,6 +222,13 @@ def load_sweep(
             )
         with open(sub / "meta.json") as f:
             entry["meta"] = json.load(f)
+        # deterministic NNDSVD run aligned to loadings_mean (run_nndsvd.py; NMF only)
+        if (sub / "nndsvd_loadings.csv").exists():
+            entry["loadings_nndsvd"] = pd.read_csv(
+                sub / "nndsvd_loadings.csv", index_col="candidate"
+            )
+            with open(sub / "nndsvd_meta.json") as f:
+                entry["nndsvd_meta"] = json.load(f)
         if full_resolution:
             entry["abundances_ref"] = pd.read_parquet(sub / "abundances_ref.parquet")
         out[p] = entry

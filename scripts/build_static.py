@@ -18,8 +18,10 @@ What it writes under ``--out`` (default ``site/data``)::
                                        province->region map, id = REGION.
     values/{year}_{level}_{w|u}.json   one record per unit: arch_* means,
                                        dominant (post-join), turnout, counts.
-    loadings/{year}.json               endmember loadings (mean) + sweep-trial std.
-    sweep/{year}_p{p}.json             per-p loadings mean/std + level stats
+    loadings/{year}.json               endmember loadings (mean) + sweep-trial std
+                                       (+ NMF only: the NNDSVD run's loadings).
+    sweep/{year}_p{p}.json             per-p loadings mean/std (+ NMF only: the
+                                       NNDSVD run's) + level stats
                                        (trial mean/std) for the comparison tab.
     lineage/{year}.json                network nodes/links tracing how archetypes
                                        persist/split as p grows across the sweep
@@ -58,13 +60,16 @@ configs/config_{year}.ini; rerun them after changing a year's data or its
 
 NMF counterparts come from the same scripts with ``--method nmf`` (outputs
 under data/processed/<year>/nmf/, data/distinctness/nmf/,
-data/order_sensitivity/nmf/).
+data/order_sensitivity/nmf/). The NMF loadings bars also overlay the
+deterministic NNDSVD-initialized run when ``scripts/run_nndsvd.py`` has
+written it next to the NMF sweep (optional; skipped silently otherwise).
 
 Run from the repo root:
     python scripts/bake_distinctness.py        # prerequisite (~1 min/year)
     python scripts/bake_order_sensitivity.py   # prerequisite (~5 min/year)
     python scripts/bake_distinctness.py --method nmf       # NMF prerequisites
     python scripts/bake_order_sensitivity.py --method nmf
+    python scripts/run_nndsvd.py --config configs/config_{year}.ini  # optional
     python scripts/build_static.py --out site/data
 """
 
@@ -708,10 +713,14 @@ def bake_year(
         "mean": {c: [_round(v, ARCH_ROUND) for v in endmembers[c]] for c in arch_cols},
         **alliance_arrays(year, list(endmembers.index), amap),
     }
-    std_df = _loading_std(endmembers, sweep, meta)
+    std_df, nndsvd_df = _loadings_from_sweep(endmembers, sweep, meta)
     if std_df is not None:
         loadings_payload["std"] = {
             c: [_round(v, ARCH_ROUND) for v in std_df[c]] for c in arch_cols
+        }
+    if nndsvd_df is not None:
+        loadings_payload["nndsvd"] = {
+            c: [_round(v, ARCH_ROUND) for v in nndsvd_df[c]] for c in arch_cols
         }
     write(f"loadings/{year}.json", loadings_payload)
 
@@ -735,6 +744,12 @@ def bake_year(
             **alliance_arrays(year, list(lm.index), amap),
             "levels": {},
         }
+        if "loadings_nndsvd" in entry:  # NMF only (run_nndsvd.py), aligned to lm
+            ln = entry["loadings_nndsvd"].reindex(lm.index)
+            sw["loadings_nndsvd"] = {
+                c: [_round(v, ARCH_ROUND) for v in ln[c]] for c in arch_cols_p
+            }
+            sw["nndsvd_meta"] = entry["nndsvd_meta"]
         for level in LEVELS:
             lvl = {}
             for weighted in WEIGHTINGS:
@@ -874,20 +889,32 @@ def build(out: Path, verify: bool, methods: list[str] | None = None) -> None:
         _verify(out, provinces, municipalities, methods_meta)
 
 
-def _loading_std(endmembers, sweep, meta):
-    """Per-loading std borrowed from the sweep, aligned to the single fit
-    (per-candidate std of the loading across the sweep's trials)."""
+def _loadings_from_sweep(endmembers, sweep, meta):
+    """(std, nndsvd) loadings borrowed from the sweep at the single fit's p,
+    aligned to the single fit: the per-candidate std of the loading across the
+    sweep's trials, and the deterministic NNDSVD run's loadings (NMF only;
+    None when absent). Both share the sweep mean's column order, so one
+    Hungarian match of the mean onto the fit aligns them. (None, None) when the
+    sweep lacks that p or its candidates."""
     entry = sweep.get(meta["n_archetypes"])
     if entry is None:
-        return None
+        return None, None
     mean = entry["loadings_mean"].reindex(endmembers.index)
     std = entry["loadings_std"].reindex(endmembers.index)
     if mean.isna().any().any() or std.isna().any().any():
-        return None
+        return None, None
     perm, _ = match_to_reference(endmembers.to_numpy(), mean.to_numpy())
-    std_aligned = std.iloc[:, perm]
-    std_aligned.columns = endmembers.columns
-    return std_aligned
+
+    def aligned(df):
+        df = df.iloc[:, perm]
+        df.columns = endmembers.columns
+        return df
+
+    nndsvd = entry.get("loadings_nndsvd")
+    if nndsvd is not None:
+        nndsvd = nndsvd.reindex(endmembers.index)
+        nndsvd = None if nndsvd.isna().any().any() else aligned(nndsvd)
+    return aligned(std), nndsvd
 
 
 def _verify(out: Path, provinces, municipalities, methods_meta: dict) -> None:
