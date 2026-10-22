@@ -1,0 +1,55 @@
+name: Deploy static site to Cloudflare Pages
+
+# Same build as the GitHub Pages workflow (bake JSON + GeoJSON, render the
+# FastHTML shell into site/), then upload site/ to Cloudflare Pages with
+# Wrangler ("Direct Upload"). Access control is configured on the Cloudflare
+# side (Cloudflare Access), not here.
+#
+# Needs two repository secrets:
+#   CLOUDFLARE_API_TOKEN   custom token with  Account · Cloudflare Pages · Edit
+#   CLOUDFLARE_ACCOUNT_ID  your Cloudflare account ID
+# and a Pages project named voting-unmixing-ph (create it once, see README).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: cloudflare-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install build dependencies
+        run: pip install -r requirements.txt python-fasthtml
+
+      # --verify fails the build if the baked tables drift from a fresh
+      # in-process aggregation.
+      - name: Bake the dataset
+        run: python scripts/build_static.py --out site/data --verify
+
+      - name: Render the FastHTML shell
+        run: python scripts/build_site.py --out site
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site --project-name=voting-unmixing-ph --branch=main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

@@ -179,12 +179,22 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--ink); margin: 
   flex: none;
 }
 
+/* Inline controls share one height (a segmented track: 32px buttons + 2 × 3px
+ * padding), so labels above controls side by side line up. The select drops
+ * the native look (Safari ignores height on it) and draws its own chevron. */
+:root { --control-h: 38px; }
 select, .labeled input {
   font: inherit; font-size: var(--fs--1); color: var(--ink);
-  border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
-  padding: 5px 8px; min-height: 32px;
+  border: 1px solid var(--border); border-radius: 6px; background-color: var(--bg);
+  height: var(--control-h); padding: 0 10px; margin: 0;
 }
-.labeled input { width: 7rem; font-family: var(--font-mono); }
+select {
+  appearance: none; -webkit-appearance: none; padding-right: 30px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2352514e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center;
+}
+select:hover, .labeled input:hover { border-color: var(--hover-border); }
+.labeled input { width: 5rem; font-family: var(--font-mono); }
 .labeled { display: flex; flex-direction: column; gap: 4px; }
 
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
@@ -198,7 +208,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   letter-spacing: -0.01em;
 }
 .lede { margin: 0; color: var(--ink-2); max-width: 68ch; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; }
 
 .grid-32, .grid-23, .grid-2 { display: grid; gap: 16px; align-items: start; }
 .grid-32 { grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); }
@@ -221,11 +231,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .card-head-text { display: flex; flex-direction: column; gap: 4px; max-width: 60ch; }
 .card-title { margin: 0; font-size: var(--fs-1); font-weight: 600; line-height: 1.2; }
 .card-sub { margin: 0; font-size: var(--fs--1); color: var(--ink-muted); }
-.head-control { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.head-control { display: flex; align-items: center; gap: 8px; }
 
 /* --------------------------------------------------------------- map card */
 .fig-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-#map-plot, #cmp-plot { min-height: 560px; }
+#map-plot { min-height: 560px; }
+/* Plotly's map traces add MapLibre's compact attribution control (a <details>
+ * toggle) without MapLibre's CSS, so it shows as a bare disclosure triangle.
+ * MAP_VIEW's "white-bg" style loads no tiles, so there is nothing to credit;
+ * switching to a tile style would need this (and MapLibre's CSS) back. */
+.maplibregl-ctrl-attrib { display: none; }
 .map-foot {
   display: flex; flex-direction: column; gap: 10px;
   border-top: 1px solid var(--hairline-2); padding-top: 14px;
@@ -246,10 +261,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
 /* ---------------------------------------------------- loadings small multiples */
 .plot-stack { display: flex; flex-direction: column; gap: 20px; }
-.plot-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  column-gap: 28px; row-gap: 20px;
-}
 .plot-cell { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .plot-title {
   display: flex; align-items: center; gap: 8px;
@@ -298,3 +309,73 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .roster td.extra { padding-right: 0; color: var(--ink-2); font-size: var(--fs--2); }
 .roster .rank { font-family: var(--font-mono); font-size: var(--fs--2); color: var(--ink-muted); }
 .roster .also { color: var(--ink-muted); font-size: var(--fs--2); }
+
+/* -------------------------------------------------------- compare tab */
+.tab-panel.spaced { gap: 32px; }
+.tab-section { display: flex; flex-direction: column; gap: 16px; }
+.toolbar.center { align-items: center; }
+.card-head-text.wide { max-width: 90ch; }
+.grid-fit {
+  display: grid; gap: 16px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr));
+}
+.scroll-x { overflow-x: auto; }
+
+/* Legend rows under a figure (line / box samples + text). */
+.legend-rule, .legend-plain {
+  display: flex; flex-wrap: wrap; gap: 6px 24px; font-size: var(--fs--2); color: var(--ink-2);
+}
+.legend-rule { border-top: 1px solid var(--hairline-2); padding-top: 12px; gap: 8px 24px; }
+.legend-item { display: inline-flex; align-items: center; gap: 8px; }
+.legend-item.on { color: var(--ink); font-weight: 600; }
+.box-swatch {
+  display: inline-block; width: 12px; height: 12px; flex: none;
+  border: 1px solid #3a3936; border-radius: 2px;
+}
+.tag-sample { font-family: var(--font-mono); font-weight: 500; color: var(--ink-2); }
+.line-swatch { display: inline-block; width: 16px; flex: none; }
+
+/* Lineage network: absolutely positioned boxes over one SVG of links. */
+.lineage { position: relative; margin: 0 auto; }
+.lineage svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.lin-col {
+  position: absolute; top: 0; display: flex; flex-direction: column; align-items: center;
+}
+.lin-col .p { font-size: var(--fs--1); font-weight: 600; }
+.lin-col .d { font-family: var(--font-mono); font-size: var(--fs--2); color: var(--ink-muted); }
+.lin-col.anchor .d { color: var(--ink); }
+.lin-node {
+  position: absolute; padding: 5px 8px; background: var(--bg);
+  border: 1.5px solid; border-radius: 6px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.lin-node .l1 {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
+  font-size: var(--fs--1); font-weight: 600; line-height: 1.25;
+}
+.lin-node .l1 span:first-child, .lin-node .l2 {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lin-node .tag {
+  font-family: var(--font-mono); font-size: var(--fs--2); font-weight: 500; color: var(--ink-2);
+}
+.lin-node .l2 { font-size: var(--fs--2); color: var(--ink-2); line-height: 1.3; }
+.lin-label {
+  position: absolute; transform: translate(-50%, -50%);
+  font-family: var(--font-mono); font-size: var(--fs--2); color: #3a3936;
+  background: var(--bg); padding: 0 3px; border-radius: 3px; line-height: 1.3;
+}
+.lin-axis {
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+  font-size: var(--fs--2); color: var(--ink-muted);
+}
+
+/* ---------------------------------------------------- distributions tab */
+.dist-rows { display: flex; flex-direction: column; gap: 16px; }
+.dist-card { padding: 16px 20px 12px; gap: 8px; }
+/* histogram : loadings side by side; stacked when narrow */
+.dist-pair {
+  display: grid; gap: 12px 28px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+}
+.dist-pair .note { display: block; margin-bottom: 2px; }

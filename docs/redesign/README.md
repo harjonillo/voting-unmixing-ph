@@ -7,6 +7,8 @@ Target: the static site built by `scripts/build_site.py` (shell) and `web/app.js
 | file | what it is |
 |---|---|
 | `mockup-A.dc.html` | The agreed mockup of the **Map / overview** tab ("direction A"). |
+| `mockup-A-compare.dc.html` | **Model comparison** tab in the same style. |
+| `mockup-A-distributions.dc.html` | **Abundance distributions** tab in the same style. |
 | `type-scale.dc.html` | The type scale sheet (ratio 1.2). Only the Instrument Sans column applies. |
 
 Both files are design-canvas source, not production code. They use a small template format: markup inside `<x-dc>`, loops as `<sc-for list="{{...}}">`, conditionals as `<sc-if>`, and `{{holes}}` filled from `renderVals()` in the `<script type="text/x-dc">` block at the bottom. Read them as a spec. Rebuild the layout with FastHTML in `build_site.py` and the charts with Plotly in `app.js`. Don't copy the template syntax.
@@ -137,6 +139,53 @@ Cards: 1px `#e3e2dc` border, 10px radius, 20px padding, no shadow.
 
 The current build already has `sticky top-0 self-start max-h-screen overflow-y-auto` on the aside. If it does not stick, check for an ancestor with `overflow` other than `visible` first. Below 1024px the sidebar stacks above the content and is not sticky.
 
-## Out of scope for this pass
+## Model comparison tab (`mockup-A-compare.dc.html`)
 
-Model comparison and Abundance distributions tabs: apply the same tokens, fonts, palette and card style, but keep their layouts.
+Same header, sidebar and card style as Overview. The sidebar drops Top N and shows sweep facts instead: p range, trials per p, HySime k.
+
+Data in the mockup: the distinctness values and order-sensitivity box stats are real (`data/distinctness/2025.json`, `data/order_sensitivity/2025.json`), and so are the p = 5 loadings with SDs. I recomputed the lineage from the sweep's mean loadings (full-cosine Hungarian match p → p+1, plus the extra child linked to its closest parent), so it may differ slightly from the baked `lineage/2025.json`.
+
+### Controls (top of tab)
+
+Similarity metric (select), Column distance (Min / Mean segmented), Candidates per node (number). These drive the lineage and both diagnostics, as now.
+
+### Archetype lineage
+
+- One column per p. Above each column: `p = N` and `min d 0.xx` (mono). The column for the HySime k is in primary ink, the rest muted.
+- Nodes are fixed-width boxes (132px) with a 1.5px border in the archetype color, white fill, 6px radius. Line 1: top candidate in semibold plus a mono tag (`A1`, or `new`). Line 2: the next candidates joined with ` · `, muted.
+- Links are cubic Béziers from the right middle of the source box to the left middle of the target box:
+  - matched: solid, `rgba(58,57,54,0.42)`, width `1 + 5 × sim`
+  - split (new archetype's closest parent): 1.5px dashed `5 4`, `#3a3936`
+  - other pairs ≥ 0.35: 1px dotted `2 4`, `#b5b4ad`, no label
+- Similarity labels on matched and split links only: mono, small, white background.
+- **Color by lineage, anchored to the Overview run.** Match the sweep's archetypes at p = k (HySime k) to the main run's archetypes, give them the main run's colors, then propagate along matched links backwards to p = 2 and forwards to p_max. A node with no counterpart at p = k takes the next free slot (7th slot `#6250d6`). Past 8 slots, fold extra nodes into a neutral gray. This needs a small addition to the bake: a `color_slot` per lineage node.
+- A legend row under the figure explains the three link styles and the "no counterpart" color.
+- The figure is wider than a narrow screen: wrap it in an `overflow-x: auto` box.
+
+### Archetype distinctness vs p
+
+- The selected metric is a 2.5px line in primary ink with 8px point markers and a direct label at its right end. The other five metrics are 1.25px lines in `#c3c2b7`, unlabelled, and named in a legend row below.
+- A dashed vertical marker at p = HySime k, labelled `HySime k = 6`.
+- y fixed 0 to 1 with light gridlines, x = p.
+
+### Sensitivity to precinct order
+
+- Grouped box plot per p. The two arms are told apart by fill lightness, not hue, so they never read as archetypes: shuffled order `#6b6a65` fill with a white median; varying seed `#ecebe6` fill with a dark median. Both get a `#3a3936` outline.
+- Whiskers to 1.5 × IQR, outlier dots, and the mean as a small white diamond with a dark outline.
+- y range −0.1 to 1.0 (outliers go slightly below 0).
+
+### Archetypes at a chosen p
+
+- p as a segmented control (2 … 7), Map shows (Mean abundance / 1 SD across trials), archetype chips colored by lineage.
+- Then the same map : loadings grid (3fr : 2fr) as Overview, with both toggles. Then the same party/alliance matrix and candidate table as Overview (a placeholder in the mockup).
+
+## Abundance distributions tab (`mockup-A-distributions.dc.html`)
+
+The histogram shapes in the mockup are **placeholder**. Bin the real per-unit values from `values/{year}_{level}_{w}.json`.
+
+- Controls: X-axis (Fixed 0 to 1 / Per archetype), Y-axis (Count / Share of units), Bins (number, default 20; 40 bins over ~80 provinces leaves most bins empty).
+- Small multiples, one card per archetype in a `repeat(auto-fill, minmax(300px, 1fr))` grid. Bars in the archetype color with 2px gaps, plus light horizontal gridlines.
+- **Shared y-scale across all cards**, so heights compare directly.
+- A dashed median line labelled `median`. Hover on a bar: bin range and count.
+- A new card, **All archetypes on one axis**: one row per archetype on a shared 0 to 1 axis, with a jittered dot per unit (archetype color, 0.75 opacity), an outlined quartile box and a median tick. Hover on a dot: unit name and value.
+- The sidebar run summary shows the unit count at the current level.

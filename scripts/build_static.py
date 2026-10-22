@@ -125,6 +125,11 @@ LEVEL_LABELS = {
 }
 VALUE_KINDS = ["Archetype abundance", "Dominant archetype", "Turnout"]
 WEIGHTINGS = [True, False]  # ballot-weighted / plain mean
+# Default of the sidebar's archetype-count selector. Every tab shows the sweep's
+# trial mean at the selected p (per-level abundances, loadings ± 1 SD); years
+# without a sweep fall back to the main (HySime-k) run. Lineage colors (and so
+# archetype names and colors at every p) are anchored to the archetypes at this p.
+DEFAULT_P = 4
 
 BALLOT_COL = "information.numberOfValidBallot"
 VOTERS_COL = "information.numberOfActuallyVoters"
@@ -408,11 +413,14 @@ def dump_json(obj, path: Path) -> int:
 # ---------------------------------------------------------------------------
 
 
-# Fixed archetype palette: slot i = Archetype i at every p, never cycled (the
-# front-end falls back to a neutral gray past the last slot). Adjacent pairs pass
-# a colorblind-separation check; three slots are under 3:1 on white, so every
-# colored mark in the UI carries a text label.
-ARCH_PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+# Fixed archetype palette: slot i = Archetype i of the main run, never cycled
+# (the front-end falls back to a neutral gray past the last slot). The 7th slot
+# is for sweep archetypes with no counterpart in the main run (see
+# lineage_color_slots). Adjacent pairs pass a colorblind-separation check; three
+# slots are under 3:1 on white, so every colored mark in the UI carries a label.
+ARCH_PALETTE = [
+    "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6",
+]  # fmt: skip
 # Sequential ramp (light -> dark) for the abundance and turnout maps.
 SEQUENTIAL_RAMP = [
     "#e8f1fc", "#cde2fb", "#9ec5f4", "#6da7ec",
@@ -572,16 +580,70 @@ def _node_names(labels: list[str]) -> list[str]:
     return names
 
 
-def build_lineage(year: str, sweep: dict, short: dict[str, str]) -> dict:
+def lineage_color_slots(
+    ps: list[int], edges: list[dict], anchor: dict[int, int] | None, p_anchor: int
+) -> dict[tuple[int, int], int]:
+    """(p, k) -> palette slot, so an archetype keeps one color across the sweep.
+
+    At p_anchor, sweep archetype k takes the slot of its main-run counterpart
+    (`anchor`: sweep k -> main-run index; identity when None). Slots then follow
+    the Hungarian-matched links backwards to ps[0] (every archetype at p - 1 is
+    matched to one at p) and forwards to ps[-1], where each step's leftover
+    "split" child takes the next free slot."""
+    matched = {
+        (e["p_from"], e["k_from"]): (e["p_to"], e["k_to"]) for e in edges if not e["split"]
+    }
+    slots = {(p_anchor, k): (anchor or {}).get(k, k) for k in range(p_anchor)}
+    below = [p for p in ps if p < p_anchor][::-1]
+    for p in below:
+        for k in range(p):
+            child = matched.get((p, k))
+            slots[(p, k)] = slots[child] if child in slots else k
+    nxt = max(slots.values(), default=-1) + 1
+    for p_from, p_to in zip(ps, ps[1:]):
+        if p_to <= p_anchor:
+            continue
+        for k in range(p_from):
+            child = matched.get((p_from, k))
+            if child is not None:
+                slots[child] = slots[(p_from, k)]
+        for k in range(p_to):
+            if (p_to, k) not in slots:
+                slots[(p_to, k)] = nxt
+                nxt += 1
+    return slots
+
+
+def build_lineage(
+    year: str,
+    sweep: dict,
+    short: dict[str, str],
+    endmembers: pd.DataFrame | None = None,
+) -> dict:
     """Lineage network tracing how archetypes persist or split as p grows
     across the sweep. Independent of level/weighting — driven only by
-    loadings_mean. `short` maps full candidate labels to display labels."""
+    loadings_mean. `short` maps full candidate labels to display labels.
+    Each node's ``color_slot`` is anchored to the sweep's own columns at
+    DEFAULT_P when the sweep has it, else to the main run (`endmembers`)
+    matched onto the sweep at its p."""
     ps = sorted(sweep)
     mats = {p: sweep[p]["loadings_mean"].to_numpy() for p in ps}
-    lineage = {
-        (e["p_from"], e["k_from"], e["p_to"], e["k_to"]): e
-        for e in archetype_lineage(mats)
-    }
+    edges = archetype_lineage(mats)
+    lineage = {(e["p_from"], e["k_from"], e["p_to"], e["k_to"]): e for e in edges}
+
+    # Anchor at the sweep's columns at DEFAULT_P as they are, else the main run's
+    # p (Hungarian match of the sweep mean onto it, as in _loadings_from_sweep);
+    # with neither, colors start at ps[0].
+    p_anchor, anchor = ps[0], None
+    if DEFAULT_P in sweep:
+        p_anchor = DEFAULT_P
+    elif endmembers is not None and endmembers.shape[1] in sweep:
+        mean = sweep[endmembers.shape[1]]["loadings_mean"].reindex(endmembers.index)
+        if not mean.isna().any().any():
+            perm, _ = match_to_reference(endmembers.to_numpy(), mean.to_numpy())
+            p_anchor = endmembers.shape[1]
+            anchor = {int(k): i for i, k in enumerate(perm)}
+    slots = lineage_color_slots(ps, edges, anchor, p_anchor)
 
     node_index: dict[tuple[int, int], int] = {}
     nodes: list[dict] = []
@@ -595,6 +657,7 @@ def build_lineage(year: str, sweep: dict, short: dict[str, str]) -> dict:
                 {
                     "p": p,
                     "k": k,
+                    "color_slot": slots[(p, k)],
                     "label": _short_label(top.index[0]),
                     "top": [
                         {"name": nm, "full": short[c], "w": _round(w, ARCH_ROUND)}
@@ -624,6 +687,7 @@ def build_lineage(year: str, sweep: dict, short: dict[str, str]) -> dict:
     return {
         "year": year,
         "ps": ps,
+        "anchor_p": p_anchor,
         "nodes": nodes,
         "links": links,
     }
@@ -773,7 +837,7 @@ def bake_year(
 
     # --- archetype lineage across the whole sweep (comparison network) ---
     if len(sweep) > 1:
-        write(f"lineage/{year}.json", build_lineage(year, sweep, short))
+        write(f"lineage/{year}.json", build_lineage(year, sweep, short, endmembers))
 
     return {
         "n_archetypes": n_arch,
@@ -781,6 +845,13 @@ def bake_year(
         "rmse": meta.get("rmse"),
         "hysime_kf": meta.get("hysime_kf"),
         "sweep_ps": sorted(sweep),
+        "sweep_trials": next(
+            (e["meta"].get("n_trials") for e in sweep.values() if "meta" in e), None
+        ),
+        # mean reconstruction RMSE over the sweep's trials, per p
+        "sweep_rmse": {
+            str(p): e.get("meta", {}).get("rmse_mean") for p, e in sorted(sweep.items())
+        },
     }
 
 
@@ -863,6 +934,7 @@ def build(out: Path, verify: bool, methods: list[str] | None = None) -> None:
         # extraction method -> {label, base (data subdir, "" = top level),
         # years (those with data), years_meta}
         "default_method": "mvsa",
+        "default_p": DEFAULT_P,
         "methods": methods_meta,
     }
     sizes["manifest.json"] = dump_json(manifest, out / "manifest.json")

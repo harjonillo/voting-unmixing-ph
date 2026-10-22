@@ -61,6 +61,7 @@ from fasthtml.common import (
     Title,
     to_xml,
 )
+from fasthtml.svg import Path as SvgPath, Svg
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WEB = REPO_ROOT / "web"
@@ -113,11 +114,13 @@ def card(*content, cls: str = "") -> Div:
     return Div(*content, cls=f"card {cls}".strip())
 
 
-def card_head(title: str, sub: str | None = None, *controls, sub_id=None) -> Div:
+def card_head(
+    title: str, sub: str | None = None, *controls, sub_id=None, title_id=None
+) -> Div:
     """Card title + caption on the left, optional controls on the right."""
     return Div(
         Div(
-            H3(title, cls="card-title"),
+            H3(title, id=title_id, cls="card-title"),
             P(sub, id=sub_id, cls="card-sub") if (sub or sub_id) else None,
             cls="card-head-text",
         ),
@@ -152,6 +155,12 @@ def sidebar() -> Aside:
                 seg_group("method", "Endmember extraction", fill=True),
                 note="Abundances are SUNSAL for both",
             ),
+            # Every tab shows the sweep's trial mean at this p (app.js fills it).
+            field(
+                "Archetypes p",
+                seg_group("p", "Number of archetypes p", fill=True),
+                note="Sweep trial mean; names and colors follow the lineage",
+            ),
             Div(
                 Label("Top N candidates", fr="topN", cls="field-label"),
                 Div(
@@ -160,23 +169,129 @@ def sidebar() -> Aside:
                     Button("+", type="button", id="topN-inc", cls="step", aria_label="More"),
                     cls="stepper",
                 ),
+                id="topN-field",
                 cls="field",
             ),
             cls="side-group",
         ),
-        # Run summary for the selected year + method (filled from the manifest).
+        # Run summary for the selected year + method + tab (filled by app.js).
         Section(id="run-summary", cls="side-group summary"),
         cls="sidebar",
     )
 
 
+def section_head(title: str, lede: str | None = None, lede_id=None) -> Div:
+    return Div(
+        H2(title, cls="section-title"),
+        P(lede, id=lede_id, cls="lede"),
+        cls="section-head",
+    )
+
+
+def legend_item(swatch, text: str) -> Span:
+    return Span(swatch, text, cls="legend-item")
+
+
+def line_swatch(stroke: str, width: float, dash: str | None = None) -> Svg:
+    """A short horizontal line sample for a figure's legend row."""
+    return Svg(
+        SvgPath(
+            d="M1 4H27",
+            stroke=stroke,
+            stroke_width=width,
+            stroke_dasharray=dash or "none",
+            stroke_linecap="round",
+        ),
+        width=28,
+        height=8,
+        aria_hidden="true",
+    )
+
+
+def box_swatch(fill: str, border: str = "#3a3936") -> Span:
+    return Span(
+        cls="box-swatch", style=f"background:{fill};border-color:{border}", aria_hidden="true"
+    )
+
+
+def map_figure(prefix: str) -> Figure:
+    """Choropleth card: title + level/year, the map, then the color-range toggle
+    and the HTML legend (filled by app.js renderMapFigure)."""
+    return Figure(
+        Figcaption(
+            Span(id=f"{prefix}-title", cls="card-title"),
+            Span(id=f"{prefix}-subtitle", cls="note"),
+            cls="fig-head",
+        ),
+        Div(id=f"{prefix}-plot"),
+        Div(
+            Div(
+                Span("Color range", cls="field-label"),
+                seg_group(
+                    f"{prefix}-range",
+                    "Color range",
+                    [("data", "Data range"), ("fixed", "Fixed 0 to 1")],
+                ),
+                id=f"{prefix}-range-row",
+                cls="legend-row",
+            ),
+            Div(id=f"{prefix}-legend"),
+            P(id=f"{prefix}-legend-note", cls="note"),
+            cls="map-foot",
+        ),
+        cls="card",
+    )
+
+
+def loadings_card(prefix: str, title: str) -> Div:
+    """Loadings small multiples with the Shared / Per archetype x-axis toggle."""
+    return card(
+        card_head(
+            title,
+            None,
+            Div(
+                Span("X-axis", cls="note"),
+                seg_group(
+                    f"{prefix}-axis",
+                    "X-axis scaling",
+                    [("shared", "Shared"), ("own", "Per archetype")],
+                ),
+                cls="head-control",
+            ),
+            sub_id=f"{prefix}-loadings-sub",
+            title_id=f"{prefix}-loadings-title",
+        ),
+        Div(id=f"{prefix}-loadings"),
+    )
+
+
+def mixing_row(prefix: str) -> Div:
+    """Party / alliance matrix (3fr) beside the candidates table (2fr)."""
+    return Div(
+        card(
+            card_head(
+                "Party / alliance mixing",
+                None,
+                seg_group(
+                    f"{prefix}-groupby",
+                    "Group by",
+                    [("party", "Party"), ("alliance", "Alliance")],
+                ),
+                sub_id=f"{prefix}-partylist-sub",
+            ),
+            Div(id=f"{prefix}-partylist"),
+        ),
+        card(
+            card_head("Candidates", None, sub_id=f"{prefix}-partylist-table-sub"),
+            Div(id=f"{prefix}-partylist-table"),
+        ),
+        cls="grid-32",
+    )
+
+
 def tab_map() -> Section:
     return Section(
-        Div(
-            H2("Geographic distribution of archetypes", cls="section-title"),
-            P(id="map-lede", cls="lede"),
-            cls="section-head",
-        ),
+        section_head("Geographic distribution of archetypes", lede_id="map-lede"),
         Div(
             seg_group("map-quantity", "Quantity"),
             Div(id="map-arch", role="group", aria_label="Archetype", cls="chips"),
@@ -184,69 +299,11 @@ def tab_map() -> Section:
         ),
         # map : loadings at 3fr : 2fr (the map gets the larger share).
         Div(
-            Figure(
-                Figcaption(
-                    Span(id="map-title", cls="card-title"),
-                    Span(id="map-subtitle", cls="note"),
-                    cls="fig-head",
-                ),
-                Div(id="map-plot"),
-                Div(
-                    Div(
-                        Span("Color range", cls="field-label"),
-                        seg_group(
-                            "map-range",
-                            "Color range",
-                            [("data", "Data range"), ("fixed", "Fixed 0 to 1")],
-                        ),
-                        id="map-range-row",
-                        cls="legend-row",
-                    ),
-                    Div(id="map-legend"),
-                    P(id="map-legend-note", cls="note"),
-                    cls="map-foot",
-                ),
-                cls="card",
-            ),
-            card(
-                card_head(
-                    "Candidate weights per endmember",
-                    None,
-                    Div(
-                        Span("X-axis", cls="note"),
-                        seg_group(
-                            "map-axis",
-                            "X-axis scaling",
-                            [("shared", "Shared"), ("own", "Per archetype")],
-                        ),
-                        cls="head-control",
-                    ),
-                    sub_id="map-loadings-sub",
-                ),
-                Div(id="map-loadings"),
-            ),
+            map_figure("map"),
+            loadings_card("map", "Candidate weights per endmember"),
             cls="grid-32",
         ),
-        Div(
-            card(
-                card_head(
-                    "Party / alliance mixing",
-                    None,
-                    seg_group(
-                        "map-groupby",
-                        "Group by",
-                        [("party", "Party"), ("alliance", "Alliance")],
-                    ),
-                    sub_id="map-partylist-sub",
-                ),
-                Div(id="map-partylist"),
-            ),
-            card(
-                card_head("Candidates", None, sub_id="map-partylist-table-sub"),
-                Div(id="map-partylist-table"),
-            ),
-            cls="grid-32",
-        ),
+        mixing_row("map"),
         id="tab-map",
         cls="tab-panel",
     )
@@ -254,160 +311,144 @@ def tab_map() -> Section:
 
 def tab_compare() -> Section:
     return Section(
-        Div(
-            H2("Endmember-count comparison", cls="section-title"),
-            P(
-                "Trial mean / 1 SD at a chosen archetype count p (precomputed by the "
-                "sweep). The map follows the sidebar level and weighting.",
-                cls="lede",
+        Section(
+            section_head(
+                "Choosing the number of archetypes",
+                "How archetypes persist, split or start to duplicate as p grows, and "
+                "how stable each p is to precinct order and seed.",
             ),
-            cls="section-head",
-        ),
-        card(
-            card_head(
-                "Archetype lineage",
-                "Network of archetypes across the sweep, one column per endmember "
-                "count p. Each node lists an archetype's top candidates; edge width "
-                "and label show the chosen similarity metric between the two loading "
-                "columns. Solid links are the Hungarian match from p to p+1 "
-                "(including the extra archetype's link to its closest parent — "
-                "hover says which), and faint links are other similar-enough pairs. "
-                "Above each column: the min/mean pairwise distance between that p's "
-                "archetypes (0 = identical, 1 = distinct) — where the min collapses, "
-                "the newest archetype duplicates an existing one.",
-                Div(
-                    labeled(
-                        "Similarity metric",
-                        Select(
-                            Option("Cosine (top 12)", value="cos12"),
-                            Option("Cosine (full)", value="cos"),
-                            Option("Spearman r", value="spearman"),
-                            Option("Weighted tau", value="wtau"),
-                            Option("RBO", value="rbo"),
-                            Option("Jaccard (top 12)", value="jac12"),
-                            id="cmp-lineage-metric",
-                        ),
+            # These drive the lineage and both diagnostics below.
+            Div(
+                labeled(
+                    "Similarity metric",
+                    Select(
+                        Option("Cosine (top 12)", value="cos12"),
+                        Option("Cosine (full)", value="cos"),
+                        Option("Spearman r", value="spearman"),
+                        Option("Weighted tau", value="wtau"),
+                        Option("RBO", value="rbo"),
+                        Option("Jaccard (top 12)", value="jac12"),
+                        id="cmp-lineage-metric",
                     ),
-                    labeled(
-                        "Column distance",
-                        Select(
-                            Option("Min pairwise", value="min"),
-                            Option("Mean pairwise", value="mean"),
-                            id="cmp-lineage-stat",
-                        ),
-                    ),
-                    labeled(
-                        "Candidates per node",
-                        Input(
-                            type="number",
-                            id="cmp-lineage-topn",
-                            min=6,
-                            max=12,
-                            value=8,
-                            step=1,
-                        ),
-                    ),
-                    cls="toolbar",
                 ),
-            ),
-            Div(id="cmp-lineage"),
-        ),
-        # Diagnostics for choosing p (notebooks 08 & 09). Both follow the
-        # "Similarity metric" selector above; the left one also follows
-        # "Column distance".
-        Div(
-            card(
-                card_head(
-                    "Archetype distinctness vs p",
-                    "Pairwise distance between a run's archetypes as p grows "
-                    "(0 = identical, 1 = distinct). The min — the most-overlapping "
-                    "pair — decreases towards a floor: past it, each added "
-                    "archetype mostly duplicates an existing one. The selected "
-                    "similarity metric is highlighted.",
-                ),
-                Div(id="cmp-distinct"),
-            ),
-            card(
-                card_head(
-                    "Sensitivity to precinct order",
-                    "Similarity of each trial's archetypes to the reference run "
-                    "(Hungarian-matched; one box over archetypes × trials, dashed "
-                    "line = mean, whiskers to 1.5 × IQR, dots = outliers) when the "
-                    "precinct order is shuffled vs when the seed is varied. "
-                    "Sensitivity to both grows with p: "
-                    "the decomposition turns degenerate, hopping between "
-                    "alternative solutions.",
-                ),
-                Div(id="cmp-order"),
-            ),
-            cls="grid-2",
-        ),
-        # Controls below drive the succeeding per-p map and loadings, not the
-        # sweep-wide lineage above.
-        Div(
-            labeled("Archetypes p", Select(id="cmp-p")),
-            labeled("Archetype", Select(id="cmp-arch")),
-            labeled(
-                "Map shows",
-                Select(
-                    Option("Mean abundance", value="mean"),
-                    Option("1 SD across trials", value="std"),
-                    id="cmp-stat",
-                ),
-            ),
-            labeled(
-                "Top N candidates",
-                Input(type="number", id="cmp-topN", min=5, max=40, value=15, step=1),
-            ),
-            cls="toolbar",
-        ),
-        # map : loadings on one row at 2fr : 3fr (the loadings grid is wide here).
-        Div(
-            card(Div(id="cmp-plot")),
-            card(
-                card_head("Loadings", None, sub_id="cmp-loadings-sub"),
-                Div(id="cmp-loadings"),
-            ),
-            cls="grid-23",
-        ),
-        Div(
-            card(
-                card_head(
-                    "Party / alliance mixing",
-                    None,
+                labeled(
+                    "Column distance",
                     seg_group(
-                        "cmp-groupby",
-                        "Group by",
-                        [("party", "Party"), ("alliance", "Alliance")],
+                        "cmp-lineage-stat",
+                        "Column distance",
+                        [("min", "Min pairwise"), ("mean", "Mean pairwise")],
                     ),
-                    sub_id="cmp-partylist-sub",
                 ),
-                Div(id="cmp-partylist"),
+                labeled(
+                    "Candidates per node",
+                    Input(type="number", id="cmp-lineage-topn", min=2, max=12, value=3, step=1),
+                ),
+                cls="toolbar",
             ),
-            card(
-                card_head("Candidates", None, sub_id="cmp-partylist-table-sub"),
-                Div(id="cmp-partylist-table"),
+            Figure(
+                Figcaption(
+                    Span("Archetype lineage", cls="card-title"),
+                    Span(id="cmp-lineage-sub", cls="card-sub"),
+                    cls="card-head-text wide",
+                ),
+                # The network is drawn at a fixed pixel width; scroll when narrow.
+                Div(Div(id="cmp-lineage"), cls="scroll-x"),
+                Div(
+                    legend_item(
+                        line_swatch("rgba(58,57,54,0.5)", 4),
+                        "Matched p → p+1 (Hungarian); width and label = similarity",
+                    ),
+                    legend_item(
+                        line_swatch("#3a3936", 1.5, "5 4"),
+                        "New archetype's closest parent (split)",
+                    ),
+                    legend_item(
+                        line_swatch("#b5b4ad", 1, "2 4"), "Other pairs with similarity ≥ 0.35"
+                    ),
+                    legend_item(Span("new", cls="tag-sample"), Span(id="cmp-lineage-new-label")),
+                    cls="legend-rule",
+                ),
+                cls="card",
             ),
-            cls="grid-32",
+            # Diagnostics for choosing p (notebooks 08 & 09). Both follow the
+            # "Similarity metric" selector above; the left one also follows
+            # "Column distance".
+            Div(
+                Figure(
+                    Figcaption(
+                        Span("Archetype distinctness vs p", cls="card-title"),
+                        Span(id="cmp-distinct-sub", cls="card-sub"),
+                        cls="card-head-text",
+                    ),
+                    Div(id="cmp-distinct"),
+                    Div(id="cmp-distinct-legend", cls="legend-plain"),
+                    cls="card",
+                ),
+                Figure(
+                    Figcaption(
+                        Span("Sensitivity to precinct order", cls="card-title"),
+                        Span(id="cmp-order-sub", cls="card-sub"),
+                        cls="card-head-text",
+                    ),
+                    Div(id="cmp-order"),
+                    Div(
+                        legend_item(box_swatch("#6b6a65"), "Shuffled precinct order"),
+                        legend_item(box_swatch("#ecebe6"), "Varying seed"),
+                        Span(id="cmp-order-ylabel", cls="note"),
+                        cls="legend-plain",
+                    ),
+                    cls="card",
+                ),
+                cls="grid-fit",
+            ),
+            cls="tab-section",
         ),
+        # The archetypes at the selected p (map, loadings, mixing) are on the
+        # Overview tab, which follows the sidebar p.
         id="tab-compare",
-        cls="tab-panel",
+        cls="tab-panel spaced",
         hidden=True,
     )
 
 
 def tab_dist() -> Section:
     return Section(
-        Div(
-            H2("Abundance distributions", cls="section-title"),
-            P(
-                "Distribution of each archetype's abundance across the units at the "
-                "current aggregation level.",
-                cls="lede",
-            ),
-            cls="section-head",
+        section_head(
+            "Abundance distributions",
+            "Distribution of each archetype's abundance across the units at the "
+            "current aggregation level, beside the candidate weights that define it.",
         ),
-        card(Div(id="dist-plots")),
+        Div(
+            labeled(
+                "Histogram x-axis",
+                seg_group(
+                    "dist-x", "X-axis", [("fixed", "Fixed 0 to 1"), ("own", "Per archetype")]
+                ),
+            ),
+            labeled(
+                "Y-axis",
+                seg_group("dist-y", "Y-axis", [("count", "Count"), ("share", "Share of units")]),
+            ),
+            labeled("Bins", Input(type="number", id="dist-bins", min=5, max=60, value=20, step=1)),
+            labeled(
+                "Loadings x-axis",
+                seg_group(
+                    "dist-axis", "Loadings x-axis", [("shared", "Shared"), ("own", "Per archetype")]
+                ),
+            ),
+            cls="toolbar",
+        ),
+        # One card per archetype: its abundance histogram beside its loadings.
+        Div(id="dist-plots", cls="dist-rows"),
+        Figure(
+            Figcaption(
+                Span("All archetypes on one axis", cls="card-title"),
+                Span(id="dist-strip-sub", cls="card-sub"),
+                cls="card-head-text",
+            ),
+            Div(id="dist-strip"),
+            cls="card",
+        ),
         id="tab-dist",
         cls="tab-panel",
         hidden=True,
