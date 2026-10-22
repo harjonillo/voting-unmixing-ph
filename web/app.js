@@ -7,9 +7,23 @@
 
 const DATA = "./data";
 const PLOTLY_CFG = { displayModeBar: false, responsive: true };
-// Match the UI font (IBM Plex Sans, loaded via Google Fonts in build_site.py).
-const FONT = { family: "'IBM Plex Sans', system-ui, sans-serif", size: 12 };
+// Match the UI fonts (loaded via Google Fonts in build_site.py): Instrument Sans
+// for text, IBM Plex Mono for numbers (axis ticks).
+const FONT = { family: "'Instrument Sans', system-ui, sans-serif", size: 12, color: "#0b0b0b" };
+const MONO = "'IBM Plex Mono', ui-monospace, monospace";
 const MAP_VIEW = { style: "white-bg", center: { lon: 122.0, lat: 12.8 }, zoom: 4.6 };
+
+// UI chrome colors (mirror the tokens in styles.css).
+const INK = "#0b0b0b", INK_2 = "#52514e", INK_MUTED = "#6b6a65";
+const GRID = "#efeee9", ZERO = "#a8a7a0", AXIS_LINE = "#c3c2b7", WHISKER = "#3a3936";
+const TICKFONT = { family: MONO, size: 11, color: INK_MUTED };
+const HOVERLABEL = { font: { family: FONT.family, size: 12 } };
+// Plotly axis defaults for the light, gridded look used across the charts.
+const AXIS = {
+  gridcolor: GRID, zerolinecolor: ZERO, linecolor: AXIS_LINE,
+  tickfont: TICKFONT, automargin: true,
+};
+const axisTitle = (text) => ({ text, font: { size: 11, color: INK_MUTED }, standoff: 8 });
 
 // ---------------------------------------------------------------- data cache
 const _cache = new Map();
@@ -26,8 +40,11 @@ async function getJSON(url, init) {
 // ------------------------------------------------------------------- globals
 let MANIFEST = null;
 const state = {
-  year: null, method: "mvsa", level: "province", weighted: true, topN: 5, tab: "map",
-  map: { quantity: "Archetype abundance", arch: "arch_0", groupBy: "party" },
+  year: null, method: "mvsa", level: "province", weighted: true, topN: 6, tab: "map",
+  // range: map color range, "data" (autoscale) | "fixed" (0 to 1, or 0 to 100%).
+  map: { quantity: "Archetype abundance", arch: "arch_0", groupBy: "alliance", range: "data" },
+  // Loadings x-axis on the map tab: "shared" across archetypes | "own" per chart.
+  loadingsAxis: "shared",
   cmp: { p: 5, arch: "arch_0", stat: "mean", topN: 15, groupBy: "party",
     lineageTopN: 8, lineageMetric: "cos12", lineageStat: "min" },
 };
@@ -35,14 +52,36 @@ const state = {
 // --------------------------------------------------------------------- theme
 const archIndex = (c) => parseInt(c.split("_")[1], 10);
 const archLabel = (c) => `Archetype ${c.split("_")[1]}`;
-const FALLBACK_COLOR = "#888888";
+const archShort = (c) => `A${c.split("_")[1]}`;
+// The baked palette has a fixed slot per archetype index (never cycled); an
+// index past its end (p = 7 in the sweep) gets a neutral gray.
+const FALLBACK_COLOR = "#8c8b85";
+function archColor(archCol) {
+  return MANIFEST.theme.categorical[archIndex(archCol)] || FALLBACK_COLOR;
+}
 function palette(nArch) {
-  return MANIFEST.theme.categorical[String(nArch)];
+  return Array.from({ length: nArch }, (_, i) => archColor(`arch_${i}`));
 }
-function archColor(archCol, nArch) {
-  const pal = palette(nArch);
-  return pal ? pal[archIndex(archCol) % nArch] : FALLBACK_COLOR;
+// Small colored dot that sits beside every archetype's text label.
+function dot(color) {
+  const s = document.createElement("span");
+  s.className = "dot"; s.style.background = color; s.setAttribute("aria-hidden", "true");
+  return s;
 }
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+// Mix two "#rrggbb" colors: t = 0 -> a, t = 1 -> b.
+function mixHex(a, b, t) {
+  const p = (h, k) => parseInt(h.substr(k, 2), 16);
+  const c = [1, 3, 5].map((k) => Math.round(p(a, k) + (p(b, k) - p(a, k)) * t));
+  return `rgb(${c.join(",")})`;
+}
+// Signed number with a true minus sign.
+const fmtSigned = (v, d) => (v < -1e-12 ? "−" : "") + Math.abs(v).toFixed(d);
 // Endmember-extraction method (sidebar): MANIFEST.methods[key] =
 // {label, base, years, years_meta}; each method has its own baked data tree.
 const methodMeta = () => MANIFEST.methods[state.method];
@@ -89,7 +128,8 @@ const orderURL = (year) => `${mdata()}/order_sensitivity/${year}.json`;
 
 // -------------------------------------------------------------- chart helpers
 function choropleth(divId, geo, records, colorFn, discrete) {
-  // colorFn: record -> number|null (null = leave unit uncolored)
+  // colorFn: record -> number|null (null = leave unit uncolored). Returns the
+  // plotted z values (the map tab's HTML legend reads their range).
   const ids = [], z = [], text = [];
   for (const rec of records) {
     const v = colorFn(rec);
@@ -98,24 +138,26 @@ function choropleth(divId, geo, records, colorFn, discrete) {
   }
   // Shared compact colorbar (no title, thin, pulled to the right edge so it
   // overlays the ocean rather than reserving a white strip the map could use).
-  // The dominant-archetype case passes its own tick config in discrete.colorbar,
-  // which merges on top; everything else inherits these defaults.
+  // Callers may merge their own colorbar config, or pass showscale: false and
+  // draw the legend in HTML (the map tab does).
   const { colorbar: cbOverrides, ...traceProps } = discrete;
   const colorbar = {
     thickness: 12, len: 0.85, x: 1, xanchor: "right", y: 0.5, yanchor: "middle",
+    tickfont: TICKFONT, outlinewidth: 0,
     ...(cbOverrides || {}),
   };
   const trace = {
     type: "choroplethmap", geojson: geo, featureidkey: "id",
-    locations: ids, z, text, marker: { opacity: 0.9 },
+    locations: ids, z, text, marker: { opacity: 0.9, line: { color: "#ffffff", width: 0.4 } },
     hovertemplate: "%{text}<br>%{z}<extra></extra>",
     colorbar, ...traceProps,
   };
   const layout = {
-    map: MAP_VIEW, height: 640, margin: { l: 0, r: 0, t: 0, b: 0 },
-    paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
+    map: MAP_VIEW, height: 600, margin: { l: 0, r: 0, t: 0, b: 0 },
+    paper_bgcolor: "rgba(0,0,0,0)", font: FONT, hoverlabel: HOVERLABEL,
   };
   Plotly.react(divId, [trace], layout, PLOTLY_CFG);
+  return z;
 }
 
 // Overlay for NMF's deterministic NNDSVD-initialized run on the (random-init)
@@ -125,53 +167,122 @@ const NNDSVD_COLOR = "#1f2937";
 const NNDSVD_CAPTION = " Dark dots (dotted line): the deterministic NNDSVD-initialized" +
   " run, archetypes matched to the random-init trials.";
 
-function loadingsGrid(divId, payload, arch_cols, nArch, topN, title) {
+// A "nice" tick step (1, 2, 2.5 or 5 × 10^k) giving at most ~5 intervals.
+function niceStep(span) {
+  if (!(span > 0)) return 1;
+  const base = Math.pow(10, Math.floor(Math.log10(span / 5)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (span / (m * base) <= 5) return m * base;
+  return 10 * base;
+}
+// x range for loadings bars: [min(0, min(mean − sd)), max(mean + sd)] (NNDSVD
+// dots included), rounded out to a tick step.
+function loadingsDomain(rows) {
+  let lo = 0, hi = 0;
+  for (const r of rows) {
+    lo = Math.min(lo, r.v - r.sd, r.nn ?? Infinity);
+    hi = Math.max(hi, r.v + r.sd, r.nn ?? -Infinity);
+  }
+  const st = niceStep(hi - lo);
+  return {
+    range: [Math.floor(lo / st - 1e-9) * st, Math.ceil(hi / st - 1e-9) * st], dtick: st,
+  };
+}
+// "Dela Rosa, Bato (PDPLBN) [3]" -> name + "PDPLBN [3]" tag for the bar labels.
+function splitLabel(label) {
+  const party = label.match(/\(([^)]*)\)/);
+  const rank = label.match(/\[(\d+)\]/);
+  return {
+    name: cleanCandidate(label),
+    tag: [party ? party[1] : "", rank ? `[${rank[1]}]` : ""].filter(Boolean).join(" "),
+  };
+}
+
+const LOADINGS_ROW_PX = 22;
+
+function loadingsGrid(divId, payload, arch_cols, topN, opts) {
   // payload: {candidates, mean:{arch:[...]}, std?:{arch:[...]}, nndsvd?:{arch:[...]}}
+  // opts: {axis: "shared" | "own" (x range), layout: "stack" | "grid"}
+  const { axis = "own", layout = "grid" } = opts || {};
   const host = document.getElementById(divId);
   host.innerHTML = "";
-  if (title) {
-    const cap = document.createElement("p");
-    cap.className = "muted"; cap.textContent = title;
-    host.appendChild(cap);
-  }
-  const grid = document.createElement("div");
-  grid.className = "plot-grid";
-  host.appendChild(grid);
-  for (const c of arch_cols) {
-    const cell = document.createElement("div");
-    cell.className = "plot-cell"; grid.appendChild(cell);
+  const wrap = el("div", layout === "stack" ? "plot-stack" : "plot-grid");
+  host.appendChild(wrap);
+
+  // Top-N rows per archetype (largest first), then one shared domain if asked.
+  const rowsBy = arch_cols.map((c) => {
     const mean = payload.mean[c], std = payload.std ? payload.std[c] : null;
-    const order = payload.candidates
-      .map((name, i) => [mean[i], name, i])
-      .sort((a, b) => b[0] - a[0])
-      .slice(0, topN)
-      .reverse();
+    const nn = payload.nndsvd ? payload.nndsvd[c] : null;
+    return payload.candidates
+      .map((label, i) => ({ label, v: mean[i], sd: std ? std[i] : 0, nn: nn ? nn[i] : null }))
+      .sort((a, b) => b.v - a.v)
+      .slice(0, topN);
+  });
+  const shared = axis === "shared" ? loadingsDomain(rowsBy.flat()) : null;
+
+  arch_cols.forEach((c, k) => {
+    const cell = el("div", "plot-cell");
+    const head = el("div", "plot-title");
+    head.append(dot(archColor(c)), archLabel(c));
+    const plot = el("div");
+    cell.append(head, plot);
+    wrap.appendChild(cell);
+
+    const rows = [...rowsBy[k]].reverse();   // Plotly draws the first y at the bottom
+    const dom = shared || loadingsDomain(rows);
+    const ys = rows.map((r) => r.label);
+    const ticktext = rows.map((r) => {
+      const { name, tag } = splitLabel(r.label);
+      return tag ? `${name} <span style="color:${INK_MUTED};font-size:11px">${tag}</span>` : name;
+    });
     const trace = {
-      type: "bar", orientation: "h",
-      x: order.map((o) => o[0]), y: order.map((o) => o[1]),
-      marker: { color: archColor(c, nArch) },
+      type: "bar", orientation: "h", x: rows.map((r) => r.v), y: ys,
+      marker: { color: archColor(c) },
+      customdata: rows.map((r) => [cleanCandidate(r.label), r.sd]),
+      hovertemplate: payload.std
+        ? "%{customdata[0]}<br>%{x:.3f} ± %{customdata[1]:.3f}<extra></extra>"
+        : "%{customdata[0]}<br>%{x:.3f}<extra></extra>",
     };
-    if (std) trace.error_x = { type: "data", array: order.map((o) => std[o[2]]), visible: true };
+    if (payload.std) {
+      trace.error_x = {
+        type: "data", array: rows.map((r) => r.sd), visible: true,
+        color: WHISKER, thickness: 1.5, width: 4,
+      };
+    }
     const traces = [trace];
     if (payload.nndsvd) {
-      const nn = payload.nndsvd[c];
       traces.push({
         type: "scatter", mode: "lines+markers", name: "NNDSVD",
-        x: order.map((o) => nn[o[2]]), y: order.map((o) => o[1]),
+        x: rows.map((r) => r.nn), y: ys,
         line: { color: NNDSVD_COLOR, width: 1.2, dash: "dot" },
         marker: { color: NNDSVD_COLOR, size: 6, line: { color: "#ffffff", width: 1 } },
-        hovertemplate: "%{y}<br>NNDSVD %{x}<extra></extra>",
+        hovertemplate: "%{y}<br>NNDSVD %{x:.3f}<extra></extra>",
       });
     }
-    Plotly.react(cell, traces, {
-      showlegend: false,
-      title: { text: archLabel(c) }, height: Math.max(300, 24 * topN),
-      margin: { l: 4, r: 4, t: 34, b: 40 }, paper_bgcolor: "rgba(0,0,0,0)",
-      plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-      xaxis: { title: { text: "loading", standoff: 8 }, automargin: true },
-      yaxis: { automargin: true },
+    Plotly.react(plot, traces, {
+      showlegend: false, bargap: 0.45,
+      height: LOADINGS_ROW_PX * rows.length + 60,
+      margin: { l: 4, r: 10, t: 4, b: 4 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: FONT, hoverlabel: HOVERLABEL,
+      xaxis: {
+        ...AXIS, range: dom.range, dtick: dom.dtick, fixedrange: true,
+        zeroline: true, zerolinewidth: 1, showline: true,
+        title: axisTitle("loading"),
+      },
+      yaxis: {
+        automargin: true, fixedrange: true, tickvals: ys, ticktext,
+        tickfont: { size: 13, color: INK }, ticks: "", ticklabelstandoff: 6,
+      },
     }, PLOTLY_CFG);
-  }
+  });
+}
+
+// Caption under a loadings card title (error-bar source + NNDSVD overlay).
+function loadingsCaption(prefix, payload) {
+  return prefix + (payload.std
+    ? " Error bars: 1 SD across the sweep's trials at this archetype count."
+    : " Run the sweep for this year to add trial-based error bars.") +
+    (payload.nndsvd ? NNDSVD_CAPTION : "");
 }
 
 // ------------------------------------------------------ party / alliance mixing
@@ -198,11 +309,15 @@ const cleanCandidate = (label) =>
 
 const NO_ALLIANCE = "Independent / none";
 
-function partylistMixing(plotId, tableId, payload, arch_cols, nArch, title, mode) {
+// Diverging cell shading for the summed-loading matrix, symmetric around 0.
+const DIV_NEG = "#a3302f", DIV_MID = "#f0efec", DIV_POS = "#184f95";
+
+function partylistMixing(plotId, tableId, payload, arch_cols, mode) {
   // payload: {candidates, mean:{arch:[per-candidate loading]},
   //           alliance_list?:[[slate, ...], ...], alliance_detail?:[...]}.
-  // mode: "party" (default) | "alliance". Renders the grouped-bar chart into
-  // plotId and the candidates table into tableId (each in its own card).
+  // mode: "party" (default) | "alliance". Renders the group × archetype matrix
+  // into plotId and the candidates table into tableId (each in its own card);
+  // their captions go in `${id}-sub`.
   mode = mode === "alliance" ? "alliance" : "party";
   const hasAlliance = Array.isArray(payload.alliance_list);
   // Per-candidate placements: the group(s) the candidate belongs to, each with the
@@ -226,112 +341,153 @@ function partylistMixing(plotId, tableId, payload, arch_cols, nArch, title, mode
   const groupHeader = mode === "alliance" ? "Alliance" : "Party";
   const extraHeader = mode === "alliance" ? "Party" : "Alliance";
 
-  const host = document.getElementById(plotId);
-  host.innerHTML = "";
-  if (title) {
-    const cap = document.createElement("p");
-    cap.className = "muted"; cap.textContent = title;
-    host.appendChild(cap);
-  }
-  const plot = document.createElement("div");
-  plot.className = "w-full";
-  host.appendChild(plot);
-
   const order = [];               // groups in first-seen order
   const sums = new Map();         // group -> {arch_col -> summed loading}
-  const members = new Map();      // group -> [[rank, name, extra], ...]
+  const members = new Map();      // group -> [[rank, name, extra, others], ...]
   payload.candidates.forEach((name, i) => {
     for (const { group: g, others } of placements(i)) {
       if (!sums.has(g)) { sums.set(g, {}); members.set(g, []); order.push(g); }
       const s = sums.get(g);
       for (const c of arch_cols) s[c] = (s[c] || 0) + payload.mean[c][i];
-      // Annotate the name with the candidate's other slates ("also in UNA").
-      const label = others.length
-        ? `${cleanCandidate(name)} (also in ${others.join(", ")})`
-        : cleanCandidate(name);
-      members.get(g).push([candRank(name), label, extraOf(i)]);
+      // `others`: the candidate's other slates, for the "also in UNA" note.
+      members.get(g).push([candRank(name), cleanCandidate(name), extraOf(i), others]);
     }
   });
-  // Largest total loading ends up at the top of the horizontal bars (Plotly puts
-  // the first y-entry at the bottom), so sort ascending by total.
+  // Most prominent group (largest total loading) first.
   const total = (p) => arch_cols.reduce((s, c) => s + (sums.get(p)[c] || 0), 0);
-  const groups = order.sort((a, b) => total(a) - total(b));
+  const groups = order.sort((a, b) => total(b) - total(a));
+  const noun = mode === "alliance" ? "alliance" : "party";
 
-  const traces = arch_cols.map((c) => ({
-    type: "bar", orientation: "h", name: archLabel(c),
-    y: groups, x: groups.map((p) => sums.get(p)[c] || 0),
-    marker: { color: archColor(c, nArch) },
-  }));
-  // Light-gray separators between adjacent groups. On a categorical axis the
-  // groups sit at integer indices, so the boundaries fall at the half-steps.
-  const seps = [];
-  for (let i = 0; i < groups.length - 1; i++) {
-    seps.push({
-      type: "line", xref: "paper", yref: "y", layer: "below",
-      x0: 0, x1: 1, y0: i + 0.5, y1: i + 0.5,
-      line: { color: "#d1d5db", width: 1 },
-    });
+  // --- group × archetype matrix of summed loadings. Cells are shaded on a
+  // diverging ramp scaled by the table's max |value|, with sqrt easing so small
+  // sums still show; text flips to white on dark cells.
+  const maxAbs = Math.max(1e-12, ...groups.flatMap((g) => arch_cols.map((c) => Math.abs(sums.get(g)[c] || 0))));
+  const digits = maxAbs >= 10 ? 1 : maxAbs >= 1 ? 2 : 3;
+  const shade = (v) => {
+    const t = Math.max(-1, Math.min(1, v / maxAbs)), m = Math.sqrt(Math.abs(t));
+    return { bg: mixHex(DIV_MID, t >= 0 ? DIV_POS : DIV_NEG, m), fg: m > 0.55 ? "#ffffff" : INK };
+  };
+  document.getElementById(`${plotId}-sub`).textContent =
+    `Summed endmember loading of each ${noun}'s candidates per archetype (sums, ` +
+    "not correlations). Blue is positive, red negative, gray near zero.";
+  const host = document.getElementById(plotId);
+  host.innerHTML = "";
+  const wrap = el("div", "matrix-wrap");
+  const tbl = el("table", "matrix");
+  const hr = el("tr");
+  hr.appendChild(el("th", "", groupHeader));
+  for (const c of arch_cols) {
+    const th = el("th"), lab = el("span");
+    th.scope = "col"; th.title = archLabel(c);
+    lab.append(dot(archColor(c)), archShort(c));
+    th.appendChild(lab); hr.appendChild(th);
   }
-  const height = Math.max(320, groups.length * (nArch * 12 + 10) + 60);
-  Plotly.react(plot, traces, {
-    barmode: "group", shapes: seps, height,
-    margin: { l: 4, r: 8, t: 36, b: 44 },
-    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-    legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, xanchor: "left" },
-    xaxis: { title: { text: "summed loading", standoff: 8 }, automargin: true },
-    yaxis: { automargin: true },
-  }, PLOTLY_CFG);
+  tbl.appendChild(el("thead")).appendChild(hr);
+  const body = tbl.appendChild(el("tbody"));
+  for (const g of groups) {
+    const tr = el("tr"), th = el("th", "", g + " ");
+    th.scope = "row";
+    th.appendChild(el("span", "n", `· ${members.get(g).length}`));
+    tr.appendChild(th);
+    for (const c of arch_cols) {
+      const v = sums.get(g)[c] || 0, { bg, fg } = shade(v);
+      const td = el("td", "", fmtSigned(v, digits));
+      td.style.background = bg; td.style.color = fg;
+      td.title = `${g} · ${archLabel(c)}: summed loading ${v.toFixed(3)}`;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+  wrap.appendChild(tbl);
+  const key = el("div", "matrix-key");
+  const bar = el("div", "bar");
+  bar.setAttribute("aria-hidden", "true");
+  bar.style.background = `linear-gradient(90deg, ${DIV_NEG}, ${mixHex(DIV_MID, DIV_NEG, 0.5)}, ` +
+    `${DIV_MID}, ${mixHex(DIV_MID, DIV_POS, 0.5)}, ${DIV_POS})`;
+  key.append(el("span", "", fmtSigned(-maxAbs, digits)), bar,
+    el("span", "", "+" + maxAbs.toFixed(digits)), el("span", "label", "summed loading"));
+  host.append(wrap, key);
 
-  // Side table (own card): candidates per group, best-ranked (by election result)
-  // first, groups ordered by total loading (most prominent first). Alliance mode
-  // lists the *full* slate (so it reads as the coalition's roster); party mode caps
-  // at the top 5 (parties like IND are large). Each candidate gets its OWN table
-  // row — name and its extra column (alliance when grouping by party, party when
-  // grouping by alliance) in the same row — so they stay aligned even when either
-  // one wraps; the group cell spans its candidates via rowSpan.
+  // --- side table (own card): candidates per group, best-ranked (by election
+  // result) first, groups in the matrix's order. Alliance mode lists the *full*
+  // slate (so it reads as the coalition's roster); party mode caps at the top 5
+  // (parties like IND are large). Each candidate gets its OWN table row — name and
+  // its extra column (alliance when grouping by party, party when grouping by
+  // alliance) in the same row — so they stay aligned even when either one wraps;
+  // the group cell spans its candidates via rowSpan.
   const memberLimit = mode === "alliance" ? Infinity : 5;
-  const candHeader = mode === "alliance" ? "Candidates (by result rank)"
-                                         : "Top candidates (by result rank)";
   const tableWrap = document.getElementById(tableId);
+  const tableCard = tableWrap.closest(".card");
+  tableCard.querySelector(".card-title").textContent =
+    mode === "alliance" ? "Candidates per alliance" : "Top candidates per party";
+  document.getElementById(`${tableId}-sub`).textContent = mode === "alliance"
+    ? "Full slate, by election result rank; the extra column shows party."
+    : "Top 5 per party, by election result rank; the extra column shows alliance.";
   tableWrap.innerHTML = "";
-  tableWrap.className = "overflow-y-auto";
-  tableWrap.style.maxHeight = height + "px";
-  const tbl = document.createElement("table");
-  tbl.className = "table table-xs";
-  const thead = document.createElement("thead");
-  thead.innerHTML =
-    `<tr><th>${groupHeader}</th><th>${candHeader}</th><th>${extraHeader}</th></tr>`;
-  tbl.appendChild(thead);
-  const tbody = document.createElement("tbody");
-  for (const p of [...groups].reverse()) {   // largest total first
-    const top = members.get(p).sort((a, b) => a[0] - b[0]).slice(0, memberLimit);
-    top.forEach(([rank, name, extra], j) => {
-      const tr = document.createElement("tr");
-      // Stronger separator at each group's first row (daisyUI already draws a
-      // faint line between every row).
-      if (j === 0) tr.className = "border-t border-base-300";
+  tableWrap.className = "roster-wrap";
+  const roster = el("table", "roster");
+  const rh = el("tr");
+  for (const h of [groupHeader, "Candidate", extraHeader]) {
+    const th = el("th", "", h); th.scope = "col"; rh.appendChild(th);
+  }
+  roster.appendChild(el("thead")).appendChild(rh);
+  for (const g of groups) {
+    const top = members.get(g).sort((a, b) => a[0] - b[0]).slice(0, memberLimit);
+    const tbody = el("tbody");
+    top.forEach(([rank, name, extra, others], j) => {
+      const tr = el("tr");
       if (j === 0) {
-        const tdGroup = document.createElement("td");
-        tdGroup.className = "font-medium align-top";
-        tdGroup.rowSpan = top.length;
-        tdGroup.textContent = p;
-        tr.appendChild(tdGroup);
+        const td = el("td", "group", g);
+        td.rowSpan = top.length;
+        tr.appendChild(td);
       }
-      const tdCand = document.createElement("td");
-      tdCand.className = "align-top";
-      tdCand.textContent = rank === Infinity ? name : `${rank}. ${name}`;
-      const tdExtra = document.createElement("td");
-      tdExtra.className = "align-top text-xs opacity-70";
-      tdExtra.textContent = extra || "—";
-      tr.appendChild(tdCand); tr.appendChild(tdExtra);
+      const tdCand = el("td");
+      if (rank !== Infinity) tdCand.append(el("span", "rank", `${rank}.`), " ");
+      tdCand.append(name);
+      if (others.length) tdCand.append(" ", el("span", "also", `also in ${others.join(", ")}`));
+      tr.append(tdCand, el("td", "extra", extra || "—"));
       tbody.appendChild(tr);
     });
+    roster.appendChild(tbody);
   }
-  tbl.appendChild(tbody);
-  tableWrap.appendChild(tbl);
+  tableWrap.appendChild(roster);
 }
 
 // --------------------------------------------------------------------- tab: map
+// Map legend texts per color-range mode (abundance + turnout maps).
+const RANGE_NOTES = {
+  data: "Stretched to the lowest and highest value among the units shown. Best for " +
+    "spotting variation within one archetype; not comparable across archetypes or years.",
+  fixed: "Fixed range. Comparable across archetypes, levels and years; small " +
+    "differences may wash out.",
+};
+const QUANTITY_LABELS = { "Archetype abundance": "Abundance" };
+
+// HTML legend under the map: a gradient bar with lo / mid / hi labels for the
+// continuous maps, or one swatch per archetype for the dominant-archetype map.
+function mapLegend(kind, cols, lo, hi, fmt) {
+  const host = document.getElementById("map-legend");
+  host.innerHTML = "";
+  if (kind === "Dominant archetype") {
+    const sw = el("div", "swatches");
+    for (const c of cols) {
+      const s = el("span");
+      s.append(dot(archColor(c)), archLabel(c));
+      sw.appendChild(s);
+    }
+    host.appendChild(sw);
+    return;
+  }
+  const ramp = el("div", "ramp");
+  const bar = el("div", "ramp-bar");
+  bar.setAttribute("aria-hidden", "true");
+  bar.style.background = `linear-gradient(90deg, ${MANIFEST.theme.sequential.map((s) => s[1]).join(", ")})`;
+  const ticks = el("div", "ramp-ticks");
+  ticks.append(el("span", "", fmt(lo)), el("span", "", fmt((lo + hi) / 2)), el("span", "", fmt(hi)));
+  ramp.append(bar, ticks);
+  host.appendChild(ramp);
+}
+
 async function renderMap() {
   const year = state.year, level = state.level, nArch = nArchFor(year);
   const [geo, vals, loadings] = await Promise.all([
@@ -340,42 +496,77 @@ async function renderMap() {
     getJSON(loadingsURL(year)),
   ]);
   const cols = archCols(year);
+  const levelLabel = MANIFEST.level_labels[level];
+  const unit = levelLabel.toLowerCase();
 
-  // keep the archetype selector valid for this year
+  // keep the archetype chips valid for this year
   if (!cols.includes(state.map.arch)) state.map.arch = "arch_0";
-  fillArchSelect("map-arch", cols, state.map.arch, nArch);
-
   const kind = state.map.quantity, sel = state.map.arch;
-  let colorFn, discrete;
+  fillArchChips(cols, sel);
+  document.getElementById("map-arch").hidden = kind !== "Archetype abundance";
+
+  // Color range: autoscaled to the data, or fixed to the quantity's full scale
+  // (abundances are fractions, turnout a percentage). Not used by the
+  // categorical dominant-archetype map.
+  const fixedMax = kind === "Turnout" ? 100 : 1;
+  const fixed = state.map.range === "fixed";
+  const rangeRow = document.getElementById("map-range-row");
+  rangeRow.hidden = kind === "Dominant archetype";
+  rangeRow.querySelector('[data-value="fixed"]').textContent =
+    kind === "Turnout" ? "Fixed 0 to 100%" : "Fixed 0 to 1";
+  const range = fixed ? { zauto: false, zmin: 0, zmax: fixedMax } : { zauto: true };
+
+  let colorFn, discrete, title, lede, fmt;
   if (kind === "Dominant archetype") {
-    const colors = palette(nArch);
     colorFn = (r) => (r.dominant == null ? null : parseInt(r.dominant, 10) + 0.5);
     discrete = {
-      colorscale: discreteScale(colors), zmin: 0, zmax: nArch,
-      colorbar: {
-        tickmode: "array",
-        tickvals: cols.map((_, i) => i + 0.5), ticktext: cols.map(archLabel),
-      },
+      colorscale: discreteScale(palette(nArch)), zmin: 0, zmax: nArch, showscale: false,
+      customdata: vals.records.filter((r) => r.dominant != null)
+        .map((r) => archLabel(`arch_${r.dominant}`)),
+      hovertemplate: "%{text}<br>%{customdata}<extra></extra>",
     };
+    title = "Dominant archetype";
+    lede = `Archetype with the highest mean abundance in each ${unit}, next to the ` +
+      "candidate weights that define every archetype.";
   } else if (kind === "Turnout") {
     colorFn = (r) => (r.turnout == null ? null : r.turnout);
-    discrete = { colorscale: MANIFEST.theme.sequential };
+    discrete = {
+      colorscale: MANIFEST.theme.sequential, showscale: false, ...range,
+      hovertemplate: "%{text}<br>turnout %{z:.1f}%<extra></extra>",
+    };
+    fmt = (v) => `${v.toFixed(0)}%`;
+    title = "Turnout";
+    lede = `Voter turnout in each ${unit}, next to the candidate weights that define ` +
+      "every archetype.";
   } else {
     colorFn = (r) => (r[sel] == null ? null : r[sel]);
-    discrete = { colorscale: MANIFEST.theme.sequential };
+    discrete = {
+      colorscale: MANIFEST.theme.sequential, showscale: false, ...range,
+      hovertemplate: "%{text}<br>abundance %{z:.3f}<extra></extra>",
+    };
+    fmt = (v) => v.toFixed(2);
+    title = `${archLabel(sel)} abundance`;
+    lede = `Abundance of the selected archetype in each ${unit}, next to the candidate ` +
+      "weights that define every archetype.";
   }
-  choropleth("map-plot", geo, vals.records, colorFn, discrete);
+  const z = choropleth("map-plot", geo, vals.records, colorFn, discrete);
+  document.getElementById("map-title").textContent = title;
+  document.getElementById("map-subtitle").textContent = `${levelLabel} · ${year}`;
+  document.getElementById("map-lede").textContent = lede;
+  const [lo, hi] = fixed ? [0, fixedMax]
+    : z.reduce(([a, b], v) => [Math.min(a, v), Math.max(b, v)], [Infinity, -Infinity]);
+  mapLegend(kind, cols, lo, hi, fmt);
+  document.getElementById("map-legend-note").textContent = kind === "Dominant archetype"
+    ? "No six-color set is fully colorblind-safe; hover a unit to read its archetype."
+    : RANGE_NOTES[fixed ? "fixed" : "data"];
 
-  const cap = (loadings.std
-    ? "Error bars: 1 SD across the sweep's trials at this archetype count."
-    : "Run the sweep for this year to add trial-based error bars.") +
-    (loadings.nndsvd ? NNDSVD_CAPTION : "");
-  loadingsGrid("map-loadings", loadings, cols, nArch, state.topN,
-    `Candidate weights per endmember (${methodLabel()}, national-level). ` + cap);
+  document.getElementById("map-loadings-sub").textContent =
+    loadingsCaption(`${methodLabel()}, national level.`, loadings);
+  loadingsGrid("map-loadings", loadings, cols, state.topN,
+    { axis: state.loadingsAxis, layout: "stack" });
 
-  const mgb = state.map.groupBy;
-  partylistMixing("map-partylist", "map-partylist-table", loadings, cols, nArch,
-    `Summed endmember loading per ${mgb}, grouped by archetype.`, mgb);
+  partylistMixing("map-partylist", "map-partylist-table", loadings, cols,
+    state.map.groupBy);
 }
 
 // Lineage network: how archetypes persist or split as p grows across the
@@ -482,7 +673,7 @@ async function renderLineage(divId) {
       line: {
         width: 0.5 + 6 * Math.max(simOf(l), 0),
         color: l.matched || l.split
-          ? "rgba(100,120,160,0.55)" : "rgba(100,120,160,0.16)",
+          ? "rgba(82,81,78,0.5)" : "rgba(82,81,78,0.14)",
       },
     };
   });
@@ -506,7 +697,7 @@ async function renderLineage(divId) {
     textfont: {
       family: FONT.family, size: 8.5,
       color: links.map((l) => l.matched || l.split
-        ? "rgba(70,85,120,0.9)" : "rgba(100,120,160,0.55)"),
+        ? "rgba(82,81,78,0.95)" : "rgba(107,106,101,0.6)"),
     },
     hovertext: links.map((l) => {
       const s = lin.nodes[l.source], t = lin.nodes[l.target];
@@ -527,7 +718,7 @@ async function renderLineage(divId) {
       x: n.p, y: y[i], xanchor: "center", yanchor: "middle",
       align: "center", showarrow: false,
       font: { family: FONT.family, size: LINEAGE_NODE_FONT },
-      bordercolor: archColor(`arch_${n.k}`, n.p), borderwidth: 1.5, borderpad: 2,
+      bordercolor: archColor(`arch_${n.k}`), borderwidth: 1.5, borderpad: 2,
       bgcolor: "rgba(255,255,255,0.85)",
       text: rows.join("<br>"),
       hovertext: `<b>p = ${n.p} · archetype ${n.k}</b><br>` +
@@ -544,7 +735,7 @@ async function renderLineage(divId) {
     if (!d) continue;
     annotations.push({
       x: p, xref: "x", y: 1, yref: "paper", yanchor: "bottom", showarrow: false,
-      font: { family: FONT.family, size: 9.5, color: "rgba(90,100,125,0.95)" },
+      font: { family: FONT.family, size: 9.5, color: INK_MUTED },
       text: `${stat} d = ${d[stat].toFixed(2)}`,
       hovertext: `${stat} pairwise distance between the ${p} archetypes<br>` +
         `of one run at the config seed<br>` +
@@ -591,8 +782,8 @@ window.addEventListener("resize", () => {
 //    (Arm C), boxplots over trials × archetypes (order_sensitivity/{year}.json,
 //    baked per year by scripts/bake_order_sensitivity.py).
 const ORDER_ARMS = {
-  B: { label: "shuffled precinct order", color: "#4C72B0" },
-  C: { label: "varying seed", color: "#DD8452" },
+  B: { label: "shuffled precinct order", color: "#2a78d6" },
+  C: { label: "varying seed", color: "#eb6834" },
 };
 
 function diagnosticsNote(divId, msg) {
@@ -612,23 +803,21 @@ async function renderDiagnostics() {
   const dist = await getJSON(distinctURL(state.year)).catch(() => null);
   if (dist) {
     const ps = dist.ps;
-    const traces = Object.entries(LINEAGE_METRICS).map(([m, label]) => ({
+    const traces = Object.entries(LINEAGE_METRICS).map(([m, label], k) => ({
       type: "scatter", mode: "lines+markers", name: label,
       x: ps,
       y: ps.map((p) => (dist.distinct[p] && dist.distinct[p][m])
         ? dist.distinct[p][m][stat] : null),
-      line: { width: m === metric ? 3 : 1.3 },
-      marker: { size: m === metric ? 7 : 5 },
+      line: { color: archColor(`arch_${k}`), width: m === metric ? 3 : 1.3 },
+      marker: { color: archColor(`arch_${k}`), size: m === metric ? 7 : 5 },
       opacity: m === metric ? 1 : 0.45,
     }));
     Plotly.react("cmp-distinct", traces, {
       height: 330, margin: { l: 50, r: 8, t: 8, b: 40 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-      xaxis: { title: { text: "number of archetypes p" }, tickvals: ps },
-      yaxis: {
-        title: { text: `${stat} pairwise distance`, standoff: 6 },
-        rangemode: "tozero",
-      },
+      hoverlabel: HOVERLABEL,
+      xaxis: { ...AXIS, title: axisTitle("number of archetypes p"), tickvals: ps },
+      yaxis: { ...AXIS, title: axisTitle(`${stat} pairwise distance`), rangemode: "tozero" },
       legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, xanchor: "left",
         font: { size: 10 } },
     }, PLOTLY_CFG);
@@ -663,12 +852,9 @@ async function renderDiagnostics() {
     boxmode: "group", boxgap: 0.25, boxgroupgap: 0.15,
     height: 330, margin: { l: 50, r: 8, t: 8, b: 40 },
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-    xaxis: { title: { text: "number of archetypes p" } },
-    yaxis: {
-      title: {
-        text: `matched similarity (${LINEAGE_METRICS[metric]})`, standoff: 6,
-      },
-    },
+    hoverlabel: HOVERLABEL,
+    xaxis: { ...AXIS, title: axisTitle("number of archetypes p") },
+    yaxis: { ...AXIS, title: axisTitle(`matched similarity (${LINEAGE_METRICS[metric]})`) },
     legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, xanchor: "left",
       font: { size: 10 } },
   }, PLOTLY_CFG);
@@ -676,7 +862,7 @@ async function renderDiagnostics() {
 
 // ----------------------------------------------------------------- tab: compare
 async function renderCompare() {
-  const year = state.year, level = state.level, nArch = nArchFor(year);
+  const year = state.year, level = state.level;
   const p = state.cmp.p;
   await renderLineage("cmp-lineage");
   await renderDiagnostics();
@@ -686,7 +872,7 @@ async function renderCompare() {
   ]);
   const cols = sweep.arch_cols;
   if (!cols.includes(state.cmp.arch)) state.cmp.arch = "arch_0";
-  fillArchSelect("cmp-arch", cols, state.cmp.arch, p);
+  fillSelect("cmp-arch", cols, state.cmp.arch, archLabel);
 
   const showStd = state.cmp.stat === "std";
   const recs = sweep.levels[level][wtag()][showStd ? "std" : "mean"];
@@ -694,40 +880,42 @@ async function renderCompare() {
   choropleth("cmp-plot", geo, recs, (r) => (r[sel] == null ? null : r[sel]),
     { colorscale: MANIFEST.theme.sequential });
 
-  loadingsGrid("cmp-loadings",
-    { candidates: sweep.candidates, mean: sweep.loadings_mean, std: sweep.loadings_std,
-      nndsvd: sweep.loadings_nndsvd },
-    cols, p, state.cmp.topN, "Loadings (mean ± 1 SD over trials) at p = " + p + "." +
-    (sweep.loadings_nndsvd ? NNDSVD_CAPTION : ""));
+  const payload = { candidates: sweep.candidates, mean: sweep.loadings_mean,
+    std: sweep.loadings_std, nndsvd: sweep.loadings_nndsvd };
+  document.getElementById("cmp-loadings-sub").textContent =
+    `Mean ± 1 SD over trials at p = ${p}.` + (payload.nndsvd ? NNDSVD_CAPTION : "");
+  loadingsGrid("cmp-loadings", payload, cols, state.cmp.topN, { axis: "own", layout: "grid" });
 
-  const cgb = state.cmp.groupBy;
   partylistMixing("cmp-partylist", "cmp-partylist-table",
     { candidates: sweep.candidates, mean: sweep.loadings_mean,
       alliance_list: sweep.alliance_list, alliance_detail: sweep.alliance_detail },
-    cols, p, `Summed endmember loading per ${cgb} at p = ${p}, grouped by archetype.`, cgb);
+    cols, state.cmp.groupBy);
 }
 
 // ------------------------------------------------------------- tab: distributions
 async function renderDist() {
-  const year = state.year, level = state.level, nArch = nArchFor(year);
+  const year = state.year, level = state.level;
   const vals = await getJSON(valuesURL(year, level));
   const cols = archCols(year);
   const host = document.getElementById("dist-plots");
   host.innerHTML = "";
-  const grid = document.createElement("div");
-  grid.className = "plot-grid"; host.appendChild(grid);
+  const grid = el("div", "plot-grid");
+  host.appendChild(grid);
   const unit = MANIFEST.level_labels[level].toLowerCase();
   for (const c of cols) {
-    const cell = document.createElement("div");
-    cell.className = "plot-cell"; grid.appendChild(cell);
+    const cell = el("div", "plot-cell"), head = el("div", "plot-title"), plot = el("div");
+    head.append(dot(archColor(c)), archLabel(c));
+    cell.append(head, plot);
+    grid.appendChild(cell);
     const x = vals.records.map((r) => r[c]).filter((v) => v != null);
-    Plotly.react(cell, [{
-      type: "histogram", x, nbinsx: 40, marker: { color: archColor(c, nArch) },
+    Plotly.react(plot, [{
+      type: "histogram", x, nbinsx: 40, marker: { color: archColor(c) },
     }], {
-      title: { text: archLabel(c) }, height: 280,
-      margin: { l: 40, r: 8, t: 34, b: 30 }, paper_bgcolor: "rgba(0,0,0,0)",
-      plot_bgcolor: "rgba(0,0,0,0)", font: FONT, xaxis: { title: { text: "abundance" } },
-      yaxis: { title: { text: `# ${unit}s` } },
+      height: 260, bargap: 0.05,
+      margin: { l: 40, r: 8, t: 4, b: 30 }, paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)", font: FONT, hoverlabel: HOVERLABEL,
+      xaxis: { ...AXIS, title: axisTitle("abundance") },
+      yaxis: { ...AXIS, title: axisTitle(`# ${unit}s`) },
     }, PLOTLY_CFG);
   }
 }
@@ -746,11 +934,18 @@ async function renderActive() {
   }
 }
 
-function updateCaption() {
+// Sidebar run summary for the selected year + method (manifest years_meta).
+function renderSummary() {
   const m = yearMeta(state.year);
-  document.getElementById("sidebar-caption").textContent =
-    `${state.year} senatorial race · ${m.n_archetypes} ${methodLabel()} ` +
-    `endmembers · ${m.candidate_labels.length} candidates`;
+  const rows = [
+    ["Archetypes", `p = ${m.n_archetypes}`],
+    ["HySime k", m.hysime_kf ?? "—"],
+    ["Candidates", m.candidate_labels.length],
+    ["RMSE", m.rmse == null ? "—" : m.rmse.toFixed(4)],
+  ];
+  const host = document.getElementById("run-summary");
+  host.innerHTML = "";
+  for (const [k, v] of rows) host.append(el("span", "k", k), el("span", "v", String(v)));
 }
 
 // Keep the year and compare-tab p valid for the current method/year (a method
@@ -760,7 +955,7 @@ function syncYearAndP() {
   if (!years.includes(state.year)) {
     state.year = years.includes(MANIFEST.default_year) ? MANIFEST.default_year : years[0];
   }
-  fillSelect("year", years, state.year);
+  fillSeg("year", [...years].sort().map((y) => [y, y]), state.year);
   const ps = yearMeta(state.year).sweep_ps;
   if (ps.length && !ps.includes(state.cmp.p)) {
     // nearest available p
@@ -772,83 +967,147 @@ function syncYearAndP() {
 
 // --------------------------------------------------------------------- controls
 function fillSelect(id, options, value, labelFn) {
-  const el = document.getElementById(id);
-  el.innerHTML = "";
+  const sel = document.getElementById(id);
+  sel.innerHTML = "";
   for (const o of options) {
     const opt = document.createElement("option");
     opt.value = o; opt.textContent = labelFn ? labelFn(o) : o;
     if (String(o) === String(value)) opt.selected = true;
-    el.appendChild(opt);
+    sel.appendChild(opt);
   }
 }
-function fillArchSelect(id, cols, value, nArch) {
-  fillSelect(id, cols, value, archLabel);
+
+// Segmented controls: a group of .seg buttons, the pressed one marked .on.
+function markSeg(id, value) {
+  for (const b of document.getElementById(id).querySelectorAll("button")) {
+    const on = b.dataset.value === String(value);
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  }
+}
+// Replace the group's buttons with `options` ([value, text] pairs).
+function fillSeg(id, options, value) {
+  const host = document.getElementById(id);
+  host.innerHTML = "";
+  for (const [v, text] of options) {
+    const b = el("button", "seg", text);
+    b.type = "button"; b.dataset.value = v;
+    host.appendChild(b);
+  }
+  markSeg(id, value);
+}
+// Call onPick(value) when an unpressed button is clicked, then mark it.
+function wireSeg(id, onPick) {
+  document.getElementById(id).addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || b.classList.contains("on")) return;
+    markSeg(id, b.dataset.value);
+    onPick(b.dataset.value);
+  });
+}
+
+// Archetype chips (color dot + "A0" …) on the map tab.
+function fillArchChips(cols, value) {
+  const host = document.getElementById("map-arch");
+  host.innerHTML = "";
+  for (const c of cols) {
+    const b = el("button", "chip");
+    b.type = "button"; b.dataset.value = c;
+    b.setAttribute("aria-label", archLabel(c));
+    b.append(dot(archColor(c)), archShort(c));
+    host.appendChild(b);
+  }
+  for (const b of host.children) {
+    const on = b.dataset.value === value;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  }
 }
 
 function switchTab(tab) {
   state.tab = tab;
   for (const t of ["map", "compare", "dist"]) {
+    const btn = document.getElementById(`tabbtn-${t}`);
     document.getElementById(`tab-${t}`).hidden = t !== tab;
-    document.getElementById(`tabbtn-${t}`).classList.toggle("tab-active", t === tab);
+    btn.classList.toggle("on", t === tab);
+    btn.setAttribute("aria-selected", String(t === tab));
   }
-  // compare uses the internal name "compare"; button/section id is "compare"
   renderActive();
+}
+
+// The sticky sidebar sits below the sticky header: keep --header-h current.
+function trackHeaderHeight() {
+  const header = document.querySelector(".app-header");
+  const set = () => document.documentElement.style.setProperty(
+    "--header-h", `${header.getBoundingClientRect().height}px`);
+  new ResizeObserver(set).observe(header);
+  set();
+}
+
+function setTopN(n) {
+  state.topN = Math.min(15, Math.max(3, Math.round(n) || 6));
+  document.getElementById("topN").value = state.topN;
+  if (state.tab === "map") renderActive();
 }
 
 // ------------------------------------------------------------------------- init
 async function init() {
+  trackHeaderHeight();
   // always revalidate: the manifest describes the data tree app.js expects
   MANIFEST = await getJSON(`${DATA}/manifest.json`, { cache: "no-cache" });
   state.year = MANIFEST.default_year;
   state.method = MANIFEST.default_method;
 
   // only the methods actually baked (e.g. NMF absent until its pipeline runs)
-  fillSelect("method", Object.keys(MANIFEST.methods), state.method,
-    (m) => MANIFEST.methods[m].label);
+  fillSeg("method", Object.keys(MANIFEST.methods).map((m) => [m, MANIFEST.methods[m].label]),
+    state.method);
   syncYearAndP();
 
   // level radio
   const levels = document.getElementById("levels");
   levels.innerHTML = "";
   for (const lvl of MANIFEST.levels) {
-    const lab = document.createElement("label");
-    lab.className = "flex items-center gap-2 cursor-pointer text-sm";
+    const lab = el("label");
     const r = document.createElement("input");
     r.type = "radio"; r.name = "level"; r.value = lvl;
-    r.className = "radio radio-xs";
     r.checked = lvl === state.level;
     r.addEventListener("change", () => { state.level = lvl; renderActive(); });
-    lab.appendChild(r);
-    lab.appendChild(document.createTextNode(MANIFEST.level_labels[lvl]));
+    lab.append(r, MANIFEST.level_labels[lvl]);
     levels.appendChild(lab);
   }
 
-  fillSelect("map-quantity", MANIFEST.value_kinds, state.map.quantity);
+  fillSeg("map-quantity",
+    MANIFEST.value_kinds.map((k) => [k, QUANTITY_LABELS[k] || k]), state.map.quantity);
+  markSeg("map-range", state.map.range);
+  markSeg("map-axis", state.loadingsAxis);
+  markSeg("map-groupby", state.map.groupBy);
+  markSeg("cmp-groupby", state.cmp.groupBy);
+  document.getElementById("topN").value = state.topN;
 
   // wire controls
-  document.getElementById("year").addEventListener("change", (e) => {
-    state.year = e.target.value;
-    syncYearAndP(); updateCaption(); renderActive();
+  wireSeg("year", (v) => {
+    state.year = v;
+    syncYearAndP(); renderSummary(); renderActive();
   });
-  document.getElementById("method").addEventListener("change", (e) => {
-    state.method = e.target.value;
-    syncYearAndP(); updateCaption(); renderActive();
+  wireSeg("method", (v) => {
+    state.method = v;
+    syncYearAndP(); renderSummary(); renderActive();
   });
-  document.getElementById("topN").addEventListener("change", (e) => {
-    state.topN = +e.target.value; if (state.tab === "map") renderActive();
-  });
+  document.getElementById("topN").addEventListener("change", (e) => setTopN(+e.target.value));
+  document.getElementById("topN-dec").addEventListener("click", () => setTopN(state.topN - 1));
+  document.getElementById("topN-inc").addEventListener("click", () => setTopN(state.topN + 1));
   document.getElementById("weighted").addEventListener("change", (e) => {
     state.weighted = e.target.checked; renderActive();
   });
-  document.getElementById("map-quantity").addEventListener("change", (e) => {
-    state.map.quantity = e.target.value; renderActive();
+  wireSeg("map-quantity", (v) => { state.map.quantity = v; renderActive(); });
+  document.getElementById("map-arch").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || b.dataset.value === state.map.arch) return;
+    state.map.arch = b.dataset.value; renderActive();
   });
-  document.getElementById("map-arch").addEventListener("change", (e) => {
-    state.map.arch = e.target.value; renderActive();
-  });
-  document.getElementById("map-groupby").addEventListener("change", (e) => {
-    state.map.groupBy = e.target.value; if (state.tab === "map") renderActive();
-  });
+  wireSeg("map-range", (v) => { state.map.range = v; renderActive(); });
+  wireSeg("map-axis", (v) => { state.loadingsAxis = v; renderActive(); });
+  wireSeg("map-groupby", (v) => { state.map.groupBy = v; renderActive(); });
   document.getElementById("cmp-p").addEventListener("change", (e) => {
     state.cmp.p = +e.target.value; renderActive();
   });
@@ -858,9 +1117,7 @@ async function init() {
   document.getElementById("cmp-stat").addEventListener("change", (e) => {
     state.cmp.stat = e.target.value; renderActive();
   });
-  document.getElementById("cmp-groupby").addEventListener("change", (e) => {
-    state.cmp.groupBy = e.target.value; if (state.tab === "compare") renderActive();
-  });
+  wireSeg("cmp-groupby", (v) => { state.cmp.groupBy = v; renderActive(); });
   document.getElementById("cmp-topN").addEventListener("change", (e) => {
     state.cmp.topN = +e.target.value; renderActive();
   });
@@ -877,11 +1134,11 @@ async function init() {
     state.cmp.lineageStat = e.target.value;
     if (state.tab === "compare") { renderLineage("cmp-lineage"); renderDiagnostics(); }
   });
-  for (const [t, id] of [["map", "tabbtn-map"], ["compare", "tabbtn-compare"], ["dist", "tabbtn-dist"]]) {
-    document.getElementById(id).addEventListener("click", () => switchTab(t));
+  for (const t of ["map", "compare", "dist"]) {
+    document.getElementById(`tabbtn-${t}`).addEventListener("click", () => switchTab(t));
   }
 
-  updateCaption();
+  renderSummary();
   renderActive();
 }
 

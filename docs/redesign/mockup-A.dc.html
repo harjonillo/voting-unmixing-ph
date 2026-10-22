@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A · Refined sidebar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#1c5cab}a:hover{color:#0d366b}
+.seg{font:inherit;font-size:0.833rem;padding:6px 10px;border:0;background:transparent;color:#52514e;border-radius:6px;cursor:pointer;min-height:32px}
+.seg:hover{background:#ecebe6;color:#0b0b0b}
+.seg.on{background:#0b0b0b;color:#ffffff}
+.chip{font:inherit;font-size:0.833rem;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #e3e2dc;border-radius:999px;background:#ffffff;color:#0b0b0b;cursor:pointer;min-height:32px}
+.chip:hover{border-color:#a8a7a0}
+.chip.on{border-color:#0b0b0b;box-shadow:inset 0 0 0 1px #0b0b0b}
+.tab{font:inherit;font-size:1rem;padding:12px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:#52514e;cursor:pointer}
+.tab:hover{color:#0b0b0b}
+.tab.on{color:#0b0b0b;border-bottom-color:#0b0b0b;font-weight:600}
+</style>
+</helmet>
+<div style="font-family: 'Instrument Sans', system-ui, sans-serif; color: #0b0b0b; background: #ffffff; min-height: 100%; font-size: 16px; line-height: 1.5">
+
+  <header style="border-bottom: 1px solid #e3e2dc; background: #ffffff">
+    <div style="max-width: 1440px; margin: 0 auto; padding: 20px 32px 0; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px">
+          <h1 style="margin: 0; font-size: 1.44rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em">PH Voting Archetypes</h1>
+          <p style="margin: 0; font-size: 0.833rem; color: #6b6a65">Spectral-unmixing explorer of PH senatorial votes</p>
+        </div>
+        <nav aria-label="Project links" style="display: flex; gap: 20px; font-size: 0.833rem">
+          <a href="#">Method notes</a>
+          <a href="#">Data sources</a>
+          <a href="#">GitHub</a>
+        </nav>
+      </div>
+      <div role="tablist" style="display: flex; flex-wrap: wrap; gap: 28px">
+        <button class="tab on" role="tab" aria-selected="true">Map / overview</button>
+        <button class="tab" role="tab" aria-selected="false">Model comparison</button>
+        <button class="tab" role="tab" aria-selected="false">Abundance distributions</button>
+      </div>
+    </div>
+  </header>
+
+  <div style="max-width: 1440px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: flex-start">
+
+    <aside style="flex: 1 1 248px; max-width: 280px; box-sizing: border-box; padding: 28px 24px 32px 32px; display: flex; flex-direction: column; gap: 28px">
+      <section style="display: flex; flex-direction: column; gap: 16px">
+        <h2 style="margin: 0; font-size: 0.694rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6a65">Data</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 0.833rem; font-weight: 500">Election year</span>
+          <div role="group" aria-label="Election year" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg" aria-pressed="false">2013</button>
+            <button class="seg" aria-pressed="false">2016</button>
+            <button class="seg" aria-pressed="false">2019</button>
+            <button class="seg" aria-pressed="false">2022</button>
+            <button class="seg on" aria-pressed="true">2025</button>
+          </div>
+        </div>
+        <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+          <legend style="font-size: 0.833rem; font-weight: 500; padding: 0; margin-bottom: 6px">Aggregation level</legend>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-a"> Region</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-a" checked> Province</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-a"> Municipality</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-a"> Clustered precinct</label>
+        </fieldset>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="checkbox" checked> Weight means by valid ballots</label>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 16px; border-top: 1px solid #ecebe6; padding-top: 24px">
+        <h2 style="margin: 0; font-size: 0.694rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6a65">Model</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 0.833rem; font-weight: 500">Endmember extraction</span>
+          <div role="group" aria-label="Endmember extraction" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg on" aria-pressed="true" style="flex: 1">MVSA</button>
+            <button class="seg" aria-pressed="false" style="flex: 1">NMF</button>
+          </div>
+          <span style="font-size: 0.694rem; color: #6b6a65">Abundances are SUNSAL for both</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="topn-a" style="font-size: 0.833rem; font-weight: 500">Top N candidates</label>
+          <div style="display: flex; align-items: center; gap: 4px">
+            <button class="seg" aria-label="Fewer" style="border: 1px solid #e3e2dc; width: 32px">−</button>
+            <input id="topn-a" type="number" value="6" min="3" max="15" style="font: inherit; font-family: 'IBM Plex Mono', monospace; font-size: 0.833rem; width: 48px; text-align: center; border: 1px solid #e3e2dc; border-radius: 6px; padding: 6px 0">
+            <button class="seg" aria-label="More" style="border: 1px solid #e3e2dc; width: 32px">+</button>
+          </div>
+        </div>
+      </section>
+
+      <section style="border-top: 1px solid #ecebe6; padding-top: 24px; display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 4px; font-size: 0.833rem">
+        <span style="color: #6b6a65">Archetypes</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">p = 6</span>
+        <span style="color: #6b6a65">HySime k</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">6</span>
+        <span style="color: #6b6a65">Candidates</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">42</span>
+        <span style="color: #6b6a65">RMSE</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">0.0413</span>
+      </section>
+    </aside>
+
+    <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 48px; border-left: 1px solid #ecebe6; display: flex; flex-direction: column; gap: 32px">
+
+      <section style="display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 1.44rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em">Geographic distribution of archetypes</h2>
+          <p style="margin: 0; color: #52514e; max-width: 68ch">Abundance of the selected archetype in each province, next to the candidate weights that define every archetype.</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center">
+          <div role="group" aria-label="Quantity" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg on" aria-pressed="true">Abundance</button>
+            <button class="seg" aria-pressed="false">Dominant archetype</button>
+            <button class="seg" aria-pressed="false">Turnout</button>
+          </div>
+          <div role="group" aria-label="Archetype" style="display: flex; flex-wrap: wrap; gap: 6px">
+            <sc-for list="{{arches}}" as="a" hint-placeholder-count="6">
+              <button class="{{a.chipClass}}" aria-pressed="{{a.pressed}}"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: {{a.color}}"></span>{{a.short}}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); gap: 16px; align-items: start">
+          <figure style="margin: 0; border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+            <figcaption style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px">
+              <span style="font-size: 1.2rem; font-weight: 600; line-height: 1.2">Archetype 0 abundance</span>
+              <span style="font-size: 0.833rem; color: #6b6a65">Province · 2025</span>
+            </figcaption>
+            <img src="/_blob/dd3e70c1bb00b2296b67b5d1446704fe" alt="Choropleth of the Philippines by province, shaded by Archetype 0 abundance" style="width: 100%; max-width: 640px; height: auto; align-self: center">
+            <div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #f1f0ec; padding-top: 14px">
+              <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px">
+                <span style="font-size: 0.833rem; font-weight: 500">Color range</span>
+                <div role="group" aria-label="Color range" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+                  <button class="{{rangeData.cls}}" aria-pressed="{{rangeData.pressed}}" onClick="{{setRangeData}}">Data range</button>
+                  <button class="{{rangeFixed.cls}}" aria-pressed="{{rangeFixed.pressed}}" onClick="{{setRangeFixed}}">Fixed 0 to 1</button>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <div aria-hidden="true" style="height: 8px; border-radius: 4px; background: linear-gradient(90deg, #e8f1fc, #9ec5f4, #3987e5, #184f95, #0d366b)"></div>
+                <div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65"><span>{{legend.lo}}</span><span>{{legend.mid}}</span><span>{{legend.hi}}</span></div>
+              </div>
+              <p style="margin: 0; font-size: 0.694rem; color: #6b6a65">{{legend.note}}</p>
+            </div>
+          </figure>
+
+          <section style="border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px">
+              <div style="display: flex; flex-direction: column; gap: 4px; max-width: 46ch">
+                <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600; line-height: 1.2">Candidate weights per endmember</h3>
+                <p style="margin: 0; font-size: 0.833rem; color: #6b6a65">MVSA, national level. Error bars: 1 SD across the sweep's trials at p = 6. With NMF, dark dots on a dotted line mark the deterministic NNDSVD run.</p>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end">
+                <span style="font-size: 0.694rem; color: #6b6a65">X-axis</span>
+                <div role="group" aria-label="X-axis scaling" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+                  <button class="{{axisShared.cls}}" aria-pressed="{{axisShared.pressed}}" onClick="{{setAxisShared}}">Shared</button>
+                  <button class="{{axisOwn.cls}}" aria-pressed="{{axisOwn.pressed}}" onClick="{{setAxisOwn}}">Per archetype</button>
+                </div>
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); column-gap: 28px; row-gap: 20px">
+              <sc-for list="{{arches}}" as="a" hint-placeholder-count="6">
+                <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+                  <div style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem; font-weight: 600"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: {{a.color}}"></span>{{a.name}}</div>
+                  <div style="display: flex; flex-direction: column">
+                    <sc-for list="{{a.rows}}" as="r" hint-placeholder-count="6">
+                      <div style="display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 22px">
+                        <span style="font-size: 0.833rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right">{{r.n}} <span style="color: #6b6a65; font-size: 0.694rem">{{r.tag}}</span></span>
+                        <div style="position: relative; height: 22px">
+                          <sc-for list="{{r.grid}}" as="g" hint-placeholder-count="4">
+                            <div style="position: absolute; left: {{g.x}}%; top: 0; bottom: 0; width: 1px; background: {{g.c}}"></div>
+                          </sc-for>
+                          <div style="position: absolute; left: {{r.left}}%; width: {{r.width}}%; top: 5px; height: 12px; background: {{a.color}}; border-radius: 2px"></div>
+                          <div style="position: absolute; left: {{r.wl}}%; width: {{r.ww}}%; top: 10px; height: 2px; background: #3a3936"></div>
+                          <div style="position: absolute; left: {{r.wl}}%; top: 7px; height: 8px; width: 1.5px; background: #3a3936"></div>
+                          <div style="position: absolute; left: {{r.wr}}%; top: 7px; height: 8px; width: 1.5px; margin-left: -1.5px; background: #3a3936"></div>
+                        </div>
+                      </div>
+                    </sc-for>
+                    <div style="display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 10px">
+                      <span></span>
+                      <div style="position: relative; height: 34px; border-top: 1px solid #c3c2b7">
+                        <sc-for list="{{a.ticks}}" as="t" hint-placeholder-count="4">
+                          <span style="position: absolute; left: {{t.x}}%; top: 3px; transform: translateX(-50%); font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{t.label}}</span>
+                        </sc-for>
+                        <span style="position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); font-size: 0.694rem; color: #6b6a65">loading</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section style="display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 16px; align-items: start">
+        <div style="border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px">
+            <div style="display: flex; flex-direction: column; gap: 4px; max-width: 52ch">
+              <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600; line-height: 1.2">Party / alliance mixing</h3>
+              <p style="margin: 0; font-size: 0.833rem; color: #6b6a65">Summed endmember loading of each alliance's candidates. Blue is positive, red negative, gray near zero.</p>
+            </div>
+            <div role="group" aria-label="Group by" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+              <button class="seg" aria-pressed="false">Party</button>
+              <button class="seg on" aria-pressed="true">Alliance</button>
+            </div>
+          </div>
+          <div style="overflow-x: auto">
+            <table style="border-collapse: separate; border-spacing: 3px; width: 100%; min-width: 600px; font-size: 0.833rem">
+              <thead>
+                <tr>
+                  <th style="text-align: left; font-weight: 500; color: #6b6a65; padding: 6px 8px 6px 0">Alliance</th>
+                  <sc-for list="{{arches}}" as="a" hint-placeholder-count="6">
+                    <th style="font-weight: 600; padding: 6px 4px"><span style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: {{a.color}}"></span>{{a.short}}</span></th>
+                  </sc-for>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{mix}}" as="m" hint-placeholder-count="6">
+                  <tr>
+                    <th scope="row" style="text-align: left; font-weight: 400; padding: 0 12px 0 0; white-space: nowrap">{{m.name}} <span style="color: #6b6a65">· {{m.n}}</span></th>
+                    <sc-for list="{{m.cells}}" as="c" hint-placeholder-count="6">
+                      <td style="background: {{c.bg}}; color: {{c.fg}}; text-align: center; padding: 10px 4px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 0.833rem">{{c.vs}}</td>
+                    </sc-for>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">
+            <span>−18</span>
+            <div aria-hidden="true" style="width: 180px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #a3302f, #e88a89, #f0efec, #86b6ef, #184f95)"></div>
+            <span>+18</span>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600; line-height: 1.2">Candidates per alliance</h3>
+            <p style="margin: 0; font-size: 0.833rem; color: #6b6a65">Full slate, by election result rank; the extra column shows party.</p>
+          </div>
+          <div style="max-height: 440px; overflow-y: auto; border-top: 1px solid #e3e2dc">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.833rem">
+              <thead>
+                <tr style="text-align: left; color: #6b6a65">
+                  <th style="font-weight: 500; padding: 8px 8px 6px 0; position: sticky; top: 0; background: #ffffff; border-bottom: 1px solid #e3e2dc">Alliance</th>
+                  <th style="font-weight: 500; padding: 8px 8px 6px; position: sticky; top: 0; background: #ffffff; border-bottom: 1px solid #e3e2dc">Candidate</th>
+                  <th style="font-weight: 500; padding: 8px 0 6px 8px; position: sticky; top: 0; background: #ffffff; border-bottom: 1px solid #e3e2dc">Party</th>
+                </tr>
+              </thead>
+              <sc-for list="{{roster}}" as="g" hint-placeholder-count="6">
+                <tbody style="border-top: 1px solid #d6d5cf">
+                  <sc-for list="{{g.rows}}" as="t" hint-placeholder-count="4">
+                    <tr>
+                      <sc-if value="{{t.first}}" hint-placeholder-val="{{ true }}">
+                        <td rowspan="{{g.n}}" style="padding: 6px 8px 6px 0; vertical-align: top; font-weight: 500; width: 34%">{{g.co}}</td>
+                      </sc-if>
+                      <td style="padding: 6px 8px; vertical-align: top; border-bottom: 1px solid #f4f3ef"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{t.r}}.</span> {{t.n}}</td>
+                      <td style="padding: 6px 0 6px 8px; vertical-align: top; border-bottom: 1px solid #f4f3ef; color: #52514e; font-size: 0.694rem">{{t.p}}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </sc-for>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1960}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { range: 'data', axis: 'shared' };
+  }
+  renderVals() {
+    var self = this;
+    var COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
+    var TOP = [
+      [['Marcos, Imee', 'NP', 12, 2.16, 0.25], ['Abalos, Benhur', 'PFP', 16, 1.99, 0.51], ['Tolentino, Francis', 'PFP', 25, 1.59, 0.31], ['Villar, Camille', 'NP', 10, 1.53, 0.22], ['Go, Bong Go', 'PDPLBN', 1, 1.41, 0.63], ['Cayetano, Pia', 'NP', 9, 1.35, 0.41]],
+      [['Dela Rosa, Bato', 'PDPLBN', 3, 2.42, 0.45], ['Bondoc, Jimmy', 'PDPLBN', 17, 2.16, 0.40], ['Go, Bong Go', 'PDPLBN', 1, 2.14, 0.43], ['Lambino, Raul', 'PDPLBN', 24, 1.84, 0.34], ['Salvador, Phillip', 'PDPLBN', 19, 1.84, 0.35], ['Hinlo, Jayvee', 'PDPLBN', 27, 1.80, 0.34]],
+      [['Aquino, Bam', 'KNP', 2, 1.90, 0.35], ['Pangilinan, Kiko', 'LP', 5, 1.65, 0.19], ['Mendoza, Heidi', 'IND', 21, 1.43, 0.22], ['Espiritu, Luke', 'PLM', 29, 1.10, 0.17], ['Bosita, Colonel', 'IND', 20, 0.89, 0.23], ['Casiño, Teddy', 'MKBYN', 32, 0.83, 0.13]],
+      [['Lapid, Lito', 'NPC', 11, 2.28, 0.42], ['Tulfo, Erwin', 'LAKAS', 4, 1.68, 0.52], ['Binay, Abby', 'NPC', 15, 1.10, 0.67], ['Pacquiao, Manny', 'PFP', 18, 1.00, 0.37], ['Tulfo, Ben Bitag', 'IND', 13, 0.99, 0.49], ['Revillame, Willie', 'IND', 22, 0.96, 0.46]],
+      [['Marcoleta, Rodante', 'IND', 7, 0.40, 0.61], ['Dela Rosa, Bato', 'PDPLBN', 3, 0.39, 0.55], ['Marcos, Imee', 'NP', 12, 0.08, 0.57], ['Ballon, Roberto', 'IND', 42, -0.04, 0.04], ['De Alban, Angelo', 'IND', 41, -0.04, 0.05], ['Querubin, Ariel', 'NP', 37, -0.06, 0.10]],
+      [['Marcos, Imee', 'NP', 12, 1.91, 0.30], ['Marcoleta, Rodante', 'IND', 7, 1.84, 0.37], ['Go, Bong Go', 'PDPLBN', 1, 1.81, 0.32], ['Dela Rosa, Bato', 'PDPLBN', 3, 1.76, 0.32], ['Revilla, Bong', 'LAKAS', 14, 1.26, 0.17], ['Sotto, Tito', 'NPC', 8, 1.13, 0.25]]
+    ];
+    var niceStep = function (span) {
+      var steps = [0.1, 0.2, 0.25, 0.5, 1, 2];
+      for (var i = 0; i < steps.length; i++) { if (span / steps[i] <= 5) return steps[i]; }
+      return 5;
+    };
+    var domainOf = function (rows) {
+      var lo = 0, hi = 0;
+      rows.forEach(function (r) { lo = Math.min(lo, r[3] - r[4]); hi = Math.max(hi, r[3] + r[4]); });
+      var st = niceStep(hi - lo);
+      return { lo: Math.floor(lo / st - 1e-9) * st, hi: Math.ceil(hi / st - 1e-9) * st, st: st };
+    };
+    var all = [].concat.apply([], TOP);
+    var shared = domainOf(all);
+    var fmtTick = function (v, st) {
+      var d = st < 0.25 ? 1 : (st < 1 ? 2 : 0);
+      if (st === 0.5) d = 1;
+      var s = Math.abs(v).toFixed(d);
+      return (v < -1e-9 ? '−' : '') + s;
+    };
+    var arches = TOP.map(function (rows, i) {
+      var dom = self.state.axis === 'shared' ? shared : domainOf(rows);
+      var span = dom.hi - dom.lo;
+      var pct = function (x) { return Math.max(0, Math.min(100, (x - dom.lo) / span * 100)); };
+      var ticks = [];
+      for (var v = dom.lo; v <= dom.hi + 1e-9; v += dom.st) {
+        ticks.push({ x: pct(v).toFixed(2), label: fmtTick(v, dom.st), c: Math.abs(v) < 1e-9 ? '#a8a7a0' : '#efeee9' });
+      }
+      return {
+        name: 'Archetype ' + i, short: 'A' + i, color: COLORS[i],
+        chipClass: i === 0 ? 'chip on' : 'chip', pressed: i === 0 ? 'true' : 'false',
+        ticks: ticks,
+        rows: rows.map(function (r) {
+          var v = r[3], sd = r[4];
+          var a = pct(Math.min(0, v)), b = pct(Math.max(0, v));
+          return {
+            n: r[0], tag: r[1] + ' [' + r[2] + ']',
+            left: a.toFixed(2), width: Math.max(0.4, b - a).toFixed(2),
+            wl: pct(v - sd).toFixed(2), ww: (pct(v + sd) - pct(v - sd)).toFixed(2), wr: pct(v + sd).toFixed(2),
+            grid: ticks
+          };
+        })
+      };
+    });
+    var seg = function (on) { return { cls: on ? 'seg on' : 'seg', pressed: on ? 'true' : 'false' }; };
+    var legend = this.state.range === 'data'
+      ? { lo: 'min', mid: '', hi: 'max', note: 'Stretched to the lowest and highest value among the units shown. Best for spotting variation within one archetype; not comparable across archetypes or years.' }
+      : { lo: '0.0', mid: '0.5', hi: '1.0', note: 'Fixed at vmin = 0, vmax = 1. Comparable across archetypes, levels and years; small differences may wash out.' };
+
+    var mixc = function (a, b, t) {
+      var p = function (h, k) { return parseInt(h.substr(k, 2), 16); };
+      var c = [1, 3, 5].map(function (k) { return Math.round(p(a, k) + (p(b, k) - p(a, k)) * t); });
+      return 'rgb(' + c.join(',') + ')';
+    };
+    var cell = function (v) {
+      var t = Math.max(-1, Math.min(1, v / 18.1));
+      var m = Math.sqrt(Math.abs(t));
+      var bg = t >= 0 ? mixc('#f0efec', '#184f95', m) : mixc('#f0efec', '#a3302f', m);
+      return { bg: bg, fg: m > 0.55 ? '#ffffff' : '#0b0b0b', vs: (v < 0 ? '−' : '') + Math.abs(v).toFixed(1) };
+    };
+    var MIX = [
+      ['Alyansa para sa Bagong Pilipinas', 12, [13.9, -3.6, -0.6, 8.0, -9.2, 9.3]],
+      ['DuterTen', 10, [3.2, 18.1, -5.7, -8.4, -0.4, 5.9]],
+      ['Independent / none', 10, [-0.8, 0.2, 5.1, 0.5, -1.5, 2.3]],
+      ['Makabayan', 6, [0.1, 0.1, 4.1, -1.2, -0.6, -0.5]],
+      ['KiBam', 2, [0.9, -0.3, 3.6, 0.9, -1.5, -0.2]],
+      ['Partido Lakas ng Masa', 2, [0.1, 0.1, 1.8, -0.5, -0.3, -0.3]]
+    ];
+    var mix = MIX.map(function (m) { return { name: m[0], n: m[1], cells: m[2].map(cell) }; });
+
+    var R = [
+      ['Alyansa para sa Bagong Pilipinas', [['Tulfo, Erwin', 'LAKAS', 4], ['Lacson, Ping', 'IND', 6], ['Sotto, Tito', 'NPC', 8], ['Cayetano, Pia', 'NP', 9], ['Villar, Camille', 'NP', 10], ['Lapid, Lito', 'NPC', 11], ['Marcos, Imee', 'NP', 12], ['Revilla, Bong', 'LAKAS', 14], ['Binay, Abby', 'NPC', 15], ['Abalos, Benhur', 'PFP', 16], ['Pacquiao, Manny', 'PFP', 18], ['Tolentino, Francis', 'PFP', 25]]],
+      ['DuterTen', [['Go, Bong Go', 'PDPLBN', 1], ['Dela Rosa, Bato', 'PDPLBN', 3], ['Marcoleta, Rodante', 'IND', 7], ['Bondoc, Jimmy', 'PDPLBN', 17], ['Salvador, Phillip', 'PDPLBN', 19], ['Rodriguez, Vic', 'IND', 23], ['Lambino, Raul', 'PDPLBN', 24], ['Hinlo, Jayvee', 'PDPLBN', 27], ['Mata, Marites', 'IND', 30], ['Quiboloy, Apollo', 'IND', 31]]],
+      ['Independent / none', [['Tulfo, Ben Bitag', 'IND', 13], ['Bosita, Colonel', 'IND', 20], ['Mendoza, Heidi', 'IND', 21], ['Revillame, Willie', 'IND', 22], ['Ong, Willie', 'AKSYON', 26], ['Honasan, Gringo', 'RP', 28], ['Querubin, Ariel', 'NP', 37], ['Matula, Sonny', 'WPP', 38], ['De Alban, Angelo', 'IND', 41], ['Ballon, Roberto', 'IND', 42]]],
+      ['Makabayan', [['Casiño, Teddy', 'MKBYN', 32], ['Brosas, Arlene', 'MKBYN', 33], ['Ramos, Danilo', 'MKBYN', 35], ['Maza, Liza', 'MKBYN', 36], ['Arambulo, Ronnel', 'MKBYN', 39], ['Castro, France', 'MKBYN', 40]]],
+      ['KiBam', [['Aquino, Bam', 'KNP', 2], ['Pangilinan, Kiko', 'LP', 5]]],
+      ['Partido Lakas ng Masa', [['Espiritu, Luke', 'PLM', 29], ['De Guzman, Leody', 'PLM', 34]]]
+    ];
+    var roster = R.map(function (g) {
+      return { co: g[0], n: g[1].length, rows: g[1].map(function (t, j) { return { n: t[0], p: t[1], r: t[2], first: j === 0 }; }) };
+    });
+
+    return {
+      arches: arches, mix: mix, roster: roster, legend: legend,
+      rangeData: seg(this.state.range === 'data'), rangeFixed: seg(this.state.range === 'fixed'),
+      axisShared: seg(this.state.axis === 'shared'), axisOwn: seg(this.state.axis === 'own'),
+      setRangeData: function () { self.setState({ range: 'data' }); },
+      setRangeFixed: function () { self.setState({ range: 'fixed' }); },
+      setAxisShared: function () { self.setState({ axis: 'shared' }); },
+      setAxisOwn: function () { self.setState({ axis: 'own' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

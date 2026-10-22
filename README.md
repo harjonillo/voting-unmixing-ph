@@ -72,7 +72,7 @@ and drawing remain — it is served as a **fully static** site.
 `scripts/build_static.py` pre-computes every selection (year × level ×
 weighting, endmember loadings, and the per-p sweep detail) into JSON +
 simplified GeoJSON under `site/data/`; `scripts/build_site.py` renders the page
-shell (`site/index.html`) with [FastHTML](https://fastht.ml) + Tailwind/daisyUI.
+shell (`site/index.html`) with [FastHTML](https://fastht.ml); styling is plain CSS (`web/styles.css`).
 The browser loads only the files for the current view and draws them with
 Plotly.js — **no server and no Pyodide**, so a first visit pulls ~½ MB.
 `.github/workflows/deploy-static.yml` builds and publishes `site/` to GitHub
@@ -85,7 +85,7 @@ Build and test locally (needs the conda env below plus `python-fasthtml`):
 pip install python-fasthtml                       # once, into the env
 python scripts/build_static.py --out site/data --verify   # bake JSON + GeoJSON (--verify checks parity with a fresh in-process aggregation)
 python scripts/build_site.py   --out site                 # render the FastHTML shell
-cd site && python -m http.server 8000             # open http://localhost:8000 (needs internet for the Plotly/Tailwind CDNs)
+cd site && python -m http.server 8000             # open http://localhost:8000 (needs internet for the Plotly CDN and Google Fonts)
 ```
 
 Rebuild `site/data` whenever the pipeline/sweep outputs change; rebuild the
