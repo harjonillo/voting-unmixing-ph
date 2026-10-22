@@ -38,11 +38,11 @@ web/                    static-site front end: app.js + styles.css (Plotly.js)
 
 ## Setup
 
-```bash
-conda activate voting_unmixing_ph_env   # created with:
-# conda create -n voting_unmixing_ph_env -c conda-forge python=3.13 \
-#   numpy scipy pandas matplotlib seaborn geopandas \
-#   jupyter ipykernel openpyxl pyarrow scikit-learn
+Creating the env for the first time:
+```
+conda create -n voting_unmixing_ph_env -c conda-forge python=3.13 numpy scipy pandas matplotlib seaborn geopandas jupyter ipykernel openpyxl pyarrow scikit-learn
+conda activate voting_unmixing_ph_env
+python -m ipykernel install --user --name=voting_unmixing_ph_env
 ```
 
 Populate `data/` (see `data/README.md`), then from the repo root:
