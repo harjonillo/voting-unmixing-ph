@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A · Abundance distributions</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#1c5cab}a:hover{color:#0d366b}
+.seg{font:inherit;font-size:0.833rem;padding:6px 10px;border:0;background:transparent;color:#52514e;border-radius:6px;cursor:pointer;min-height:32px}
+.seg:hover{background:#ecebe6;color:#0b0b0b}
+.seg.on{background:#0b0b0b;color:#ffffff}
+.tab{font:inherit;font-size:1rem;padding:12px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:#52514e;cursor:pointer}
+.tab:hover{color:#0b0b0b}
+.tab.on{color:#0b0b0b;border-bottom-color:#0b0b0b;font-weight:600}
+.sel{font:inherit;font-size:0.833rem;padding:6px 10px;border:1px solid #dcdbd5;border-radius:6px;background:#ffffff;color:#0b0b0b;min-height:32px}
+</style>
+</helmet>
+<div style="font-family: 'Instrument Sans', system-ui, sans-serif; color: #0b0b0b; background: #ffffff; min-height: 100%; font-size: 16px; line-height: 1.5">
+
+  <header style="border-bottom: 1px solid #e3e2dc; background: #ffffff">
+    <div style="max-width: 1440px; margin: 0 auto; padding: 20px 32px 0; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px">
+          <h1 style="margin: 0; font-size: 1.44rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em">PH Voting Archetypes</h1>
+          <p style="margin: 0; font-size: 0.833rem; color: #6b6a65">Spectral-unmixing explorer of PH senatorial votes</p>
+        </div>
+        <nav aria-label="Project links" style="display: flex; gap: 20px; font-size: 0.833rem">
+          <a href="#">Method notes</a>
+          <a href="#">Data sources</a>
+          <a href="#">GitHub</a>
+        </nav>
+      </div>
+      <div role="tablist" style="display: flex; flex-wrap: wrap; gap: 28px">
+        <button class="tab" role="tab" aria-selected="false">Map / overview</button>
+        <button class="tab" role="tab" aria-selected="false">Model comparison</button>
+        <button class="tab on" role="tab" aria-selected="true">Abundance distributions</button>
+      </div>
+    </div>
+  </header>
+
+  <div style="max-width: 1440px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: flex-start">
+
+    <aside style="flex: 1 1 248px; max-width: 280px; box-sizing: border-box; padding: 28px 24px 32px 32px; display: flex; flex-direction: column; gap: 28px">
+      <section style="display: flex; flex-direction: column; gap: 16px">
+        <h2 style="margin: 0; font-size: 0.694rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6a65">Data</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 0.833rem; font-weight: 500">Election year</span>
+          <div role="group" aria-label="Election year" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg">2013</button><button class="seg">2016</button><button class="seg">2019</button><button class="seg">2022</button><button class="seg on" aria-pressed="true">2025</button>
+          </div>
+        </div>
+        <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+          <legend style="font-size: 0.833rem; font-weight: 500; padding: 0; margin-bottom: 6px">Aggregation level</legend>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-d"> Region</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-d" checked> Province</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-d"> Municipality</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-d"> Clustered precinct</label>
+        </fieldset>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="checkbox" checked> Weight means by valid ballots</label>
+      </section>
+      <section style="display: flex; flex-direction: column; gap: 16px; border-top: 1px solid #ecebe6; padding-top: 24px">
+        <h2 style="margin: 0; font-size: 0.694rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6a65">Model</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 0.833rem; font-weight: 500">Endmember extraction</span>
+          <div role="group" aria-label="Endmember extraction" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg on" aria-pressed="true" style="flex: 1">MVSA</button><button class="seg" style="flex: 1">NMF</button>
+          </div>
+          <span style="font-size: 0.694rem; color: #6b6a65">Abundances are SUNSAL for both</span>
+        </div>
+      </section>
+      <section style="border-top: 1px solid #ecebe6; padding-top: 24px; display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 4px; font-size: 0.833rem">
+        <span style="color: #6b6a65">Archetypes</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">p = 6</span>
+        <span style="color: #6b6a65">Units</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">[n] provinces</span>
+      </section>
+    </aside>
+
+    <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 48px; border-left: 1px solid #ecebe6; display: flex; flex-direction: column; gap: 24px">
+
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 1.44rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em">Abundance distributions</h2>
+          <p style="margin: 0; color: #52514e; max-width: 72ch">Distribution of each archetype's abundance across the units at the current aggregation level.</p>
+        </div>
+        <span style="font-size: 0.694rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #52514e; border: 1px solid #dcdbd5; border-radius: 999px; padding: 3px 10px">Placeholder data</span>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 0.694rem; color: #6b6a65">X-axis</span>
+          <div role="group" aria-label="X-axis" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg on" aria-pressed="true">Fixed 0 to 1</button><button class="seg">Per archetype</button>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 0.694rem; color: #6b6a65">Y-axis</span>
+          <div role="group" aria-label="Y-axis" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg on" aria-pressed="true">Count</button><button class="seg">Share of units</button>
+          </div>
+        </div>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 0.694rem; color: #6b6a65">Bins
+          <input type="number" value="20" min="5" max="60" class="sel" style="width: 64px; font-family: 'IBM Plex Mono', monospace">
+        </label>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px">
+        <sc-for list="{{hists}}" as="h" hint-placeholder-count="6">
+          <figure style="margin: 0; border: 1px solid #e3e2dc; border-radius: 10px; padding: 16px 20px 12px; display: flex; flex-direction: column; gap: 8px">
+            <figcaption style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem; font-weight: 600"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: {{h.color}}"></span>{{h.name}}</figcaption>
+            <div style="display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 6px">
+              <div style="position: relative; height: 150px">
+                <sc-for list="{{h.yt}}" as="t" hint-placeholder-count="3">
+                  <span style="position: absolute; right: 0; top: {{t.y}}px; transform: translateY(-50%); font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{t.label}}</span>
+                </sc-for>
+              </div>
+              <div style="position: relative; height: 150px; border-bottom: 1px solid #c3c2b7">
+                <sc-for list="{{h.yt}}" as="t" hint-placeholder-count="3">
+                  <div style="position: absolute; left: 0; right: 0; top: {{t.y}}px; height: 1px; background: #f1f0ec"></div>
+                </sc-for>
+                <sc-for list="{{h.bars}}" as="b" hint-placeholder-count="20">
+                  <div style="position: absolute; bottom: 0; left: calc({{b.x}}% + 1px); width: calc({{b.w}}% - 2px); height: {{b.h}}px; background: {{h.color}}; border-radius: 2px 2px 0 0"></div>
+                </sc-for>
+                <div style="position: absolute; top: -4px; bottom: 0; left: {{h.med}}%; width: 0; border-left: 1.5px dashed #0b0b0b"></div>
+                <span style="position: absolute; top: -6px; left: {{h.med}}%; margin-left: 6px; font-size: 0.694rem; color: #0b0b0b; background: #ffffff; padding: 0 2px">median</span>
+              </div>
+              <span></span>
+              <div style="position: relative; height: 32px">
+                <sc-for list="{{xt}}" as="t" hint-placeholder-count="5">
+                  <span style="position: absolute; left: {{t.x}}%; top: 2px; transform: translateX(-50%); font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{t.label}}</span>
+                </sc-for>
+                <span style="position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); font-size: 0.694rem; color: #6b6a65">abundance</span>
+              </div>
+            </div>
+          </figure>
+        </sc-for>
+      </div>
+
+      <figure style="margin: 0; border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <figcaption style="display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 1.2rem; font-weight: 600; line-height: 1.2">All archetypes on one axis</span>
+          <span style="font-size: 0.833rem; color: #6b6a65">Each dot is one province. Box = quartiles, line = median. Hover a dot for the province name and value.</span>
+        </figcaption>
+        <div style="display: flex; flex-direction: column">
+          <sc-for list="{{hists}}" as="h" hint-placeholder-count="6">
+            <div style="display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 40px; border-bottom: 1px solid #f4f3ef">
+              <span style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem; font-weight: 500"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: {{h.color}}"></span>{{h.name}}</span>
+              <div style="position: relative; height: 40px">
+                <sc-for list="{{xt}}" as="t" hint-placeholder-count="5">
+                  <div style="position: absolute; top: 0; bottom: 0; left: {{t.x}}%; width: 1px; background: #f1f0ec"></div>
+                </sc-for>
+                <div style="position: absolute; top: 9px; height: 22px; left: {{h.q1}}%; width: {{h.iqr}}%; border: 1px solid #3a3936; border-radius: 3px; box-sizing: border-box"></div>
+                <div style="position: absolute; top: 7px; height: 26px; left: {{h.med}}%; width: 2px; margin-left: -1px; background: #0b0b0b"></div>
+                <sc-for list="{{h.dots}}" as="d" hint-placeholder-count="40">
+                  <div style="position: absolute; left: {{d.x}}%; top: {{d.y}}px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: {{h.color}}; opacity: 0.75"></div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+          <div style="display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px">
+            <span></span>
+            <div style="position: relative; height: 32px">
+              <sc-for list="{{xt}}" as="t" hint-placeholder-count="5">
+                <span style="position: absolute; left: {{t.x}}%; top: 4px; transform: translateX(-50%); font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{t.label}}</span>
+              </sc-for>
+              <span style="position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); font-size: 0.694rem; color: #6b6a65">abundance</span>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var COLORS = ['#3c73e1', '#fe654f', '#169873', '#ffae03', '#6b4b3e', '#9ebd6e'];
+    // Placeholder shapes only (seeded); the real tab bins the baked per-unit abundances.
+    var seed = 7;
+    var rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    var gauss = function () { return Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd()); };
+    var SHAPE = [[0.32, 0.12], [0.22, 0.18], [0.14, 0.08], [0.18, 0.07], [0.06, 0.04], [0.24, 0.09]];
+    var NU = 82, NB = 20;
+    var hists = SHAPE.map(function (s, i) {
+      var xs = [];
+      for (var k = 0; k < NU; k++) { xs.push(Math.max(0.002, Math.min(0.998, s[0] + s[1] * gauss()))); }
+      xs.sort(function (a, b) { return a - b; });
+      var counts = new Array(NB).fill(0);
+      xs.forEach(function (x) { counts[Math.min(NB - 1, Math.floor(x * NB))] += 1; });
+      var q = function (f) { return xs[Math.floor(f * (NU - 1))]; };
+      return {
+        name: 'Archetype ' + i, color: COLORS[i], counts: counts, xs: xs,
+        med: (q(0.5) * 100).toFixed(2), q1: (q(0.25) * 100).toFixed(2), iqr: ((q(0.75) - q(0.25)) * 100).toFixed(2),
+        dots: xs.map(function () { return 0; })
+      };
+    });
+    var ymax = 0;
+    hists.forEach(function (h) { h.counts.forEach(function (c) { ymax = Math.max(ymax, c); }); });
+    ymax = Math.ceil(ymax / 10) * 10;
+    var yt = [0, ymax / 2, ymax].map(function (v) { return { y: 150 - v / ymax * 150, label: String(v) }; });
+    hists.forEach(function (h) {
+      h.yt = yt;
+      h.bars = h.counts.map(function (c, b) { return { x: (b / NB * 100).toFixed(2), w: (100 / NB).toFixed(2), h: (c / ymax * 150).toFixed(1) }; });
+      h.dots = h.xs.map(function (x) { return { x: (x * 100).toFixed(2), y: (8 + rnd() * 22).toFixed(1) }; });
+    });
+    var xt = [0, 0.25, 0.5, 0.75, 1].map(function (v) { return { x: v * 100, label: v.toFixed(2) }; });
+    return { hists: hists, xt: xt };
+  }
+}
+</script>
+</body>
+</html>

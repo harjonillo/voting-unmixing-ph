@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software or its results, please cite it as below."
+title: "voting-unmixing-ph: spectral unmixing of Philippine senatorial votes"
+abstract: >-
+  Treats precinct-level Philippine senatorial election returns as mixtures of
+  a few voting archetypes and recovers them with hyperspectral unmixing
+  (HySime, MVSA or NMF, and SUNSAL), with a static explorer for the results.
+type: software
+authors:
+  - family-names: Arjonillo
+    given-names: Hannah
+    affiliation: >-
+      CX Team, Instrumentation Physics Laboratory, National Institute of
+      Physics, University of the Philippines Diliman
+  - family-names: Lim
+    given-names: May
+    affiliation: >-
+      CX Team, Instrumentation Physics Laboratory, National Institute of
+      Physics, University of the Philippines Diliman
+repository-code: "https://github.com/harjonillo/voting-unmixing-ph"
+url: "https://harjonillo.github.io/voting-unmixing-ph/"
+license: MIT
+keywords:
+  - hyperspectral unmixing
+  - spectral unmixing
+  - elections
+  - Philippines
+  - voting behavior

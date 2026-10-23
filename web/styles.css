@@ -1,25 +1,444 @@
-/* App-specific rules layered on Tailwind + daisyUI (see scripts/build_site.py).
+/* PH voting archetypes — all styling for the static explorer (no framework).
  *
- * Layout, colors, and the form/tab/card look come from Tailwind utility classes
- * and daisyUI components in the markup; the theme is set by `data-theme` on
- * <html>. Only the few things that are awkward to express as utilities — the
- * JS-generated plot grids and the map's minimum height — live here. */
+ * Markup comes from scripts/build_site.py and the JS-built pieces in web/app.js.
+ * Tokens follow docs/redesign/README.md: a 1.2-ratio type scale on a 16px base,
+ * Instrument Sans for UI text, IBM Plex Mono for numbers. UI chrome is black and
+ * gray only; color is reserved for data. */
 
-/* Use IBM Plex Sans across the UI (loaded from Google Fonts in build_site.py),
- * overriding daisyUI/Tailwind's default system stack. Set on body so it wins
- * over Tailwind's html-level default and cascades to the components. */
-body { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+:root {
+  --fs--2: 0.694rem;  /* captions, axis ticks, overline labels */
+  --fs--1: 0.833rem;  /* labels, controls, table cells */
+  --fs-0: 1rem;       /* body */
+  --fs-1: 1.2rem;     /* card titles */
+  --fs-2: 1.44rem;    /* page title, section headings */
+  --fs-3: 1.728rem;   /* reserve */
 
-/* Grid of small plots (endmember loadings, histograms) — built in app.js. */
-.plot-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 0.5rem;
+  --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-wordmark: "Bricolage Grotesque", var(--font-sans);   /* the title only */
+
+  --bg: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #6b6a65;      /* >= 4.5:1 on white */
+  --border: #e3e2dc;
+  --hairline: #ecebe6;
+  --hairline-2: #f1f0ec;
+  --axis: #c3c2b7;
+  --track: #f7f6f3;
+  --hover-border: #a8a7a0;
+  --link: #1c5cab;
+  --link-hover: #0d366b;
+
+  --radius: 0;               /* cards: sharp corners, like the scrollbars */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  /* The pointing hand, its index fingernail marked with indelible ink — the
+   * violet stain a Philippine voter's finger gets at the precinct. Hotspot at
+   * the fingertip; falls back to the system hand. */
+  --hand: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M11 4.5A2.5 2.5 0 0 1 16 4.5V12.5A1.75 1.75 0 0 1 19.5 12.5V13.5A1.75 1.75 0 0 1 23 13.5V15A1.75 1.75 0 0 1 26.5 15V21C26.5 25.5 24 29 19.5 29H16.5C14 29 12.5 27.5 11 25.5L6.2 19A1.9 1.9 0 0 1 9 16.4L11 18.5Z' fill='%23fff' stroke='%230b0b0b' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M16 12.5V17M19.5 13.5V17.5M23 15V18' fill='none' stroke='%230b0b0b' stroke-width='1.2' stroke-linecap='round'/%3E%3Cpath d='M12 4.6A1.5 1.5 0 0 1 15 4.6V7.9Q13.5 8.8 12 7.9Z' fill='%236a2c91'/%3E%3C/svg%3E") 13 2, pointer;
 }
-.plot-cell { min-width: 0; }
 
-/* Give the choropleths a sensible minimum height (Plotly fills the width). */
-#map-plot, #cmp-plot { min-height: 600px; }
+*, *::before, *::after { box-sizing: border-box; }
 
-/* Caption text emitted by app.js (loadings grid header). */
-.muted { font-size: 0.75rem; opacity: 0.6; line-height: 1.4; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-0);
+  line-height: 1.5;
+}
+
+a { color: var(--link); cursor: var(--hand); }
+a:hover { color: var(--link-hover); }
+
+.mono { font-family: var(--font-mono); }
+.note { font-size: var(--fs--2); color: var(--ink-muted); }
+.muted { font-size: var(--fs--1); color: var(--ink-muted); line-height: 1.4; margin: 0; }
+
+/* ------------------------------------------------------------------ header */
+.app-header { border-bottom: 1px solid var(--border); background: var(--bg); }
+.header-inner {
+  max-width: 1440px; margin: 0 auto; padding: 20px 32px 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.header-top, .brand-row {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px;
+}
+/* center, not baseline: the logo mark would push the links below the title */
+.header-top, .brand-row { align-items: center; }
+.header-top { justify-content: space-between; }
+.brand-link {
+  display: inline-flex; align-items: center; gap: 10px;
+  color: var(--ink); text-decoration: none;
+}
+.brand-link:hover { color: var(--ink); }
+.brand {
+  margin: 0; font-family: var(--font-wordmark); font-size: var(--fs-2); line-height: 1.2;
+  font-weight: 700; letter-spacing: -0.02em;
+}
+.logo { flex: none; transition: transform .6s var(--ease-out); }
+.brand-link:hover .logo { transform: rotate(60deg); }
+.subtitle { margin: 0; font-size: var(--fs--1); color: var(--ink-muted); }
+.links { display: flex; gap: 20px; font-size: var(--fs--1); }
+.header-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 28px; }
+.tab {
+  font: inherit; font-size: var(--fs-0); padding: 12px 0; border: 0;
+  border-bottom: 2px solid transparent; background: transparent;
+  color: var(--ink-2); cursor: var(--hand);
+}
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+
+/* ------------------------------------------------------------------ layout */
+/* A fixed-height app shell: the header and sidebar stay put and only the main
+ * pane scrolls. direction: rtl puts the pane's scrollbar on its left edge, where
+ * its always-shown track line is the one divider from the sidebar; the
+ * sidebar's own scrollbar (only on short windows) goes on its outer edge, away
+ * from the divider. Their children switch back to ltr. Phones get one normal
+ * page. */
+.shell { height: 100vh; display: flex; flex-direction: column; }
+.app-header { flex: none; }
+.layout {
+  flex: 1 1 auto; min-height: 0; width: 100%; max-width: 1440px; margin: 0 auto;
+  display: flex; align-items: stretch;
+}
+/* The sidebar scrolls only if taller than the window. Its 10px scrollbar gutter
+ * is always reserved (+10px width, -10px left padding), so its text stays at the
+ * header's 32px margin whether or not the bar shows. */
+.sidebar {
+  flex: 0 0 282px; overflow-y: auto; direction: rtl; scrollbar-gutter: stable;
+  padding: 28px 24px 32px 22px;
+  display: flex; flex-direction: column; gap: 28px;
+}
+.main {
+  flex: 1 1 auto; min-width: 0; overflow-y: scroll; direction: rtl;
+  padding: 28px 32px 48px;
+  display: flex; flex-direction: column; gap: 32px;
+}
+.sidebar > *, .main > * { direction: ltr; }
+.tab-panel { display: flex; flex-direction: column; gap: 16px; }
+.tab-panel[hidden] { display: none; }
+
+@media (max-width: 900px) {
+  .shell { height: auto; }
+  .layout { flex-wrap: wrap; }
+  .sidebar { flex: 1 1 100%; overflow: visible; direction: ltr; padding: 24px 20px 8px; }
+  .main {
+    overflow: visible; direction: ltr; border-left: 0;
+    border-top: 1px solid var(--hairline); padding: 24px 20px 40px;
+  }
+  .header-inner { padding: 16px 20px 0; }
+}
+
+.site-footer {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  border-top: 1px solid var(--hairline); padding-top: 16px;
+  font-size: var(--fs--1); color: var(--ink-muted);
+}
+
+/* Scrollbars: minimal and always visible, like the tab underline — a 1px
+ * hairline track with a 4px black thumb that thickens to 6px on hover. Don't
+ * add scrollbar-color/-width for Chrome: once set, it ignores these rules. */
+.scroll::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+.scroll::-webkit-scrollbar-track:vertical {
+  background: linear-gradient(90deg, transparent 4.5px, var(--border) 4.5px,
+    var(--border) 5.5px, transparent 5.5px);
+}
+.scroll::-webkit-scrollbar-track:horizontal {
+  background: linear-gradient(180deg, transparent 4.5px, var(--border) 4.5px,
+    var(--border) 5.5px, transparent 5.5px);
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: var(--ink); background-clip: padding-box;
+  border: 3px solid transparent; border-radius: 0;
+}
+.scroll::-webkit-scrollbar-thumb:hover,
+.scroll::-webkit-scrollbar-thumb:active { border-width: 2px; }
+.scroll::-webkit-scrollbar-corner { background: transparent; }
+/* the sidebar's bar is a bare thumb: the pane's track is the only divider line */
+.sidebar::-webkit-scrollbar-track:vertical { background: transparent; }
+@supports not selector(::-webkit-scrollbar) {   /* Firefox: closest match */
+  .scroll { scrollbar-width: auto; scrollbar-color: var(--ink) transparent; }
+  .main { border-left: 1px solid var(--hairline); }   /* no track line to divide */
+}
+
+/* ----------------------------------------------------------------- sidebar */
+.side-group { display: flex; flex-direction: column; gap: 16px; }
+.side-group + .side-group { border-top: 1px solid var(--hairline); padding-top: 24px; }
+.overline {
+  margin: 0; font-size: var(--fs--2); font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-muted);
+}
+.field { display: flex; flex-direction: column; gap: 6px; border: 0; margin: 0; padding: 0; }
+.field-label { font-size: var(--fs--1); font-weight: 500; padding: 0; }
+legend.field-label { margin-bottom: 6px; }
+.radios { display: flex; flex-direction: column; gap: 6px; }
+.radios label, .check {
+  display: flex; align-items: center; gap: 8px; font-size: var(--fs--1); cursor: var(--hand);
+}
+input[type="radio"], input[type="checkbox"] {
+  accent-color: var(--ink); margin: 0; cursor: var(--hand);
+}
+
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper input {
+  font: inherit; font-family: var(--font-mono); font-size: var(--fs--1);
+  width: 48px; text-align: center; border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 0; -moz-appearance: textfield;
+}
+.stepper input::-webkit-inner-spin-button,
+.stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.step {
+  font: inherit; font-size: var(--fs--1); width: 32px; min-height: 32px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+  color: var(--ink-2); cursor: var(--hand);
+}
+.step:hover { background: var(--hairline); color: var(--ink); }
+
+.summary {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 4px;
+  font-size: var(--fs--1);
+}
+.summary dt, .summary .k { color: var(--ink-muted); }
+.summary .v { font-family: var(--font-mono); text-align: right; }
+
+/* ----------------------------------------------------------------- controls */
+.seg-group {
+  display: flex; flex-wrap: wrap; gap: 2px; padding: 3px;
+  background: var(--track); border-radius: 8px; width: fit-content;
+}
+.seg-group.fill { width: auto; }
+.seg-group.fill .seg { flex: 1; }
+.seg {
+  font: inherit; font-size: var(--fs--1); padding: 6px 10px; border: 0;
+  background: transparent; color: var(--ink-2); border-radius: 6px;
+  cursor: var(--hand); min-height: 32px;
+}
+.seg:hover { background: var(--hairline); color: var(--ink); }
+.seg.on { background: var(--ink); color: #ffffff; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips[hidden] { display: none; }
+.chip {
+  font: inherit; font-size: var(--fs--1); display: inline-flex; align-items: center;
+  gap: 6px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg); color: var(--ink); cursor: var(--hand); min-height: 32px;
+}
+.chip:hover { border-color: var(--hover-border); }
+/* the selected chip is also tinted with its archetype color (set by app.js) */
+.chip.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  flex: none;
+}
+.chip .dot { transition: transform .2s ease; }
+.chip:hover .dot { transform: scale(1.4); }
+
+@media (prefers-reduced-motion: reduce) {
+  .logo, .chip .dot { transition: none; }
+  .brand-link:hover .logo { transform: none; }
+}
+
+/* Inline controls share one height (a segmented track: 32px buttons + 2 × 3px
+ * padding), so labels above controls side by side line up. The select drops
+ * the native look (Safari ignores height on it) and draws its own chevron. */
+:root { --control-h: 38px; }
+select, .labeled input {
+  font: inherit; font-size: var(--fs--1); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 6px; background-color: var(--bg);
+  height: var(--control-h); padding: 0 10px; margin: 0;
+}
+select {
+  appearance: none; -webkit-appearance: none; padding-right: 30px; cursor: var(--hand);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2352514e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center;
+}
+select:hover, .labeled input:hover { border-color: var(--hover-border); }
+.labeled input { width: 5rem; font-family: var(--font-mono); }
+.labeled { display: flex; flex-direction: column; gap: 4px; }
+
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 2px solid var(--link); outline-offset: 2px;
+}
+
+/* --------------------------------------------------------- sections & cards */
+.section-head { display: flex; flex-direction: column; gap: 4px; }
+.section-title {
+  margin: 0; font-size: var(--fs-2); line-height: 1.2; font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.lede { margin: 0; color: var(--ink-2); max-width: 68ch; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; }
+
+.grid-32, .grid-23, .grid-2 { display: grid; gap: 16px; align-items: start; }
+.grid-32 { grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); }
+.grid-23 { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-32 + .grid-32 { margin-top: 16px; }
+@media (max-width: 1180px) {
+  .grid-32, .grid-23, .grid-2 { grid-template-columns: minmax(0, 1fr); }
+}
+
+.card {
+  margin: 0; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0;
+  background: var(--bg);
+}
+.card-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between;
+  align-items: flex-start; gap: 12px;
+}
+.card-head-text { display: flex; flex-direction: column; gap: 4px; max-width: 60ch; }
+.card-title { margin: 0; font-size: var(--fs-1); font-weight: 600; line-height: 1.2; }
+.card-sub { margin: 0; font-size: var(--fs--1); color: var(--ink-muted); }
+.head-control { display: flex; align-items: center; gap: 8px; }
+
+/* --------------------------------------------------------------- map card */
+.fig-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+#map-plot { min-height: 560px; }
+/* Plotly's map traces add MapLibre's compact attribution control (a <details>
+ * toggle) without MapLibre's CSS, so it shows as a bare disclosure triangle.
+ * MAP_VIEW's "white-bg" style loads no tiles, so there is nothing to credit;
+ * switching to a tile style would need this (and MapLibre's CSS) back. */
+.maplibregl-ctrl-attrib { display: none; }
+.map-foot {
+  display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid var(--hairline-2); padding-top: 14px;
+}
+.map-foot p { margin: 0; }
+.legend-row {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
+}
+.legend-row[hidden] { display: none; }
+.ramp { display: flex; flex-direction: column; gap: 4px; }
+.ramp-bar { height: 8px; border-radius: 4px; }
+.ramp-ticks {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono); font-size: var(--fs--2); color: var(--ink-muted);
+}
+.swatches { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--fs--1); }
+.swatches span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------------------------------------------------- loadings small multiples */
+.plot-stack { display: flex; flex-direction: column; gap: 20px; }
+.plot-cell { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.plot-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--fs--1); font-weight: 600;
+}
+
+/* --------------------------------------------------- alliance × archetype matrix */
+.matrix-wrap { overflow-x: auto; }
+.matrix {
+  border-collapse: separate; border-spacing: 3px; width: 100%;
+  font-size: var(--fs--1);
+}
+.matrix thead th { font-weight: 600; padding: 6px 4px; white-space: nowrap; }
+.matrix thead th:first-child {
+  text-align: left; font-weight: 500; color: var(--ink-muted); padding: 6px 8px 6px 0;
+}
+.matrix thead th span { display: inline-flex; align-items: center; gap: 6px; }
+.matrix tbody th {
+  text-align: left; font-weight: 400; padding: 0 12px 0 0; white-space: nowrap;
+}
+.matrix tbody th .n { color: var(--ink-muted); }
+.matrix td {
+  text-align: center; padding: 10px 4px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: var(--fs--1); min-width: 3.5rem;
+}
+.matrix-key {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-mono); font-size: var(--fs--2); color: var(--ink-muted);
+}
+.matrix-key .bar { width: 180px; height: 8px; border-radius: 4px; }
+.matrix-key .label { font-family: var(--font-sans); }
+
+/* -------------------------------------------------------------- candidates */
+.roster-wrap { max-height: 440px; overflow-y: auto; border-top: 1px solid var(--border); }
+.roster { width: 100%; border-collapse: collapse; font-size: var(--fs--1); }
+.roster thead th {
+  text-align: left; font-weight: 500; color: var(--ink-muted);
+  padding: 8px 8px 6px; position: sticky; top: 0; background: var(--bg);
+  border-bottom: 1px solid var(--border); z-index: 1;
+}
+.roster thead th:first-child { padding-left: 0; }
+.roster thead th:last-child { padding-right: 0; }
+.roster tbody { border-top: 1px solid #d6d5cf; }
+.roster td { padding: 6px 8px; vertical-align: top; border-bottom: 1px solid #f4f3ef; }
+.roster td.group { padding-left: 0; font-weight: 500; width: 34%; border-bottom: 0; }
+.roster td.extra { padding-right: 0; color: var(--ink-2); font-size: var(--fs--2); }
+.roster .rank { font-family: var(--font-mono); font-size: var(--fs--2); color: var(--ink-muted); }
+.roster .also { color: var(--ink-muted); font-size: var(--fs--2); }
+
+/* -------------------------------------------------------- compare tab */
+.tab-panel.spaced { gap: 32px; }
+.tab-section { display: flex; flex-direction: column; gap: 16px; }
+.toolbar.center { align-items: center; }
+.card-head-text.wide { max-width: 90ch; }
+.grid-fit {
+  display: grid; gap: 16px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr));
+}
+.scroll-x { overflow-x: auto; }
+
+/* Legend rows under a figure (line / box samples + text). */
+.legend-rule, .legend-plain {
+  display: flex; flex-wrap: wrap; gap: 6px 24px; font-size: var(--fs--2); color: var(--ink-2);
+}
+.legend-rule { border-top: 1px solid var(--hairline-2); padding-top: 12px; gap: 8px 24px; }
+.legend-item { display: inline-flex; align-items: center; gap: 8px; }
+.legend-item.on { color: var(--ink); font-weight: 600; }
+.box-swatch {
+  display: inline-block; width: 12px; height: 12px; flex: none;
+  border: 1px solid #3a3936; border-radius: 2px;
+}
+.tag-sample { font-family: var(--font-mono); font-weight: 500; color: var(--ink-2); }
+.line-swatch { display: inline-block; width: 16px; flex: none; }
+
+/* Lineage network: absolutely positioned boxes over one SVG of links. */
+.lineage { position: relative; margin: 0 auto; }
+.lineage svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.lin-col {
+  position: absolute; top: 0; display: flex; flex-direction: column; align-items: center;
+}
+.lin-col .p { font-size: var(--fs--1); font-weight: 600; }
+.lin-col .d { font-family: var(--font-mono); font-size: var(--fs--2); color: var(--ink-muted); }
+.lin-col.anchor .d { color: var(--ink); }
+.lin-node {
+  position: absolute; padding: 5px 8px; background: var(--bg);
+  border: 1.5px solid; border-radius: 6px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.lin-node .l1 {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
+  font-size: var(--fs--1); font-weight: 600; line-height: 1.25;
+}
+.lin-node .l1 span:first-child, .lin-node .l2 {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lin-node .tag {
+  font-family: var(--font-mono); font-size: var(--fs--2); font-weight: 500; color: var(--ink-2);
+}
+.lin-node .l2 { font-size: var(--fs--2); color: var(--ink-2); line-height: 1.3; }
+.lin-label {
+  position: absolute; transform: translate(-50%, -50%);
+  font-family: var(--font-mono); font-size: var(--fs--2); color: #3a3936;
+  background: var(--bg); padding: 0 3px; border-radius: 3px; line-height: 1.3;
+}
+.lin-axis {
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+  font-size: var(--fs--2); color: var(--ink-muted);
+}
+
+/* ---------------------------------------------------- distributions tab */
+.dist-rows { display: flex; flex-direction: column; gap: 16px; }
+.dist-card { padding: 16px 20px 12px; gap: 8px; }
+/* histogram : loadings side by side; stacked when narrow */
+.dist-pair {
+  display: grid; gap: 12px 28px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+}
+.dist-pair .note { display: block; margin-bottom: 2px; }

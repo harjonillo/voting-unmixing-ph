@@ -5,10 +5,9 @@ component tree in Python and serializes it to a single ``index.html``. The page
 is inert on its own — all interactivity is client-side (web/app.js + Plotly.js),
 re-slicing the JSON that scripts/build_static.py bakes into ``site/data/``.
 
-Styling is Tailwind CSS (Play CDN) + daisyUI (component classes + themes). Swap
-the whole palette by changing the ``data-theme`` on <html> below to any daisyUI
-theme name ("corporate", "light", "emerald", "business", ...). web/styles.css
-holds only the few app-specific rules on top.
+Styling is plain CSS in web/styles.css (design tokens as CSS variables; see
+docs/redesign/README.md). The markup below only names its classes. UI chrome is
+black and gray; color is reserved for data.
 
 This writes into the same output dir as build_static.py (default ``site``):
 
@@ -32,15 +31,24 @@ import shutil
 from pathlib import Path
 
 from fasthtml.common import (
+    A,
     Aside,
     Body,
     Button,
     Div,
+    Fieldset,
+    Figcaption,
+    Figure,
+    Footer,
+    H1,
     H2,
+    H3,
     Head,
+    Header,
     Html,
     Input,
     Label,
+    Legend,
     Link,
     Main,
     Meta,
@@ -54,339 +62,476 @@ from fasthtml.common import (
     Title,
     to_xml,
 )
+from fasthtml.svg import Circle, G, Path as SvgPath, Svg
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WEB = REPO_ROOT / "web"
 
 PLOTLY_CDN = "https://cdn.plot.ly/plotly-3.0.1.min.js"
-TAILWIND_CDN = "https://cdn.tailwindcss.com"
-DAISYUI_CDN = "https://cdn.jsdelivr.net/npm/daisyui@4/dist/full.min.css"
-DAISY_THEME = "light"  # any daisyUI theme name (light = the daisyUI-site default)
+FONTS_CSS = (
+    "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700"
+    "&family=Instrument+Sans:wght@400;500;600"
+    "&family=IBM+Plex+Mono:wght@400;500&display=swap"
+)
+REPO_URL = "https://github.com/harjonillo/voting-unmixing-ph"
+PROJECT_LINKS = [
+    ("Method notes", f"{REPO_URL}#readme"),
+    ("Data sources", f"{REPO_URL}/blob/main/data/README.md"),
+    ("GitHub", REPO_URL),
+]
 
-# Shared class strings (keep the markup below readable).
-SELECT = "select select-bordered select-sm"
-INPUT = "input input-bordered input-sm"
-CARD = "card bg-base-100 shadow-md border border-base-200"
+# Logo mark: the archetype palette (build_static.py's theme, slots 0-5) at the
+# corners of a hexagon, every pair joined — a 2-D view of the simplex.
+LOGO_COLORS = ["#3c73e1", "#fe654f", "#169873", "#ffae03", "#6b4b3e", "#9ebd6e"]
+LOGO_PTS = [(14, 3), (23.5, 8.5), (23.5, 19.5), (14, 25), (4.5, 19.5), (4.5, 8.5)]
+FOOTER_TEXT = (
+    "Unmixed with HySime, MVSA and SUNSAL at the National Institute of Physics, UP Diliman."
+)
 
 
-def field(label_text: str, control) -> Div:
-    """A sidebar (label above control) block."""
+def logo_mark(size: int, edges: bool = True, r: float = 2.8, cls: str | None = None) -> Svg:
+    """The hexagon-of-dots mark; `edges=False` drops the joining lines."""
+    d = "".join(
+        f"M{x1:g} {y1:g}L{x2:g} {y2:g}"
+        for i, (x1, y1) in enumerate(LOGO_PTS)
+        for x2, y2 in LOGO_PTS[i + 1 :]
+    )
+    return Svg(
+        G(SvgPath(d=d), stroke="#d6d5cf", stroke_width=0.75) if edges else None,
+        *(Circle(cx=x, cy=y, r=r, fill=c) for (x, y), c in zip(LOGO_PTS, LOGO_COLORS)),
+        width=size,
+        height=size,
+        viewBox="0 0 28 28",
+        aria_hidden="true",
+        cls=cls,
+    )
+
+
+def seg_group(group_id: str, label: str, options=(), fill: bool = False) -> Div:
+    """A segmented control: buttons in a gray track, one pressed at a time.
+    `options` are (value, text) pairs; leave empty for app.js to fill. app.js
+    wires the clicks and sets aria-pressed / .on."""
     return Div(
-        Label(label_text, cls="block text-sm font-medium mb-1"), control, cls="mb-4"
+        *(
+            Button(text, type="button", cls="seg", data_value=value, aria_pressed="false")
+            for value, text in options
+        ),
+        id=group_id,
+        role="group",
+        aria_label=label,
+        cls="seg-group fill" if fill else "seg-group",
+    )
+
+
+def field(label_text: str, control, note: str | None = None) -> Div:
+    """A sidebar block: label above control, optional caption below."""
+    return Div(
+        Span(label_text, cls="field-label"),
+        control,
+        Span(note, cls="note") if note else None,
+        cls="field",
     )
 
 
 def labeled(label_text: str, control) -> Div:
-    """A compact (tiny label above control) cell for the inline control strips."""
+    """A compact (small label above control) cell for the inline control strips."""
+    return Div(Span(label_text, cls="note"), control, cls="labeled")
+
+
+def card(*content, cls: str = "") -> Div:
+    return Div(*content, cls=f"card {cls}".strip())
+
+
+def card_head(
+    title: str, sub: str | None = None, *controls, sub_id=None, title_id=None
+) -> Div:
+    """Card title + caption on the left, optional controls on the right."""
     return Div(
-        Span(label_text, cls="text-xs opacity-60"), control, cls="flex flex-col gap-1"
+        Div(
+            H3(title, id=title_id, cls="card-title"),
+            P(sub, id=sub_id, cls="card-sub") if (sub or sub_id) else None,
+            cls="card-head-text",
+        ),
+        *controls,
+        cls="card-head",
     )
-
-
-def card(*content, span: str = "") -> Div:
-    """A daisyUI card wrapping plot content; `span` adds a grid col-span class."""
-    return Div(Div(*content, cls="card-body p-4"), cls=f"{CARD} {span}".strip())
 
 
 def sidebar() -> Aside:
     return Aside(
-        P(
-            "Spectral-unmixing explorer of PH senatorial votes.",
-            cls="text-xs opacity-60 mb-1",
-        ),
-        P(id="sidebar-caption", cls="text-xs opacity-60 mb-4"),
-        field("Election year", Select(id="year", cls=f"{SELECT} w-full")),
-        # Options come from the manifest's "methods" (MVSA / NMF); every tab
-        # reads that method's baked tree. Abundances are SUNSAL either way.
-        field(
-            "Endmember extraction",
-            Select(
-                Option("MVSA", value="mvsa"),
-                Option("NMF", value="nmf"),
-                id="method",
-                cls=f"{SELECT} w-full",
+        Section(
+            H2("Data", cls="overline"),
+            field("Election year", seg_group("year", "Election year")),
+            Fieldset(
+                Legend("Aggregation level", cls="field-label"),
+                Div(id="levels", cls="radios"),
+                cls="field",
             ),
-        ),
-        Div(
-            Label("Aggregation level", cls="block text-sm font-medium mb-1"),
-            Div(id="levels", cls="space-y-1"),
-            cls="mb-4",
-        ),
-        field(
-            "Top N candidates",
-            Input(
-                type="number",
-                id="topN",
-                min=3,
-                max=15,
-                value=5,
-                step=1,
-                cls=f"{INPUT} w-full",
-            ),
-        ),
-        Div(
             Label(
-                Input(
-                    type="checkbox",
-                    id="weighted",
-                    checked=True,
-                    cls="checkbox checkbox-sm",
-                ),
-                Span("Weight means by valid ballots", cls="text-sm"),
-                cls="flex items-center gap-2 cursor-pointer",
+                Input(type="checkbox", id="weighted", checked=True),
+                "Weight means by valid ballots",
+                cls="check",
             ),
-            cls="mb-4",
+            cls="side-group",
         ),
-        # sticky/self-start so the inputs stay in view while the main column
-        # scrolls; max-h-screen + overflow-y-auto lets a tall sidebar scroll on
-        # its own instead of being clipped.
-        cls="w-72 shrink-0 bg-base-100 border-r border-base-300 p-4 "
-        "sticky top-0 self-start max-h-screen overflow-y-auto",
+        Section(
+            H2("Model", cls="overline"),
+            # Options come from the manifest's "methods" (MVSA / NMF); every tab
+            # reads that method's baked tree. Abundances are SUNSAL either way.
+            field(
+                "Endmember extraction",
+                seg_group("method", "Endmember extraction", fill=True),
+                note="Abundances are SUNSAL for both",
+            ),
+            # Every tab shows the sweep's trial mean at this p (app.js fills it).
+            field(
+                "Archetypes p",
+                seg_group("p", "Number of archetypes p", fill=True),
+                note="Sweep trial mean; names and colors follow the lineage",
+            ),
+            Div(
+                Label("Top N candidates", fr="topN", cls="field-label"),
+                Div(
+                    Button("−", type="button", id="topN-dec", cls="step", aria_label="Fewer"),
+                    Input(type="number", id="topN", min=3, max=15, value=6, step=1),
+                    Button("+", type="button", id="topN-inc", cls="step", aria_label="More"),
+                    cls="stepper",
+                ),
+                id="topN-field",
+                cls="field",
+            ),
+            cls="side-group",
+        ),
+        # Run summary for the selected year + method + tab (filled by app.js).
+        Section(id="run-summary", cls="side-group summary"),
+        cls="sidebar scroll",
+    )
+
+
+def section_head(title: str, lede: str | None = None, lede_id=None) -> Div:
+    return Div(
+        H2(title, cls="section-title"),
+        P(lede, id=lede_id, cls="lede"),
+        cls="section-head",
+    )
+
+
+def legend_item(swatch, text: str) -> Span:
+    return Span(swatch, text, cls="legend-item")
+
+
+def line_swatch(stroke: str, width: float, dash: str | None = None) -> Svg:
+    """A short horizontal line sample for a figure's legend row."""
+    return Svg(
+        SvgPath(
+            d="M1 4H27",
+            stroke=stroke,
+            stroke_width=width,
+            stroke_dasharray=dash or "none",
+            stroke_linecap="round",
+        ),
+        width=28,
+        height=8,
+        aria_hidden="true",
+    )
+
+
+def box_swatch(fill: str, border: str = "#3a3936") -> Span:
+    return Span(
+        cls="box-swatch", style=f"background:{fill};border-color:{border}", aria_hidden="true"
+    )
+
+
+def map_figure(prefix: str) -> Figure:
+    """Choropleth card: title + level/year, the map, then the color-range toggle
+    and the HTML legend (filled by app.js renderMapFigure)."""
+    return Figure(
+        Figcaption(
+            Span(id=f"{prefix}-title", cls="card-title"),
+            Span(id=f"{prefix}-subtitle", cls="note"),
+            cls="fig-head",
+        ),
+        Div(id=f"{prefix}-plot"),
+        Div(
+            Div(
+                Span("Color range", cls="field-label"),
+                seg_group(
+                    f"{prefix}-range",
+                    "Color range",
+                    [("data", "Data range"), ("fixed", "Fixed 0 to 1")],
+                ),
+                id=f"{prefix}-range-row",
+                cls="legend-row",
+            ),
+            Div(id=f"{prefix}-legend"),
+            P(id=f"{prefix}-legend-note", cls="note"),
+            cls="map-foot",
+        ),
+        cls="card",
+    )
+
+
+def loadings_card(prefix: str, title: str) -> Div:
+    """Loadings small multiples with the Shared / Per archetype x-axis toggle."""
+    return card(
+        card_head(
+            title,
+            None,
+            Div(
+                Span("X-axis", cls="note"),
+                seg_group(
+                    f"{prefix}-axis",
+                    "X-axis scaling",
+                    [("shared", "Shared"), ("own", "Per archetype")],
+                ),
+                cls="head-control",
+            ),
+            sub_id=f"{prefix}-loadings-sub",
+            title_id=f"{prefix}-loadings-title",
+        ),
+        Div(id=f"{prefix}-loadings"),
+    )
+
+
+def mixing_row(prefix: str) -> Div:
+    """Party / alliance matrix (3fr) beside the candidates table (2fr)."""
+    return Div(
+        card(
+            card_head(
+                "Party / alliance mixing",
+                None,
+                seg_group(
+                    f"{prefix}-groupby",
+                    "Group by",
+                    [("party", "Party"), ("alliance", "Alliance")],
+                ),
+                sub_id=f"{prefix}-partylist-sub",
+            ),
+            Div(id=f"{prefix}-partylist"),
+        ),
+        card(
+            card_head("Candidates", None, sub_id=f"{prefix}-partylist-table-sub"),
+            Div(id=f"{prefix}-partylist-table"),
+        ),
+        cls="grid-32",
     )
 
 
 def tab_map() -> Section:
     return Section(
-        H2("Geographic distribution of archetypes", cls="text-base font-semibold mb-2"),
+        section_head("Geographic distribution of archetypes", lede_id="map-lede"),
         Div(
-            labeled("Quantity", Select(id="map-quantity", cls=SELECT)),
-            labeled("Archetype", Select(id="map-arch", cls=SELECT)),
-            cls="flex flex-wrap gap-3 items-end mb-3",
+            seg_group("map-quantity", "Quantity"),
+            Div(id="map-arch", role="group", aria_label="Archetype", cls="chips"),
+            cls="toolbar",
         ),
-        # map : loadings in a 2:3 ratio — the Tailwind way to do st.columns([2, 3]).
+        # map : loadings at 3fr : 2fr (the map gets the larger share).
         Div(
-            card(Div(id="map-plot"), span="lg:col-span-2"),
-            card(Div(id="map-loadings"), span="lg:col-span-3"),
-            cls="grid grid-cols-1 lg:grid-cols-5 gap-4",
+            map_figure("map"),
+            loadings_card("map", "Candidate weights per endmember"),
+            cls="grid-32",
         ),
-        Div(
-            card(
-                Div(
-                    H2("Party / alliance mixing", cls="text-sm font-semibold"),
-                    labeled(
-                        "Group by",
-                        Select(
-                            Option("Party", value="party"),
-                            Option("Alliance", value="alliance"),
-                            id="map-groupby",
-                            cls=SELECT,
-                        ),
-                    ),
-                    cls="flex items-start justify-between gap-3 mb-1",
-                ),
-                P(
-                    "Endmember loadings summed by party or by alliance/coalition (the "
-                    "grouping over parties), showing how each group's candidates distribute "
-                    "across the voting archetypes. National-level loadings from the "
-                    "sidebar's endmember-extraction method.",
-                    cls="text-sm opacity-60 mb-2",
-                    style="flex-grow:0",
-                ),
-                Div(id="map-partylist"),
-                span="lg:col-span-3",
-            ),
-            card(
-                H2("Top candidates per group", cls="text-sm font-semibold mb-1"),
-                P(
-                    "Best-ranked (by election result) in each party/alliance; the extra "
-                    "column shows the other grouping.",
-                    cls="text-sm opacity-60 mb-2",
-                    style="flex-grow:0",
-                ),
-                Div(id="map-partylist-table"),
-                span="lg:col-span-2",
-            ),
-            cls="grid grid-cols-1 lg:grid-cols-5 gap-4 mt-4",
-        ),
+        mixing_row("map"),
         id="tab-map",
+        cls="tab-panel",
     )
 
 
 def tab_compare() -> Section:
     return Section(
-        H2("Endmember-count comparison", cls="text-base font-semibold mb-2"),
-        P(
-            "Trial mean / 1 SD at a chosen archetype count p (precomputed by the sweep). "
-            "The map follows the sidebar level and weighting.",
-            cls="text-sm opacity-60 mb-3",
-        ),
-        card(
+        Section(
+            section_head(
+                "Choosing the number of archetypes",
+                "How archetypes persist, split or start to duplicate as p grows, and "
+                "how stable each p is to precinct order and seed.",
+            ),
+            # These drive the lineage and both diagnostics below.
             Div(
-                H2("Archetype lineage", cls="text-sm font-semibold"),
-                Div(
-                    labeled(
-                        "Similarity metric",
-                        Select(
-                            Option("Cosine (top 12)", value="cos12"),
-                            Option("Cosine (full)", value="cos"),
-                            Option("Spearman r", value="spearman"),
-                            Option("Weighted tau", value="wtau"),
-                            Option("RBO", value="rbo"),
-                            Option("Jaccard (top 12)", value="jac12"),
-                            id="cmp-lineage-metric",
-                            cls=SELECT,
-                        ),
+                labeled(
+                    "Similarity metric",
+                    Select(
+                        Option("Cosine (top 12)", value="cos12"),
+                        Option("Cosine (full)", value="cos"),
+                        Option("Spearman r", value="spearman"),
+                        Option("Weighted tau", value="wtau"),
+                        Option("RBO", value="rbo"),
+                        Option("Jaccard (top 12)", value="jac12"),
+                        id="cmp-lineage-metric",
                     ),
-                    labeled(
+                ),
+                labeled(
+                    "Column distance",
+                    seg_group(
+                        "cmp-lineage-stat",
                         "Column distance",
-                        Select(
-                            Option("Min pairwise", value="min"),
-                            Option("Mean pairwise", value="mean"),
-                            id="cmp-lineage-stat",
-                            cls=SELECT,
-                        ),
+                        [("min", "Min pairwise"), ("mean", "Mean pairwise")],
                     ),
-                    labeled(
-                        "Candidates per node",
-                        Input(
-                            type="number",
-                            id="cmp-lineage-topn",
-                            min=6,
-                            max=12,
-                            value=8,
-                            step=1,
-                            cls=f"{INPUT} w-28",
-                        ),
-                    ),
-                    cls="flex flex-wrap gap-3 items-end",
                 ),
-                cls="flex items-start justify-between gap-3 mb-1",
-            ),
-            P(
-                "Network of archetypes across the sweep, one column per endmember "
-                "count p. Each node lists an archetype's top candidates; edge width "
-                "and label show the chosen similarity metric between the two loading "
-                "columns. Solid links are the Hungarian match from p to p+1 "
-                "(including the extra archetype's link to its closest parent — "
-                "hover says which), and faint links are other similar-enough pairs. "
-                "Above each column: the min/mean pairwise distance between that p's "
-                "archetypes (0 = identical, 1 = distinct) — where the min collapses, "
-                "the newest archetype duplicates an existing one.",
-                cls="text-sm opacity-60 mb-2",
-            ),
-            Div(id="cmp-lineage"),
-            span="mb-4",
-        ),
-        # Diagnostics for choosing p (notebooks 08 & 09). Both follow the
-        # "Similarity metric" selector above; the left one also follows
-        # "Column distance".
-        Div(
-            card(
-                H2("Archetype distinctness vs p", cls="text-sm font-semibold mb-1"),
-                P(
-                    "Pairwise distance between a run's archetypes as p grows "
-                    "(0 = identical, 1 = distinct). The min — the most-overlapping "
-                    "pair — decreases towards a floor: past it, each added "
-                    "archetype mostly duplicates an existing one. The selected "
-                    "similarity metric is highlighted.",
-                    cls="text-sm opacity-60 mb-2",
+                labeled(
+                    "Candidates per node",
+                    Input(type="number", id="cmp-lineage-topn", min=2, max=12, value=3, step=1),
                 ),
-                Div(id="cmp-distinct"),
+                cls="toolbar",
             ),
-            card(
-                H2("Sensitivity to precinct order", cls="text-sm font-semibold mb-1"),
-                P(
-                    "Similarity of each trial's archetypes to the reference run "
-                    "(Hungarian-matched; one box over archetypes × trials, dashed "
-                    "line = mean, whiskers to 1.5 × IQR, dots = outliers) when the "
-                    "precinct order is shuffled vs when the seed is varied. "
-                    "Sensitivity to both grows with p: "
-                    "the decomposition turns degenerate, hopping between "
-                    "alternative solutions.",
-                    cls="text-sm opacity-60 mb-2",
+            Figure(
+                Figcaption(
+                    Span("Archetype lineage", cls="card-title"),
+                    Span(id="cmp-lineage-sub", cls="card-sub"),
+                    cls="card-head-text wide",
                 ),
-                Div(id="cmp-order"),
-            ),
-            cls="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4",
-        ),
-        # Controls below drive the succeeding per-p map and loadings, not the
-        # sweep-wide lineage above.
-        Div(
-            labeled("Archetypes p", Select(id="cmp-p", cls=SELECT)),
-            labeled("Archetype", Select(id="cmp-arch", cls=SELECT)),
-            labeled(
-                "Map shows",
-                Select(
-                    Option("Mean abundance", value="mean"),
-                    Option("1 SD across trials", value="std"),
-                    id="cmp-stat",
-                    cls=SELECT,
-                ),
-            ),
-            labeled(
-                "Top N candidates",
-                Input(
-                    type="number",
-                    id="cmp-topN",
-                    min=5,
-                    max=40,
-                    value=15,
-                    step=1,
-                    cls=f"{INPUT} w-28",
-                ),
-            ),
-            cls="flex flex-wrap gap-3 items-end mb-3",
-        ),
-        # map : loadings on one row, same 2:3 split as the map tab.
-        Div(
-            card(Div(id="cmp-plot"), span="lg:col-span-2"),
-            card(Div(id="cmp-loadings"), span="lg:col-span-3"),
-            cls="grid grid-cols-1 lg:grid-cols-5 gap-4",
-        ),
-        Div(
-            card(
+                # The network is drawn at a fixed pixel width; scroll when narrow.
+                Div(Div(id="cmp-lineage"), cls="scroll-x scroll"),
                 Div(
-                    H2("Party / alliance mixing", cls="text-sm font-semibold"),
-                    labeled(
-                        "Group by",
-                        Select(
-                            Option("Party", value="party"),
-                            Option("Alliance", value="alliance"),
-                            id="cmp-groupby",
-                            cls=SELECT,
-                        ),
+                    legend_item(
+                        line_swatch("rgba(58,57,54,0.5)", 4),
+                        "Matched p → p+1 (Hungarian); width and label = similarity",
                     ),
-                    cls="flex items-start justify-between gap-3 mb-1",
+                    legend_item(
+                        line_swatch("#3a3936", 1.5, "5 4"),
+                        "New archetype's closest parent (split)",
+                    ),
+                    legend_item(
+                        line_swatch("#b5b4ad", 1, "2 4"), "Other pairs with similarity ≥ 0.35"
+                    ),
+                    legend_item(Span("new", cls="tag-sample"), Span(id="cmp-lineage-new-label")),
+                    cls="legend-rule",
                 ),
-                P(
-                    "Endmember loadings summed by party or by alliance/coalition at the "
-                    "chosen archetype count p, showing how each group's candidates distribute "
-                    "across the archetypes as p changes.",
-                    cls="text-sm opacity-60 mb-2",
-                    style="flex-grow:0",
-                ),
-                Div(id="cmp-partylist"),
-                span="lg:col-span-3",
+                cls="card",
             ),
-            card(
-                H2("Top candidates per group", cls="text-sm font-semibold mb-1"),
-                P(
-                    "Best-ranked (by election result) in each party/alliance; the extra "
-                    "column shows the other grouping.",
-                    cls="text-sm opacity-60 mb-2",
-                    style="flex-grow:0",
+            # Diagnostics for choosing p (notebooks 08 & 09). Both follow the
+            # "Similarity metric" selector above; the left one also follows
+            # "Column distance".
+            Div(
+                Figure(
+                    Figcaption(
+                        Span("Archetype distinctness vs p", cls="card-title"),
+                        Span(id="cmp-distinct-sub", cls="card-sub"),
+                        cls="card-head-text",
+                    ),
+                    Div(id="cmp-distinct"),
+                    Div(id="cmp-distinct-legend", cls="legend-plain"),
+                    cls="card",
                 ),
-                Div(id="cmp-partylist-table"),
-                span="lg:col-span-2",
+                Figure(
+                    Figcaption(
+                        Span("Sensitivity to precinct order", cls="card-title"),
+                        Span(id="cmp-order-sub", cls="card-sub"),
+                        cls="card-head-text",
+                    ),
+                    Div(id="cmp-order"),
+                    Div(
+                        legend_item(box_swatch("#6b6a65"), "Shuffled precinct order"),
+                        legend_item(box_swatch("#ecebe6"), "Varying seed"),
+                        Span(id="cmp-order-ylabel", cls="note"),
+                        cls="legend-plain",
+                    ),
+                    cls="card",
+                ),
+                cls="grid-fit",
             ),
-            cls="grid grid-cols-1 lg:grid-cols-5 gap-4 mt-4",
+            cls="tab-section",
         ),
+        # The archetypes at the selected p (map, loadings, mixing) are on the
+        # Overview tab, which follows the sidebar p.
         id="tab-compare",
+        cls="tab-panel spaced",
         hidden=True,
     )
 
 
 def tab_dist() -> Section:
     return Section(
-        H2("Abundance distributions", cls="text-base font-semibold mb-2"),
-        P(
-            "Distribution of each archetype's abundance across the units at the current "
-            "aggregation level.",
-            cls="text-sm opacity-60 mb-3",
+        section_head(
+            "Abundance distributions",
+            "Distribution of each archetype's abundance across the units at the "
+            "current aggregation level, beside the candidate weights that define it.",
         ),
-        card(Div(id="dist-plots")),
+        Div(
+            labeled(
+                "Histogram x-axis",
+                seg_group(
+                    "dist-x", "X-axis", [("fixed", "Fixed 0 to 1"), ("own", "Per archetype")]
+                ),
+            ),
+            labeled(
+                "Y-axis",
+                seg_group("dist-y", "Y-axis", [("count", "Count"), ("share", "Share of units")]),
+            ),
+            labeled("Bins", Input(type="number", id="dist-bins", min=5, max=60, value=20, step=1)),
+            labeled(
+                "Loadings x-axis",
+                seg_group(
+                    "dist-axis", "Loadings x-axis", [("shared", "Shared"), ("own", "Per archetype")]
+                ),
+            ),
+            cls="toolbar",
+        ),
+        # One card per archetype: its abundance histogram beside its loadings.
+        Div(id="dist-plots", cls="dist-rows"),
+        Figure(
+            Figcaption(
+                Span("All archetypes on one axis", cls="card-title"),
+                Span(id="dist-strip-sub", cls="card-sub"),
+                cls="card-head-text",
+            ),
+            Div(id="dist-strip"),
+            cls="card",
+        ),
         id="tab-dist",
+        cls="tab-panel",
         hidden=True,
+    )
+
+
+def header() -> Header:
+    tabs = [
+        ("map", "Map / overview"),
+        ("compare", "Model comparison"),
+        ("dist", "Abundance distributions"),
+    ]
+    return Header(
+        Div(
+            Div(
+                Div(
+                    A(
+                        logo_mark(30, cls="logo"),
+                        H1("PH Voting Archetypes", cls="brand"),
+                        href="./",
+                        cls="brand-link",
+                    ),
+                    P("Spectral-unmixing explorer of PH senatorial votes", cls="subtitle"),
+                    cls="brand-row",
+                ),
+                Nav(
+                    *(A(text, href=href) for text, href in PROJECT_LINKS),
+                    aria_label="Project links",
+                    cls="links",
+                ),
+                cls="header-top",
+            ),
+            Div(
+                Div(
+                    *(
+                        Button(
+                            text,
+                            type="button",
+                            id=f"tabbtn-{key}",
+                            role="tab",
+                            aria_selected="true" if key == "map" else "false",
+                            aria_controls=f"tab-{key}",
+                            cls="tab on" if key == "map" else "tab",
+                        )
+                        for key, text in tabs
+                    ),
+                    role="tablist",
+                    cls="tabs",
+                ),
+                Span(id="status", cls="note", aria_live="polite"),
+                cls="header-tabs",
+            ),
+            cls="header-inner",
+        ),
+        cls="app-header",
     )
 
 
@@ -409,52 +554,34 @@ def page() -> Html:
                 href="https://fonts.gstatic.com",
                 crossorigin="anonymous",
             ),
-            Link(
-                rel="stylesheet",
-                href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap",
-            ),
-            Link(rel="stylesheet", href=DAISYUI_CDN),
-            Script(src=TAILWIND_CDN),
-            Link(
-                rel="stylesheet", href=asset_url("styles.css")
-            ),  # our overrides, after Tailwind/daisyUI
+            Link(rel="stylesheet", href=FONTS_CSS),
+            Link(rel="stylesheet", href=asset_url("styles.css")),
             Script(src=PLOTLY_CDN),
         ),
         Body(
+            # App shell: header and sidebar stay put, only the main pane scrolls.
             Div(
-                Span("PH Voting Archetypes", cls="text-lg font-semibold"),
-                cls="navbar bg-base-100 border-b border-base-300 px-4 min-h-0 py-2",
-            ),
-            Div(
-                sidebar(),
-                Main(
-                    Div(
-                        Nav(
-                            Button(
-                                "Map / overview", id="tabbtn-map", cls="tab tab-active"
-                            ),
-                            Button("Model comparison", id="tabbtn-compare", cls="tab"),
-                            Button(
-                                "Abundance distributions", id="tabbtn-dist", cls="tab"
-                            ),
-                            role="tablist",
-                            cls="tabs tabs-bordered",
+                header(),
+                Div(
+                    sidebar(),
+                    Main(
+                        tab_map(),
+                        tab_compare(),
+                        tab_dist(),
+                        Footer(
+                            logo_mark(18, edges=False, r=3),
+                            Span(FOOTER_TEXT),
+                            cls="site-footer",
                         ),
-                        Span(id="status", cls="text-xs opacity-60 ml-2"),
-                        cls="flex items-center gap-2 mb-4",
+                        cls="main scroll",
                     ),
-                    tab_map(),
-                    tab_compare(),
-                    tab_dist(),
-                    cls="flex-1 min-w-0 p-6",
+                    cls="layout",
                 ),
-                cls="flex",
+                cls="shell",
             ),
             Script(src=asset_url("app.js")),
-            cls="min-h-screen bg-base-100",
         ),
         lang="en",
-        data_theme=DAISY_THEME,
     )
 
 

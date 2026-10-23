@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A · Model comparison</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#1c5cab}a:hover{color:#0d366b}
+.seg{font:inherit;font-size:0.833rem;padding:6px 10px;border:0;background:transparent;color:#52514e;border-radius:6px;cursor:pointer;min-height:32px}
+.seg:hover{background:#ecebe6;color:#0b0b0b}
+.seg.on{background:#0b0b0b;color:#ffffff}
+.chip{font:inherit;font-size:0.833rem;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #e3e2dc;border-radius:999px;background:#ffffff;color:#0b0b0b;cursor:pointer;min-height:32px}
+.chip:hover{border-color:#a8a7a0}
+.chip.on{border-color:#0b0b0b;box-shadow:inset 0 0 0 1px #0b0b0b}
+.tab{font:inherit;font-size:1rem;padding:12px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:#52514e;cursor:pointer}
+.tab:hover{color:#0b0b0b}
+.tab.on{color:#0b0b0b;border-bottom-color:#0b0b0b;font-weight:600}
+.sel{font:inherit;font-size:0.833rem;padding:6px 10px;border:1px solid #dcdbd5;border-radius:6px;background:#ffffff;color:#0b0b0b;min-height:32px}
+</style>
+</helmet>
+<div style="font-family: 'Instrument Sans', system-ui, sans-serif; color: #0b0b0b; background: #ffffff; min-height: 100%; font-size: 16px; line-height: 1.5">
+
+  <header style="border-bottom: 1px solid #e3e2dc; background: #ffffff">
+    <div style="max-width: 1440px; margin: 0 auto; padding: 20px 32px 0; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px">
+          <h1 style="margin: 0; font-size: 1.44rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em">PH Voting Archetypes</h1>
+          <p style="margin: 0; font-size: 0.833rem; color: #6b6a65">Spectral-unmixing explorer of PH senatorial votes</p>
+        </div>
+        <nav aria-label="Project links" style="display: flex; gap: 20px; font-size: 0.833rem">
+          <a href="#">Method notes</a>
+          <a href="#">Data sources</a>
+          <a href="#">GitHub</a>
+        </nav>
+      </div>
+      <div role="tablist" style="display: flex; flex-wrap: wrap; gap: 28px">
+        <button class="tab" role="tab" aria-selected="false">Map / overview</button>
+        <button class="tab on" role="tab" aria-selected="true">Model comparison</button>
+        <button class="tab" role="tab" aria-selected="false">Abundance distributions</button>
+      </div>
+    </div>
+  </header>
+
+  <div style="max-width: 1440px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: flex-start">
+
+    <aside style="flex: 1 1 248px; max-width: 280px; box-sizing: border-box; padding: 28px 24px 32px 32px; display: flex; flex-direction: column; gap: 28px">
+      <section style="display: flex; flex-direction: column; gap: 16px">
+        <h2 style="margin: 0; font-size: 0.694rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6a65">Data</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 0.833rem; font-weight: 500">Election year</span>
+          <div role="group" aria-label="Election year" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg">2013</button><button class="seg">2016</button><button class="seg">2019</button><button class="seg">2022</button><button class="seg on" aria-pressed="true">2025</button>
+          </div>
+        </div>
+        <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+          <legend style="font-size: 0.833rem; font-weight: 500; padding: 0; margin-bottom: 6px">Aggregation level</legend>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-c"> Region</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-c" checked> Province</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-c"> Municipality</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="radio" name="lvl-c"> Clustered precinct</label>
+        </fieldset>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem"><input type="checkbox" checked> Weight means by valid ballots</label>
+      </section>
+      <section style="display: flex; flex-direction: column; gap: 16px; border-top: 1px solid #ecebe6; padding-top: 24px">
+        <h2 style="margin: 0; font-size: 0.694rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6a65">Model</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 0.833rem; font-weight: 500">Endmember extraction</span>
+          <div role="group" aria-label="Endmember extraction" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg on" aria-pressed="true" style="flex: 1">MVSA</button><button class="seg" style="flex: 1">NMF</button>
+          </div>
+          <span style="font-size: 0.694rem; color: #6b6a65">Abundances are SUNSAL for both</span>
+        </div>
+      </section>
+      <section style="border-top: 1px solid #ecebe6; padding-top: 24px; display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 4px; font-size: 0.833rem">
+        <span style="color: #6b6a65">Sweep</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">p = 2 … 7</span>
+        <span style="color: #6b6a65">Trials per p</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">50</span>
+        <span style="color: #6b6a65">HySime k</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">6</span>
+      </section>
+    </aside>
+
+    <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 48px; border-left: 1px solid #ecebe6; display: flex; flex-direction: column; gap: 32px">
+
+      <section style="display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 1.44rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em">Choosing the number of archetypes</h2>
+          <p style="margin: 0; color: #52514e; max-width: 72ch">How archetypes persist, split or start to duplicate as p grows, and how stable each p is to precinct order and seed.</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end">
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 0.694rem; color: #6b6a65">Similarity metric
+            <select class="sel"><option>Cosine (top 12)</option><option selected>Cosine (full)</option><option>Spearman r</option><option>Weighted tau</option><option>RBO</option><option>Jaccard (top 12)</option></select>
+          </label>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <span style="font-size: 0.694rem; color: #6b6a65">Column distance</span>
+            <div role="group" aria-label="Column distance" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+              <button class="seg on" aria-pressed="true">Min pairwise</button><button class="seg">Mean pairwise</button>
+            </div>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 0.694rem; color: #6b6a65">Candidates per node
+            <input type="number" value="3" min="2" max="12" class="sel" style="width: 64px; font-family: 'IBM Plex Mono', monospace">
+          </label>
+        </div>
+
+        <figure style="margin: 0; border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+          <figcaption style="display: flex; flex-direction: column; gap: 4px">
+            <span style="font-size: 1.2rem; font-weight: 600; line-height: 1.2">Archetype lineage</span>
+            <span style="font-size: 0.833rem; color: #6b6a65; max-width: 90ch">One column per p. Each box lists an archetype's top candidates. Color follows an archetype across p, matched to the p = 6 run on the Overview tab. Above each column: min pairwise distance between that run's archetypes (0 = identical, 1 = distinct).</span>
+          </figcaption>
+          <div style="overflow-x: auto">
+            <div style="position: relative; width: 1040px; height: 600px; margin: 0 auto">
+              <sc-for list="{{cols}}" as="c" hint-placeholder-count="6">
+                <div style="position: absolute; left: {{c.left}}px; top: 0; width: 132px; display: flex; flex-direction: column; align-items: center; gap: 0">
+                  <span style="font-size: 0.833rem; font-weight: 600">p = {{c.p}}</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: {{c.dColor}}">min d {{c.d}}</span>
+                </div>
+              </sc-for>
+              <sc-for list="{{edges}}" as="e" hint-placeholder-count="20">
+                <svg width="1040" height="600" aria-hidden="true" style="position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none"><path d="{{e.d}}" fill="none" stroke="{{e.stroke}}" stroke-width="{{e.w}}" stroke-dasharray="{{e.dash}}" stroke-linecap="round"/></svg>
+              </sc-for>
+              <sc-for list="{{elabels}}" as="l" hint-placeholder-count="20">
+                <span style="position: absolute; left: {{l.x}}px; top: {{l.y}}px; transform: translate(-50%, -50%); font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #3a3936; background: #ffffff; padding: 0 3px; border-radius: 3px; line-height: 1.3">{{l.t}}</span>
+              </sc-for>
+              <sc-for list="{{nodes}}" as="n" hint-placeholder-count="27">
+                <div style="position: absolute; left: {{n.left}}px; top: {{n.top}}px; width: 132px; height: 52px; box-sizing: border-box; border: 1.5px solid {{n.color}}; border-radius: 6px; background: #ffffff; padding: 5px 8px; display: flex; flex-direction: column; justify-content: center; gap: 1px">
+                  <span style="display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 0.833rem; font-weight: 600; line-height: 1.25"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{n.t1}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; font-weight: 500; color: #52514e">{{n.tag}}</span></span>
+                  <span style="font-size: 0.694rem; color: #52514e; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{n.t2}}</span>
+                </div>
+              </sc-for>
+              <span style="position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); font-size: 0.694rem; color: #6b6a65">number of archetypes p</span>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.694rem; color: #52514e; border-top: 1px solid #f1f0ec; padding-top: 12px">
+            <span style="display: inline-flex; align-items: center; gap: 8px"><svg width="28" height="8" aria-hidden="true"><path d="M1 4H27" stroke="rgba(58,57,54,0.5)" stroke-width="4" stroke-linecap="round"/></svg>Matched p → p+1 (Hungarian); width and label = similarity</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px"><svg width="28" height="8" aria-hidden="true"><path d="M1 4H27" stroke="#3a3936" stroke-width="1.5" stroke-dasharray="5 4" stroke-linecap="round"/></svg>New archetype's closest parent (split)</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px"><svg width="28" height="8" aria-hidden="true"><path d="M1 4H27" stroke="#b5b4ad" stroke-width="1" stroke-dasharray="2 4" stroke-linecap="round"/></svg>Other pairs with similarity ≥ 0.35</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px"><span aria-hidden="true" style="width: 12px; height: 12px; border: 1.5px solid #993955; border-radius: 3px"></span>No counterpart at p = 6</span>
+          </div>
+        </figure>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 16px; align-items: start">
+          <figure style="margin: 0; border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+            <figcaption style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 1.2rem; font-weight: 600; line-height: 1.2">Archetype distinctness vs p</span>
+              <span style="font-size: 0.833rem; color: #6b6a65">Min pairwise distance between one run's archetypes (config seed). Past the floor, each added archetype mostly duplicates an existing one.</span>
+            </figcaption>
+            <div style="position: relative; width: 480px; height: 272px; max-width: 100%">
+              <sc-for list="{{dgrid}}" as="g" hint-placeholder-count="5">
+                <div style="position: absolute; left: 44px; width: 356px; top: {{g.y}}px; height: 1px; background: {{g.c}}"></div>
+                <span style="position: absolute; left: 0; width: 36px; top: {{g.y}}px; transform: translateY(-50%); text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{g.label}}</span>
+              </sc-for>
+              <div style="position: absolute; left: {{hx}}px; top: 14px; height: 216px; width: 0; border-left: 1px dashed #8a8984"></div>
+              <span style="position: absolute; left: {{hx}}px; top: 0; transform: translateX(-50%); font-size: 0.694rem; color: #52514e; white-space: nowrap">HySime k = 6</span>
+              <sc-for list="{{dlines}}" as="l" hint-placeholder-count="6">
+                <svg width="480" height="272" aria-hidden="true" style="position: absolute; left: 0; top: 0"><path d="{{l.d}}" fill="none" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"/></svg>
+              </sc-for>
+              <sc-for list="{{dpts}}" as="pt" hint-placeholder-count="11">
+                <div style="position: absolute; left: {{pt.x}}px; top: {{pt.y}}px; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #0b0b0b; box-shadow: 0 0 0 2px #ffffff"></div>
+              </sc-for>
+              <span style="position: absolute; left: 406px; top: {{dEndY}}px; transform: translateY(-50%); font-size: 0.694rem; font-weight: 600; white-space: nowrap">cosine (full)</span>
+              <sc-for list="{{dxt}}" as="t" hint-placeholder-count="11">
+                <span style="position: absolute; left: {{t.x}}px; top: 236px; transform: translateX(-50%); font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{t.p}}</span>
+              </sc-for>
+              <span style="position: absolute; left: 222px; top: 254px; transform: translateX(-50%); font-size: 0.694rem; color: #6b6a65">number of archetypes p</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.694rem; color: #6b6a65">
+              <span style="display: inline-flex; align-items: center; gap: 6px; color: #0b0b0b; font-weight: 600"><span aria-hidden="true" style="width: 16px; height: 2.5px; background: #0b0b0b"></span>Cosine (full)</span>
+              <span style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 16px; height: 1.5px; background: #c3c2b7"></span>Cosine (top 12) · Spearman r · Weighted tau · RBO · Jaccard (top 12)</span>
+            </div>
+          </figure>
+
+          <figure style="margin: 0; border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+            <figcaption style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 1.2rem; font-weight: 600; line-height: 1.2">Sensitivity to precinct order</span>
+              <span style="font-size: 0.833rem; color: #6b6a65">Matched similarity of each trial's archetypes to the reference run, over 50 trials × archetypes. Box = quartiles, whiskers to 1.5 × IQR, diamond = mean.</span>
+            </figcaption>
+            <div style="position: relative; width: 480px; height: 272px; max-width: 100%">
+              <sc-for list="{{ogrid}}" as="g" hint-placeholder-count="5">
+                <div style="position: absolute; left: 44px; width: 430px; top: {{g.y}}px; height: 1px; background: {{g.c}}"></div>
+                <span style="position: absolute; left: 0; width: 36px; top: {{g.y}}px; transform: translateY(-50%); text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{g.label}}</span>
+              </sc-for>
+              <sc-for list="{{boxes}}" as="b" hint-placeholder-count="10">
+                <div style="position: absolute; left: {{b.x}}px; top: {{b.yhi}}px; height: {{b.wh}}px; width: 1px; background: #3a3936"></div>
+                <div style="position: absolute; left: {{b.bx}}px; top: {{b.yq3}}px; height: {{b.bh}}px; width: 20px; box-sizing: border-box; background: {{b.fill}}; border: 1px solid #3a3936; border-radius: 2px"></div>
+                <div style="position: absolute; left: {{b.bx}}px; top: {{b.ymed}}px; width: 20px; height: 2px; margin-top: -1px; background: {{b.medc}}"></div>
+                <div style="position: absolute; left: {{b.x}}px; top: {{b.ymean}}px; width: 6px; height: 6px; margin: -3px 0 0 -3px; transform: rotate(45deg); background: #ffffff; border: 1px solid #0b0b0b"></div>
+                <sc-for list="{{b.out}}" as="o" hint-placeholder-count="3">
+                  <div style="position: absolute; left: {{b.x}}px; top: {{o.y}}px; width: 4px; height: 4px; margin: -2px 0 0 -1.5px; border-radius: 50%; background: {{b.dot}}"></div>
+                </sc-for>
+              </sc-for>
+              <sc-for list="{{oxt}}" as="t" hint-placeholder-count="5">
+                <span style="position: absolute; left: {{t.x}}px; top: 236px; transform: translateX(-50%); font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">p = {{t.p}}</span>
+              </sc-for>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.694rem; color: #52514e">
+              <span style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 12px; height: 12px; border: 1px solid #3a3936; border-radius: 2px; background: #6b6a65"></span>Shuffled precinct order</span>
+              <span style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 12px; height: 12px; border: 1px solid #3a3936; border-radius: 2px; background: #ecebe6"></span>Varying seed</span>
+              <span style="color: #6b6a65">y: matched similarity, cosine (full)</span>
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 1.44rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em">Archetypes at a chosen p</h2>
+          <p style="margin: 0; color: #52514e; max-width: 72ch">Trial mean or 1 SD at the selected p. The map follows the sidebar level and weighting.</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center">
+          <div role="group" aria-label="Archetypes p" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg">p = 2</button><button class="seg">3</button><button class="seg">4</button><button class="seg on" aria-pressed="true">5</button><button class="seg">6</button><button class="seg">7</button>
+          </div>
+          <div role="group" aria-label="Map shows" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+            <button class="seg on" aria-pressed="true">Mean abundance</button><button class="seg">1 SD across trials</button>
+          </div>
+          <div role="group" aria-label="Archetype" style="display: flex; flex-wrap: wrap; gap: 6px">
+            <sc-for list="{{p5}}" as="a" hint-placeholder-count="5">
+              <button class="{{a.chip}}"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: {{a.color}}"></span>{{a.short}}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); gap: 16px; align-items: start">
+          <figure style="margin: 0; border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+            <figcaption style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px">
+              <span style="font-size: 1.2rem; font-weight: 600; line-height: 1.2">A0 mean abundance at p = 5</span>
+              <span style="font-size: 0.833rem; color: #6b6a65">Province · 2025</span>
+            </figcaption>
+            <img src="/_blob/dd3e70c1bb00b2296b67b5d1446704fe" alt="Choropleth of the Philippines by province, shaded by mean abundance of archetype 0 at p = 5" style="width: 100%; max-width: 640px; height: auto; align-self: center">
+            <div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #f1f0ec; padding-top: 14px">
+              <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px">
+                <span style="font-size: 0.833rem; font-weight: 500">Color range</span>
+                <div role="group" aria-label="Color range" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+                  <button class="seg on" aria-pressed="true">Data range</button><button class="seg">Fixed 0 to 1</button>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <div aria-hidden="true" style="height: 8px; border-radius: 4px; background: linear-gradient(90deg, #e8f1fc, #9ec5f4, #3987e5, #184f95, #0d366b)"></div>
+                <div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65"><span>min</span><span>max</span></div>
+              </div>
+            </div>
+          </figure>
+
+          <section style="border: 1px solid #e3e2dc; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px">
+              <div style="display: flex; flex-direction: column; gap: 4px; max-width: 46ch">
+                <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600; line-height: 1.2">Loadings at p = 5</h3>
+                <p style="margin: 0; font-size: 0.833rem; color: #6b6a65">Mean ± 1 SD over 50 trials.</p>
+              </div>
+              <div role="group" aria-label="X-axis scaling" style="display: flex; gap: 2px; padding: 3px; background: #f7f6f3; border-radius: 8px">
+                <button class="seg on" aria-pressed="true">Shared</button><button class="seg">Per archetype</button>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 20px">
+              <sc-for list="{{p5}}" as="a" hint-placeholder-count="5">
+                <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+                  <div style="display: flex; align-items: center; gap: 8px; font-size: 0.833rem; font-weight: 600"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: {{a.color}}"></span>{{a.name}}</div>
+                  <div style="display: flex; flex-direction: column">
+                    <sc-for list="{{a.rows}}" as="r" hint-placeholder-count="6">
+                      <div style="display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 22px">
+                        <span style="font-size: 0.833rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right">{{r.n}} <span style="color: #6b6a65; font-size: 0.694rem">{{r.tag}}</span></span>
+                        <div style="position: relative; height: 22px">
+                          <sc-for list="{{r.grid}}" as="g" hint-placeholder-count="4">
+                            <div style="position: absolute; left: {{g.x}}%; top: 0; bottom: 0; width: 1px; background: {{g.c}}"></div>
+                          </sc-for>
+                          <div style="position: absolute; left: {{r.left}}%; width: {{r.width}}%; top: 5px; height: 12px; background: {{a.color}}; border-radius: 2px"></div>
+                          <div style="position: absolute; left: {{r.wl}}%; width: {{r.ww}}%; top: 10px; height: 2px; background: #3a3936"></div>
+                          <div style="position: absolute; left: {{r.wl}}%; top: 7px; height: 8px; width: 1.5px; background: #3a3936"></div>
+                          <div style="position: absolute; left: {{r.wr}}%; top: 7px; height: 8px; width: 1.5px; margin-left: -1.5px; background: #3a3936"></div>
+                        </div>
+                      </div>
+                    </sc-for>
+                    <div style="display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 10px">
+                      <span></span>
+                      <div style="position: relative; height: 34px; border-top: 1px solid #c3c2b7">
+                        <sc-for list="{{a.ticks}}" as="t" hint-placeholder-count="4">
+                          <span style="position: absolute; left: {{t.x}}%; top: 3px; transform: translateX(-50%); font-family: 'IBM Plex Mono', monospace; font-size: 0.694rem; color: #6b6a65">{{t.label}}</span>
+                        </sc-for>
+                        <span style="position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); font-size: 0.694rem; color: #6b6a65">loading</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </div>
+
+        <div style="border: 1px dashed #c3c2b7; border-radius: 10px; padding: 24px; display: flex; justify-content: center; color: #6b6a65; font-size: 0.833rem">[Party / alliance mixing matrix and candidates table at p = 5: same components as Map / overview]</div>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var COLORS = ['#3c73e1', '#fe654f', '#169873', '#ffae03', '#6b4b3e', '#9ebd6e', '#993955'];
+
+    // ---- lineage (2025 MVSA sweep, cosine over full loading columns) ----
+    var N = [[2,1,0.25,['Dela Rosa','Go','Bondoc']],[2,2,0.75,['Aquino','Pangilinan','E. Tulfo']],
+      [3,1,0.1667,['Dela Rosa','Go','Bondoc']],[3,2,0.5,['Aquino','Pangilinan','Lacson']],[3,4,0.8333,['Lapid','E. Tulfo','Revilla']],
+      [4,2,0.375,['Aquino','Pangilinan','Mendoza']],[4,1,0.125,['Dela Rosa','Go','Bondoc']],[4,4,0.875,['Revillame','B. Tulfo','Pacquiao']],[4,3,0.625,['Marcos','Revilla','Abalos']],
+      [5,4,0.9,['Revillame','B. Tulfo','Pacquiao']],[5,3,0.5,['E. Tulfo','Revilla','Lapid']],[5,2,0.3,['Aquino','Pangilinan','Mendoza']],[5,1,0.1,['Dela Rosa','Go','Bondoc']],[5,0,0.7,['Marcos','Abalos','Go']],
+      [6,1,0.0833,['Dela Rosa','Bondoc','Go']],[6,0,0.75,['Marcos','Abalos','Tolentino']],[6,4,0.9167,['Ballon','Revillame','De Alban']],[6,5,0.4167,['Marcos','Marcoleta','Dela Rosa']],[6,3,0.5833,['Lapid','E. Tulfo','B. Tulfo']],[6,2,0.25,['Aquino','Pangilinan','Mendoza']],
+      [7,0,0.7857,['Marcos','Abalos','Tolentino']],[7,1,0.0714,['Bondoc','Dela Rosa','Lambino']],[7,5,0.3571,['Go','Dela Rosa','Marcoleta']],[7,3,0.6429,['Lapid','Pangilinan','Salvador']],[7,2,0.2143,['Aquino','Pangilinan','Mendoza']],[7,6,0.5,['E. Tulfo','B. Tulfo','Sotto']],[7,4,0.9286,['Ballon','Revillame','B. Tulfo']]];
+    var E = [[0,2,0.99,'m'],[1,3,0.96,'m'],[1,4,0.25,'s'],[2,6,1.0,'m'],[3,5,0.86,'m'],[3,8,0.62,'s'],[4,7,0.68,'m'],[5,11,0.96,'m'],[6,12,0.99,'m'],[7,9,0.91,'m'],[8,10,0.96,'m'],[8,13,0.79,'s'],[9,16,0.82,'m'],[10,15,0.72,'f'],[10,17,0.54,'f'],[10,18,0.71,'m'],[11,19,0.97,'m'],[12,14,0.98,'m'],[12,17,0.41,'f'],[13,15,0.96,'m'],[13,17,0.69,'s'],[14,21,0.97,'m'],[14,22,0.49,'f'],[15,20,0.98,'m'],[15,22,0.53,'f'],[16,26,0.95,'m'],[17,20,0.51,'f'],[17,22,0.86,'m'],[17,25,0.44,'f'],[18,23,0.65,'m'],[18,25,0.63,'s'],[19,24,0.98,'m']];
+    var DMIN = { 2: 0.666, 3: 0.544, 4: 0.381, 5: 0.216, 6: 0.170, 7: 0.300 };
+    var cx = function (p) { return 70 + (p - 2) * 180; };
+    var cy = function (y) { return 64 + y * 496; };
+    var nodes = N.map(function (n) {
+      return {
+        left: cx(n[0]) - 66, top: Math.round(cy(n[2]) - 26), color: COLORS[n[1]],
+        t1: n[3][0], t2: n[3][1] + ' · ' + n[3][2], tag: n[1] === 6 ? 'new' : 'A' + n[1]
+      };
+    });
+    var edges = [], elabels = [];
+    E.forEach(function (e) {
+      var s = N[e[0]], t = N[e[1]];
+      var x0 = cx(s[0]) + 66, y0 = cy(s[2]), x1 = cx(t[0]) - 66, y1 = cy(t[2]), xm = (x0 + x1) / 2;
+      var d = 'M' + x0 + ' ' + y0.toFixed(1) + ' C' + xm + ' ' + y0.toFixed(1) + ' ' + xm + ' ' + y1.toFixed(1) + ' ' + x1 + ' ' + y1.toFixed(1);
+      if (e[3] === 'm') edges.push({ d: d, stroke: 'rgba(58,57,54,0.42)', w: (1 + 5 * e[2]).toFixed(1), dash: 'none' });
+      else if (e[3] === 's') edges.push({ d: d, stroke: '#3a3936', w: '1.5', dash: '5 4' });
+      else edges.push({ d: d, stroke: '#b5b4ad', w: '1', dash: '2 4' });
+      if (e[3] !== 'f') elabels.push({ x: xm, y: ((y0 + y1) / 2).toFixed(1), t: e[2].toFixed(2) });
+    });
+    var cols = [2, 3, 4, 5, 6, 7].map(function (p) {
+      return { p: p, left: cx(p) - 66, d: DMIN[p].toFixed(2), dColor: p === 6 ? '#0b0b0b' : '#6b6a65' };
+    });
+
+    // ---- distinctness vs p (min pairwise distance; real 2025 values) ----
+    var PS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    var DM = {
+      cos12: [0.672, 0.6, 0.379, 0.185, 0.154, 0.266, 0.22, 0.31, 0.281, 0.271, 0.278],
+      spearman: [0.869, 0.303, 0.411, 0.243, 0.228, 0.25, 0.202, 0.273, 0.222, 0.261, 0.297],
+      wtau: [0.833, 0.474, 0.496, 0.297, 0.237, 0.243, 0.195, 0.299, 0.298, 0.287, 0.296],
+      rbo: [0.907, 0.775, 0.804, 0.602, 0.418, 0.577, 0.487, 0.573, 0.601, 0.391, 0.432],
+      jac12: [1.0, 0.737, 0.857, 0.5, 0.5, 0.4, 0.4, 0.5, 0.5, 0.4, 0.4],
+      cos: [0.666, 0.544, 0.381, 0.216, 0.17, 0.3, 0.229, 0.301, 0.256, 0.296, 0.273]
+    };
+    var dx = function (p) { return 44 + (p - 2) / 10 * 356; };
+    var dy = function (v) { return 230 - v * 216; };
+    var path = function (vals) { return vals.map(function (v, i) { return (i ? 'L' : 'M') + dx(PS[i]).toFixed(1) + ' ' + dy(v).toFixed(1); }).join(' '); };
+    var dlines = Object.keys(DM).map(function (k) {
+      var sel = k === 'cos';
+      return { d: path(DM[k]), stroke: sel ? '#0b0b0b' : '#c3c2b7', w: sel ? '2.5' : '1.25' };
+    });
+    var dpts = DM.cos.map(function (v, i) { return { x: dx(PS[i]).toFixed(1), y: dy(v).toFixed(1) }; });
+    var dgrid = [0, 0.25, 0.5, 0.75, 1].map(function (v) { return { y: dy(v), label: v.toFixed(2), c: v === 0 ? '#c3c2b7' : '#efeee9' }; });
+    var dxt = PS.map(function (p) { return { p: p, x: dx(p) }; });
+
+    // ---- precinct-order sensitivity (cosine full; real 2025 box stats) ----
+    var B = [[1,1,1,1,1,1,[]],[1,1,1,1,1,1,[]],[1,1,1,1,1,1,[]],[0.897,0.957,0.998,1,1,0.973,[0.77,0.85,0.87]],[0.816,0.922,0.978,0.995,1,0.911,[0.54,0.56,0.57,0.58,0.59,0.6,0.65,0.66,0.67,0.68,0.69,0.72,0.73,0.79,0.81]]];
+    var C = [[1,1,1,1,1,1,[]],[0.991,0.991,1,1,1,0.977,[0.85]],[0.988,0.995,0.999,1,1,0.989,[0.6,0.81,0.82,0.91,0.95,0.98]],[0.717,0.882,0.982,0.999,1,0.91,[0.21,0.27,0.34,0.45,0.49,0.52,0.53,0.64,0.67]],[0.465,0.773,0.94,0.988,1,0.851,[-0.02,0.1,0.19,0.22,0.34,0.36,0.38]]];
+    var oy = function (v) { return 230 - (v + 0.1) / 1.1 * 216; };
+    var gx = function (i) { return 44 + (i + 0.5) * 85.2; };
+    var boxes = [];
+    [[B, -14, '#6b6a65', '#ffffff', '#3a3936'], [C, 14, '#ecebe6', '#0b0b0b', '#8a8984']].forEach(function (arm) {
+      arm[0].forEach(function (s, i) {
+        var x = gx(i) + arm[1];
+        var yq3 = oy(s[3]), yq1 = oy(s[1]);
+        boxes.push({
+          x: x.toFixed(1), bx: (x - 10).toFixed(1), yhi: oy(s[4]).toFixed(1), wh: Math.max(0, oy(s[0]) - oy(s[4])).toFixed(1),
+          yq3: (yq3 - 1).toFixed(1), bh: Math.max(3, yq1 - yq3 + 2).toFixed(1), ymed: oy(s[2]).toFixed(1), ymean: oy(s[5]).toFixed(1),
+          fill: arm[2], medc: arm[3], dot: arm[4],
+          out: s[6].map(function (v) { return { y: oy(v).toFixed(1) }; })
+        });
+      });
+    });
+    var ogrid = [0, 0.25, 0.5, 0.75, 1].map(function (v) { return { y: oy(v), label: v.toFixed(2), c: '#efeee9' }; });
+    var oxt = [2, 3, 4, 5, 6].map(function (p, i) { return { p: p, x: gx(i) }; });
+
+    // ---- loadings at p = 5, colored by lineage ----
+    var P5 = [
+      [0, [['Marcos, Imee', 'NP', 12, 2.24, 0.56], ['Abalos, Benhur', 'PFP', 16, 1.67, 0.51], ['Go, Bong Go', 'PDPLBN', 1, 1.39, 0.30], ['Tolentino, Francis', 'PFP', 25, 1.34, 0.36], ['Villar, Camille', 'NP', 10, 1.31, 0.22], ['Cayetano, Pia', 'NP', 9, 1.03, 0.28]]],
+      [1, [['Dela Rosa, Bato', 'PDPLBN', 3, 2.26, 0.39], ['Go, Bong Go', 'PDPLBN', 1, 1.85, 0.30], ['Bondoc, Jimmy', 'PDPLBN', 17, 1.73, 0.31], ['Salvador, Phillip', 'PDPLBN', 19, 1.58, 0.30], ['Lambino, Raul', 'PDPLBN', 24, 1.48, 0.27], ['Hinlo, Jayvee', 'PDPLBN', 27, 1.43, 0.26]]],
+      [2, [['Aquino, Bam', 'KNP', 2, 1.62, 0.32], ['Pangilinan, Kiko', 'LP', 5, 1.20, 0.23], ['Mendoza, Heidi', 'IND', 21, 1.19, 0.22], ['Espiritu, Luke', 'PLM', 29, 0.91, 0.17], ['Bosita, Colonel', 'IND', 20, 0.78, 0.18], ['Casiño, Teddy', 'MKBYN', 32, 0.70, 0.13]]],
+      [3, [['Tulfo, Erwin', 'LAKAS', 4, 1.81, 0.19], ['Revilla, Bong', 'LAKAS', 14, 1.63, 0.24], ['Lapid, Lito', 'NPC', 11, 1.58, 0.18], ['Cayetano, Pia', 'NP', 9, 1.40, 0.26], ['Lacson, Ping', 'IND', 6, 1.31, 0.26], ['Abalos, Benhur', 'PFP', 16, 1.29, 0.42]]],
+      [4, [['Revillame, Willie', 'IND', 22, 0.34, 0.23], ['Tulfo, Ben Bitag', 'IND', 13, 0.29, 0.28], ['Pacquiao, Manny', 'PFP', 18, 0.23, 0.18], ['Lapid, Lito', 'NPC', 11, 0.08, 0.14], ['Ballon, Roberto', 'IND', 42, -0.04, 0.05], ['De Alban, Angelo', 'IND', 41, -0.07, 0.06]]]
+    ];
+    var lo = -0.5, hi = 3.0, span = hi - lo;
+    var pct = function (x) { return Math.max(0, Math.min(100, (x - lo) / span * 100)); };
+    var ticks = [-0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3].map(function (v) {
+      return { x: pct(v).toFixed(2), label: (v < 0 ? '−' : '') + Math.abs(v).toFixed(1), c: v === 0 ? '#a8a7a0' : '#efeee9' };
+    });
+    var p5 = P5.map(function (a, i) {
+      return {
+        name: 'Archetype ' + a[0], short: 'A' + a[0], color: COLORS[a[0]], chip: i === 0 ? 'chip on' : 'chip', ticks: ticks,
+        rows: a[1].map(function (r) {
+          var v = r[3], sd = r[4], x0 = pct(Math.min(0, v)), x1 = pct(Math.max(0, v));
+          return { n: r[0], tag: r[1] + ' [' + r[2] + ']', left: x0.toFixed(2), width: Math.max(0.4, x1 - x0).toFixed(2), wl: pct(v - sd).toFixed(2), ww: (pct(v + sd) - pct(v - sd)).toFixed(2), wr: pct(v + sd).toFixed(2), grid: ticks };
+        })
+      };
+    });
+
+    return {
+      nodes: nodes, edges: edges, elabels: elabels, cols: cols,
+      dlines: dlines, dpts: dpts, dgrid: dgrid, dxt: dxt, hx: dx(6), dEndY: dy(DM.cos[DM.cos.length - 1]),
+      boxes: boxes, ogrid: ogrid, oxt: oxt, p5: p5
+    };
+  }
+}
+</script>
+</body>
+</html>
