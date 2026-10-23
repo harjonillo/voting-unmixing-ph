@@ -24,6 +24,8 @@ const AXIS = {
   tickfont: TICKFONT, automargin: true,
 };
 const axisTitle = (text) => ({ text, font: { size: 11, color: INK_MUTED }, standoff: 8 });
+// Motion (logo, chip dots, loadings bars) is off for prefers-reduced-motion.
+const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 // ---------------------------------------------------------------- data cache
 const _cache = new Map();
@@ -93,6 +95,11 @@ function archRamp(archCol) {
     [0.55, c], [0.8, mixHex(c, "#000000", 0.3)], [1, mixHex(c, "#000000", 0.55)],
   ];
 }
+// Turnout map ramp: warm grays (the UI chrome's hue), light = low turnout. Not
+// a data hue, so turnout never reads as one of the archetypes.
+const TURNOUT_RAMP = [
+  "#f4f3ef", "#dddcd5", "#c3c2b9", "#a5a49c", "#86857e", "#686761", "#4a4945", "#2b2a28",
+].map((c, i, a) => [i / (a.length - 1), c]);
 // Signed number with a true minus sign.
 const fmtSigned = (v, d) => (v < -1e-12 ? "−" : "") + Math.abs(v).toFixed(d);
 // Endmember-extraction method (sidebar): MANIFEST.methods[key] =
@@ -231,6 +238,9 @@ function loadingsRows(payload, arch_cols, topN) {
 // plotEl, on the x domain `dom` ({range, dtick}; see loadingsDomain). `height`
 // overrides the default (row height × rows + axis).
 function loadingsChart(plotEl, c, topRows, dom, payload, height) {
+  // kept for animateLoadingsAxis, which re-ranges the chart without a redraw
+  plotEl.classList.add("loadings-plot");
+  plotEl._rows = topRows;
   const rows = [...topRows].reverse();   // Plotly draws the first y at the bottom
   const ys = rows.map((r) => r.label);
   const ticktext = rows.map((r) => {
@@ -297,6 +307,28 @@ function loadingsGrid(divId, payload, arch_cols, topN, axis) {
     wrap.appendChild(cell);
     loadingsChart(plot, c, rowsBy[k], shared || loadingsDomain(rowsBy[k]), payload);
   });
+}
+
+// Switch the loadings charts already drawn in hostId to x-axis mode `axis`,
+// sliding the bars to the new range over 0.45s instead of redrawing them.
+// Returns false when there is nothing to animate (re-render instead).
+function animateLoadingsAxis(hostId, axis) {
+  const plots = [...document.getElementById(hostId).querySelectorAll(".loadings-plot")];
+  if (!plots.length) return false;
+  const shared = axis === "shared" ? loadingsDomain(plots.flatMap((p) => p._rows)) : null;
+  for (const p of plots) {
+    const { range, dtick } = shared || loadingsDomain(p._rows);
+    if (REDUCED_MOTION.matches) {
+      Plotly.relayout(p, { "xaxis.range": range, "xaxis.dtick": dtick });
+      continue;
+    }
+    // dtick isn't animatable: set it first, then glide the range
+    Plotly.relayout(p, { "xaxis.dtick": dtick }).then(() => Plotly.animate(
+      p, { layout: { "xaxis.range": range } },
+      { transition: { duration: 450, easing: "cubic-out" }, frame: { duration: 450, redraw: false } },
+    ));
+  }
+  return true;
 }
 
 // Caption under a loadings card title (error-bar source + NNDSVD overlay).
@@ -394,7 +426,7 @@ function partylistMixing(plotId, tableId, payload, arch_cols, mode) {
     "not correlations). Blue is positive, red negative, gray near zero.";
   const host = document.getElementById(plotId);
   host.innerHTML = "";
-  const wrap = el("div", "matrix-wrap");
+  const wrap = el("div", "matrix-wrap scroll");
   const tbl = el("table", "matrix");
   const hr = el("tr");
   hr.appendChild(el("th", "", groupHeader));
@@ -446,7 +478,7 @@ function partylistMixing(plotId, tableId, payload, arch_cols, mode) {
     ? "Full slate, by election result rank; the extra column shows party."
     : "Top 5 per party, by election result rank; the extra column shows alliance.";
   tableWrap.innerHTML = "";
-  tableWrap.className = "roster-wrap";
+  tableWrap.className = "roster-wrap scroll";
   const roster = el("table", "roster");
   const rh = el("tr");
   for (const h of [groupHeader, "Candidate", extraHeader]) {
@@ -643,7 +675,7 @@ async function renderMap() {
     Object.assign(fig, {
       colorFn: (r) => (r.turnout == null ? null : r.turnout),
       hover: "%{text}<br>turnout %{z:.1f}%<extra></extra>",
-      fmt: (v) => `${v.toFixed(0)}%`, title: "Turnout",
+      fmt: (v) => `${v.toFixed(0)}%`, title: "Turnout", colorscale: TURNOUT_RAMP,
     });
     lede = `Voter turnout in each ${unit}, next to the candidate weights that define ` +
       "every archetype.";
@@ -1169,9 +1201,9 @@ async function renderDist() {
 
 // ------------------------------------------------------------------- rendering
 // Renders empty their containers and refill them. Meanwhile, hold the active
-// panel at its current height: otherwise the page briefly shrinks, the browser
-// clamps the scroll position to the shorter page, and the view jumps toward the
-// top. Overlapping renders (quick clicks) share one hold, released two frames
+// panel at its current height: otherwise the pane's content briefly shrinks, the
+// browser clamps its scroll position to the shorter content, and the view jumps
+// toward the top. Overlapping renders (quick clicks) share one hold, released two frames
 // after the last one finishes, once the redrawn plots have laid out.
 let _heldRenders = 0;
 async function holdHeight(render) {
@@ -1289,6 +1321,8 @@ function fillArchChips(id, cols, value) {
     const on = b.dataset.value === value;
     b.classList.toggle("on", on);
     b.setAttribute("aria-pressed", String(on));
+    // the selected chip is tinted with its archetype color (~14% alpha)
+    b.style.background = on ? hexToRgba(archColor(b.dataset.value), 0.14) : "";
   }
 }
 
@@ -1303,16 +1337,31 @@ function switchTab(tab) {
   // Top N drives the loadings on the overview and distributions tabs.
   document.getElementById("topN-field").hidden = tab === "compare";
   renderSummary();
-  renderActive();
+  renderActive().then(resizeActivePlots);
 }
 
-// The sticky sidebar sits below the sticky header: keep --header-h current.
-function trackHeaderHeight() {
-  const header = document.querySelector(".app-header");
-  const set = () => document.documentElement.style.setProperty(
-    "--header-h", `${header.getBoundingClientRect().height}px`);
-  new ResizeObserver(set).observe(header);
-  set();
+// Plotly's responsive mode follows window resizes only, but the main pane can
+// change width on its own (its scrollbar appearing, the shell wrapping): resize
+// the active tab's charts with the pane. Hidden tabs can't resize, so a tab
+// also resizes its charts when it is shown again.
+function resizeActivePlots() {
+  for (const gd of document.querySelectorAll(`#tab-${state.tab} .js-plotly-plot`)) {
+    Plotly.Plots.resize(gd);
+  }
+}
+function trackPaneWidth() {
+  const pane = document.querySelector(".main");
+  let width = pane.clientWidth, queued = false;
+  new ResizeObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      if (pane.clientWidth === width) return;
+      width = pane.clientWidth;
+      resizeActivePlots();
+    });
+  }).observe(pane);
 }
 
 function setTopN(n) {
@@ -1323,7 +1372,7 @@ function setTopN(n) {
 
 // ------------------------------------------------------------------------- init
 async function init() {
-  trackHeaderHeight();
+  trackPaneWidth();
   // always revalidate: the manifest describes the data tree app.js expects
   MANIFEST = await getJSON(`${DATA}/manifest.json`, { cache: "no-cache" });
   state.year = MANIFEST.default_year;
@@ -1385,7 +1434,10 @@ async function init() {
     state.map.arch = b.dataset.value; renderActive();
   });
   wireSeg("map-range", (v) => { state.map.range = v; renderActive(); });
-  wireSeg("map-axis", (v) => { state.loadingsAxis = v; renderActive(); });
+  wireSeg("map-axis", (v) => {
+    state.loadingsAxis = v;
+    if (!animateLoadingsAxis("map-loadings", v)) renderActive();
+  });
   wireSeg("map-groupby", (v) => { state.map.groupBy = v; renderActive(); });
   wireSeg("p", (v) => { state.p = +v; renderSummary(); renderActive(); });
   document.getElementById("cmp-lineage-topn").addEventListener("change", (e) => {
@@ -1407,7 +1459,10 @@ async function init() {
   });
   wireSeg("dist-x", (v) => { state.dist.x = v; renderActive(); });
   wireSeg("dist-y", (v) => { state.dist.y = v; renderActive(); });
-  wireSeg("dist-axis", (v) => { state.dist.axis = v; renderActive(); });
+  wireSeg("dist-axis", (v) => {
+    state.dist.axis = v;
+    if (!animateLoadingsAxis("dist-plots", v)) renderActive();
+  });
   document.getElementById("dist-bins").addEventListener("change", (e) => {
     state.dist.bins = Math.min(60, Math.max(5, Math.round(+e.target.value) || 20));
     e.target.value = state.dist.bins;

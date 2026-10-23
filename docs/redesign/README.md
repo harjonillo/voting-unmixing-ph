@@ -59,18 +59,22 @@ UI chrome is black and gray only. Color is reserved for data.
 Replace the husl `theme.categorical` in `build_static.py` with this fixed order (slot i = Archetype i, never cycled):
 
 ```
-#2a78d6  #eb6834  #1baf7a  #eda100  #e87ba4  #008300
+#3c73e1  #fe654f  #169873  #ffae03  #6b4b3e  #9ebd6e
+Crayola Blue, Tomato, Shamrock, Orange, Mauve Bark, Muted Olive
 ```
 
-This passes a colorblind-separation check for adjacent pairs. Three slots (aqua, yellow, magenta) are under 3:1 contrast on white, so every colored mark needs a text label next to it (chip label, chart title, legend). The dominant-archetype map uses all six at once, and no six-color set is fully colorblind-safe there, so keep the abundance map as the default view.
+The 7th slot, Vintage Berry `#993955`, is for lineage nodes with no counterpart (see the Model comparison tab).
 
-Sequential ramp for abundance and turnout maps (replaces `mako_r`), light to dark:
+The order puts blue, tomato, a green and orange first, because most views show p ≤ 4. Shamrock is the green there: under simulated deuteranopia it stays about three times further from blue, tomato and orange than Muted Olive does (ΔE ≈ 43 vs 14). Olive is close to tomato for red-green colorblind viewers, so it takes the last slot, where the two only meet at p ≥ 6. Three slots (tomato, orange, olive) are under 3:1 contrast on white, so every colored mark needs a text label next to it (chip label, chart title, legend), and none of them should be used for text. The dominant-archetype map uses all six at once, and no six-color set is fully colorblind-safe there, so keep the abundance map as the default view.
+
+Map ramps (replace `mako_r`), light to dark:
+
+- Abundance (and its 1 SD map): the selected archetype's own hue, from a pale tint through the color to a darker shade.
+- Turnout: warm grays, so turnout never reads as an archetype.
 
 ```
-#e8f1fc  #cde2fb  #9ec5f4  #6da7ec  #3987e5  #256abf  #184f95  #0d366b
+#f4f3ef  #dddcd5  #c3c2b9  #a5a49c  #86857e  #686761  #4a4945  #2b2a28
 ```
-
-Open question for Hannah: should the abundance map use the selected archetype's own hue as its ramp instead? The mockup only shows Archetype 0, where the two are the same.
 
 ## Layout (Map / overview tab)
 
@@ -122,22 +126,56 @@ Cards: 1px `#e3e2dc` border, 10px radius, 20px padding, no shadow.
 - Rows sorted by result rank and shown as `12. Marcos, Imee`, with "also in …" notes for guests. The group cell spans its rows (rowspan).
 - Scroll box with a sticky table header.
 
-### Sticky header and sidebar (≥ 1024px)
+### App shell and scrolling (replaces sticky positioning)
+
+The page is a fixed-height app shell: the header and sidebar stay put, and only the content pane scrolls. Its scrollbar sits on the pane's **left** edge, right next to the sidebar. Apply the same layout to all three tabs.
 
 ```css
-@media (min-width: 1024px) {
-  .app-header { position: sticky; top: 0; z-index: 10; background: #fff; }
-  .sidebar {
-    position: sticky;
-    top: var(--header-h);
-    align-self: flex-start;
-    max-height: calc(100vh - var(--header-h));
-    overflow-y: auto;
-  }
+.shell { height: 100vh; display: flex; flex-direction: column; }
+.shell-body { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch;
+              width: 100%; max-width: 1440px; margin: 0 auto; }
+.side { flex: 0 0 272px; overflow-y: auto; }   /* scrolls on its own only if taller than the window */
+.pane { flex: 1 1 auto; min-width: 0; overflow-y: auto; direction: rtl; }  /* rtl puts the scrollbar on the left */
+.pane > * { direction: ltr; }
+
+@media (max-width: 900px) {            /* phones: one normal scrolling page */
+  .shell { height: auto; }
+  .shell-body { flex-wrap: wrap; }
+  .side { flex: 1 1 100%; overflow: visible; }
+  .pane { overflow: visible; direction: ltr; border-left: 0; }
 }
 ```
 
-The current build already has `sticky top-0 self-start max-h-screen overflow-y-auto` on the aside. If it does not stick, check for an ancestor with `overflow` other than `visible` first. Below 1024px the sidebar stacks above the content and is not sticky.
+Scrollbars: minimal and always visible, matching the tab underline. A 1px hairline track (`#e3e2dc`) with a 2px black (`#0b0b0b`) thumb that thickens to 4px on hover. Use it on `.pane`, `.side` and every scrollable card (candidates table, matrix, lineage figure).
+
+```css
+.scroll::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+.scroll::-webkit-scrollbar-track:vertical {
+  background: linear-gradient(90deg, transparent 3.5px, #e3e2dc 3.5px, #e3e2dc 4.5px, transparent 4.5px); }
+.scroll::-webkit-scrollbar-track:horizontal {
+  background: linear-gradient(180deg, transparent 3.5px, #e3e2dc 3.5px, #e3e2dc 4.5px, transparent 4.5px); }
+.scroll::-webkit-scrollbar-thumb { background: #0b0b0b; background-clip: padding-box;
+  border: 3px solid transparent; border-radius: 0; }
+.scroll::-webkit-scrollbar-thumb:hover,
+.scroll::-webkit-scrollbar-thumb:active { border-width: 2px; }
+.scroll::-webkit-scrollbar-corner { background: transparent; }
+@supports not selector(::-webkit-scrollbar) {   /* Firefox: closest match */
+  .scroll { scrollbar-width: thin; scrollbar-color: #0b0b0b transparent; }
+}
+```
+
+Do not also set `scrollbar-color`/`scrollbar-width` for Chrome: once those standard properties are set, Chrome ignores the `::-webkit-scrollbar` rules.
+
+Plotly charts inside the pane resize with the pane, not the window. Keep `responsive: true` and call `Plotly.Plots.resize` on the visible charts when the pane's width changes (a `ResizeObserver` on `.pane`).
+
+### Small touches
+
+- **Logo mark** left of the title: six dots in the archetype palette at the corners of a hexagon, every pair joined by a 0.75px `#d6d5cf` line (a 2-D view of the simplex). It rotates 60° on hover of the title link (0.6s ease-out). The SVG is in `mockup-A.dc.html`.
+- **Wordmark:** the title only, in Bricolage Grotesque 700. Everything else stays Instrument Sans.
+- **Archetype chips:** the selected chip's background is its archetype color at about 14% alpha (`#3c73e1` + `24`). The dot scales up 1.4× on hover.
+- **Loadings bars** animate `left`/`width` over 0.45s when the x-axis toggle changes. In Plotly, use `Plotly.animate` or a `transition` in the layout.
+- **Footer line** at the end of the pane, with a dots-only version of the mark: "Unmixed with HySime, MVSA and SUNSAL at the National Institute of Physics, UP Diliman."
+- Respect `prefers-reduced-motion: reduce`: no rotation, no bar animation.
 
 ## Model comparison tab (`mockup-A-compare.dc.html`)
 
@@ -158,7 +196,7 @@ Similarity metric (select), Column distance (Min / Mean segmented), Candidates p
   - split (new archetype's closest parent): 1.5px dashed `5 4`, `#3a3936`
   - other pairs ≥ 0.35: 1px dotted `2 4`, `#b5b4ad`, no label
 - Similarity labels on matched and split links only: mono, small, white background.
-- **Color by lineage, anchored to the Overview run.** Match the sweep's archetypes at p = k (HySime k) to the main run's archetypes, give them the main run's colors, then propagate along matched links backwards to p = 2 and forwards to p_max. A node with no counterpart at p = k takes the next free slot (7th slot `#6250d6`). Past 8 slots, fold extra nodes into a neutral gray. This needs a small addition to the bake: a `color_slot` per lineage node.
+- **Color by lineage, anchored to the Overview run.** Match the sweep's archetypes at p = k (HySime k) to the main run's archetypes, give them the main run's colors, then propagate along matched links backwards to p = 2 and forwards to p_max. A node with no counterpart at p = k takes the next free slot (7th slot `#993955`). Past 8 slots, fold extra nodes into a neutral gray. This needs a small addition to the bake: a `color_slot` per lineage node.
 - A legend row under the figure explains the three link styles and the "no counterpart" color.
 - The figure is wider than a narrow screen: wrap it in an `overflow-x: auto` box.
 

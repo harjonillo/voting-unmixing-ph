@@ -416,10 +416,13 @@ def dump_json(obj, path: Path) -> int:
 # Fixed archetype palette: slot i = Archetype i of the main run, never cycled
 # (the front-end falls back to a neutral gray past the last slot). The 7th slot
 # is for sweep archetypes with no counterpart in the main run (see
-# lineage_color_slots). Adjacent pairs pass a colorblind-separation check; three
-# slots are under 3:1 on white, so every colored mark in the UI carries a label.
+# lineage_color_slots). Blue, tomato, shamrock, orange first (p <= 4, the
+# common views): shamrock is the green that stays apart from the other three
+# under simulated deutan vision; olive, the weakest match against tomato, comes
+# last. Three slots (orange, olive, tomato) are under 3:1 on white, so every
+# colored mark carries a label.
 ARCH_PALETTE = [
-    "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6",
+    "#3c73e1", "#fe654f", "#169873", "#ffae03", "#6b4b3e", "#9ebd6e", "#993955",
 ]  # fmt: skip
 # Sequential ramp (light -> dark) for the abundance and turnout maps.
 SEQUENTIAL_RAMP = [

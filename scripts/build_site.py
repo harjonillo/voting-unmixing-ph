@@ -39,6 +39,7 @@ from fasthtml.common import (
     Fieldset,
     Figcaption,
     Figure,
+    Footer,
     H1,
     H2,
     H3,
@@ -61,14 +62,15 @@ from fasthtml.common import (
     Title,
     to_xml,
 )
-from fasthtml.svg import Path as SvgPath, Svg
+from fasthtml.svg import Circle, G, Path as SvgPath, Svg
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WEB = REPO_ROOT / "web"
 
 PLOTLY_CDN = "https://cdn.plot.ly/plotly-3.0.1.min.js"
 FONTS_CSS = (
-    "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600"
+    "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700"
+    "&family=Instrument+Sans:wght@400;500;600"
     "&family=IBM+Plex+Mono:wght@400;500&display=swap"
 )
 REPO_URL = "https://github.com/harjonillo/voting-unmixing-ph"
@@ -77,6 +79,32 @@ PROJECT_LINKS = [
     ("Data sources", f"{REPO_URL}/blob/main/data/README.md"),
     ("GitHub", REPO_URL),
 ]
+
+# Logo mark: the archetype palette (build_static.py's theme, slots 0-5) at the
+# corners of a hexagon, every pair joined — a 2-D view of the simplex.
+LOGO_COLORS = ["#3c73e1", "#fe654f", "#169873", "#ffae03", "#6b4b3e", "#9ebd6e"]
+LOGO_PTS = [(14, 3), (23.5, 8.5), (23.5, 19.5), (14, 25), (4.5, 19.5), (4.5, 8.5)]
+FOOTER_TEXT = (
+    "Unmixed with HySime, MVSA and SUNSAL at the National Institute of Physics, UP Diliman."
+)
+
+
+def logo_mark(size: int, edges: bool = True, r: float = 2.8, cls: str | None = None) -> Svg:
+    """The hexagon-of-dots mark; `edges=False` drops the joining lines."""
+    d = "".join(
+        f"M{x1:g} {y1:g}L{x2:g} {y2:g}"
+        for i, (x1, y1) in enumerate(LOGO_PTS)
+        for x2, y2 in LOGO_PTS[i + 1 :]
+    )
+    return Svg(
+        G(SvgPath(d=d), stroke="#d6d5cf", stroke_width=0.75) if edges else None,
+        *(Circle(cx=x, cy=y, r=r, fill=c) for (x, y), c in zip(LOGO_PTS, LOGO_COLORS)),
+        width=size,
+        height=size,
+        viewBox="0 0 28 28",
+        aria_hidden="true",
+        cls=cls,
+    )
 
 
 def seg_group(group_id: str, label: str, options=(), fill: bool = False) -> Div:
@@ -176,7 +204,7 @@ def sidebar() -> Aside:
         ),
         # Run summary for the selected year + method + tab (filled by app.js).
         Section(id="run-summary", cls="side-group summary"),
-        cls="sidebar",
+        cls="sidebar scroll",
     )
 
 
@@ -352,7 +380,7 @@ def tab_compare() -> Section:
                     cls="card-head-text wide",
                 ),
                 # The network is drawn at a fixed pixel width; scroll when narrow.
-                Div(Div(id="cmp-lineage"), cls="scroll-x"),
+                Div(Div(id="cmp-lineage"), cls="scroll-x scroll"),
                 Div(
                     legend_item(
                         line_swatch("rgba(58,57,54,0.5)", 4),
@@ -465,7 +493,12 @@ def header() -> Header:
         Div(
             Div(
                 Div(
-                    H1("PH Voting Archetypes", cls="brand"),
+                    A(
+                        logo_mark(30, cls="logo"),
+                        H1("PH Voting Archetypes", cls="brand"),
+                        href="./",
+                        cls="brand-link",
+                    ),
                     P("Spectral-unmixing explorer of PH senatorial votes", cls="subtitle"),
                     cls="brand-row",
                 ),
@@ -526,11 +559,25 @@ def page() -> Html:
             Script(src=PLOTLY_CDN),
         ),
         Body(
-            header(),
+            # App shell: header and sidebar stay put, only the main pane scrolls.
             Div(
-                sidebar(),
-                Main(tab_map(), tab_compare(), tab_dist(), cls="main"),
-                cls="layout",
+                header(),
+                Div(
+                    sidebar(),
+                    Main(
+                        tab_map(),
+                        tab_compare(),
+                        tab_dist(),
+                        Footer(
+                            logo_mark(18, edges=False, r=3),
+                            Span(FOOTER_TEXT),
+                            cls="site-footer",
+                        ),
+                        cls="main scroll",
+                    ),
+                    cls="layout",
+                ),
+                cls="shell",
             ),
             Script(src=asset_url("app.js")),
         ),

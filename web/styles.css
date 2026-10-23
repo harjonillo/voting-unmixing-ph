@@ -15,6 +15,7 @@
 
   --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-wordmark: "Bricolage Grotesque", var(--font-sans);   /* the title only */
 
   --bg: #ffffff;
   --ink: #0b0b0b;
@@ -29,8 +30,12 @@
   --link: #1c5cab;
   --link-hover: #0d366b;
 
-  --radius: 10px;
-  --header-h: 0px;           /* measured by app.js */
+  --radius: 0;               /* cards: sharp corners, like the scrollbars */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  /* The pointing hand, its index fingernail marked with indelible ink — the
+   * violet stain a Philippine voter's finger gets at the precinct. Hotspot at
+   * the fingertip; falls back to the system hand. */
+  --hand: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M11 4.5A2.5 2.5 0 0 1 16 4.5V12.5A1.75 1.75 0 0 1 19.5 12.5V13.5A1.75 1.75 0 0 1 23 13.5V15A1.75 1.75 0 0 1 26.5 15V21C26.5 25.5 24 29 19.5 29H16.5C14 29 12.5 27.5 11 25.5L6.2 19A1.9 1.9 0 0 1 9 16.4L11 18.5Z' fill='%23fff' stroke='%230b0b0b' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M16 12.5V17M19.5 13.5V17.5M23 15V18' fill='none' stroke='%230b0b0b' stroke-width='1.2' stroke-linecap='round'/%3E%3Cpath d='M12 4.6A1.5 1.5 0 0 1 15 4.6V7.9Q13.5 8.8 12 7.9Z' fill='%236a2c91'/%3E%3C/svg%3E") 13 2, pointer;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -44,7 +49,7 @@ body {
   line-height: 1.5;
 }
 
-a { color: var(--link); }
+a { color: var(--link); cursor: var(--hand); }
 a:hover { color: var(--link-hover); }
 
 .mono { font-family: var(--font-mono); }
@@ -60,11 +65,20 @@ a:hover { color: var(--link-hover); }
 .header-top, .brand-row {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px;
 }
+/* center, not baseline: the logo mark would push the links below the title */
+.header-top, .brand-row { align-items: center; }
 .header-top { justify-content: space-between; }
-.brand {
-  margin: 0; font-size: var(--fs-2); line-height: 1.2; font-weight: 600;
-  letter-spacing: -0.01em;
+.brand-link {
+  display: inline-flex; align-items: center; gap: 10px;
+  color: var(--ink); text-decoration: none;
 }
+.brand-link:hover { color: var(--ink); }
+.brand {
+  margin: 0; font-family: var(--font-wordmark); font-size: var(--fs-2); line-height: 1.2;
+  font-weight: 700; letter-spacing: -0.02em;
+}
+.logo { flex: none; transition: transform .6s var(--ease-out); }
+.brand-link:hover .logo { transform: rotate(60deg); }
 .subtitle { margin: 0; font-size: var(--fs--1); color: var(--ink-muted); }
 .links { display: flex; gap: 20px; font-size: var(--fs--1); }
 .header-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
@@ -73,43 +87,82 @@ a:hover { color: var(--link-hover); }
 .tab {
   font: inherit; font-size: var(--fs-0); padding: 12px 0; border: 0;
   border-bottom: 2px solid transparent; background: transparent;
-  color: var(--ink-2); cursor: pointer;
+  color: var(--ink-2); cursor: var(--hand);
 }
 .tab:hover { color: var(--ink); }
 .tab.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
 
 /* ------------------------------------------------------------------ layout */
+/* A fixed-height app shell: the header and sidebar stay put and only the main
+ * pane scrolls. direction: rtl puts the pane's scrollbar on its left edge, where
+ * its always-shown track line is the one divider from the sidebar; the
+ * sidebar's own scrollbar (only on short windows) goes on its outer edge, away
+ * from the divider. Their children switch back to ltr. Phones get one normal
+ * page. */
+.shell { height: 100vh; display: flex; flex-direction: column; }
+.app-header { flex: none; }
 .layout {
-  max-width: 1440px; margin: 0 auto;
-  display: flex; flex-wrap: wrap; align-items: flex-start;
+  flex: 1 1 auto; min-height: 0; width: 100%; max-width: 1440px; margin: 0 auto;
+  display: flex; align-items: stretch;
 }
+/* The sidebar scrolls only if taller than the window. Its 10px scrollbar gutter
+ * is always reserved (+10px width, -10px left padding), so its text stays at the
+ * header's 32px margin whether or not the bar shows. */
 .sidebar {
-  flex: 1 1 248px; max-width: 280px;
-  padding: 28px 24px 32px 32px;
+  flex: 0 0 282px; overflow-y: auto; direction: rtl; scrollbar-gutter: stable;
+  padding: 28px 24px 32px 22px;
   display: flex; flex-direction: column; gap: 28px;
 }
 .main {
-  flex: 999 1 560px; min-width: 0;
+  flex: 1 1 auto; min-width: 0; overflow-y: scroll; direction: rtl;
   padding: 28px 32px 48px;
-  border-left: 1px solid var(--hairline);
+  display: flex; flex-direction: column; gap: 32px;
 }
+.sidebar > *, .main > * { direction: ltr; }
 .tab-panel { display: flex; flex-direction: column; gap: 16px; }
 .tab-panel[hidden] { display: none; }
 
-@media (min-width: 1024px) {
-  .app-header { position: sticky; top: 0; z-index: 10; background: var(--bg); }
-  .sidebar {
-    position: sticky;
-    top: var(--header-h);
-    align-self: flex-start;
-    max-height: calc(100vh - var(--header-h));
-    overflow-y: auto;
+@media (max-width: 900px) {
+  .shell { height: auto; }
+  .layout { flex-wrap: wrap; }
+  .sidebar { flex: 1 1 100%; overflow: visible; direction: ltr; padding: 24px 20px 8px; }
+  .main {
+    overflow: visible; direction: ltr; border-left: 0;
+    border-top: 1px solid var(--hairline); padding: 24px 20px 40px;
   }
-}
-@media (max-width: 1023px) {
-  .sidebar { max-width: none; flex-basis: 100%; padding: 24px 20px 8px; }
-  .main { border-left: 0; border-top: 1px solid var(--hairline); padding: 24px 20px 40px; }
   .header-inner { padding: 16px 20px 0; }
+}
+
+.site-footer {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  border-top: 1px solid var(--hairline); padding-top: 16px;
+  font-size: var(--fs--1); color: var(--ink-muted);
+}
+
+/* Scrollbars: minimal and always visible, like the tab underline — a 1px
+ * hairline track with a 4px black thumb that thickens to 6px on hover. Don't
+ * add scrollbar-color/-width for Chrome: once set, it ignores these rules. */
+.scroll::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+.scroll::-webkit-scrollbar-track:vertical {
+  background: linear-gradient(90deg, transparent 4.5px, var(--border) 4.5px,
+    var(--border) 5.5px, transparent 5.5px);
+}
+.scroll::-webkit-scrollbar-track:horizontal {
+  background: linear-gradient(180deg, transparent 4.5px, var(--border) 4.5px,
+    var(--border) 5.5px, transparent 5.5px);
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: var(--ink); background-clip: padding-box;
+  border: 3px solid transparent; border-radius: 0;
+}
+.scroll::-webkit-scrollbar-thumb:hover,
+.scroll::-webkit-scrollbar-thumb:active { border-width: 2px; }
+.scroll::-webkit-scrollbar-corner { background: transparent; }
+/* the sidebar's bar is a bare thumb: the pane's track is the only divider line */
+.sidebar::-webkit-scrollbar-track:vertical { background: transparent; }
+@supports not selector(::-webkit-scrollbar) {   /* Firefox: closest match */
+  .scroll { scrollbar-width: auto; scrollbar-color: var(--ink) transparent; }
+  .main { border-left: 1px solid var(--hairline); }   /* no track line to divide */
 }
 
 /* ----------------------------------------------------------------- sidebar */
@@ -124,9 +177,11 @@ a:hover { color: var(--link-hover); }
 legend.field-label { margin-bottom: 6px; }
 .radios { display: flex; flex-direction: column; gap: 6px; }
 .radios label, .check {
-  display: flex; align-items: center; gap: 8px; font-size: var(--fs--1); cursor: pointer;
+  display: flex; align-items: center; gap: 8px; font-size: var(--fs--1); cursor: var(--hand);
 }
-input[type="radio"], input[type="checkbox"] { accent-color: var(--ink); margin: 0; }
+input[type="radio"], input[type="checkbox"] {
+  accent-color: var(--ink); margin: 0; cursor: var(--hand);
+}
 
 .stepper { display: flex; align-items: center; gap: 4px; }
 .stepper input {
@@ -139,7 +194,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--ink); margin: 
 .step {
   font: inherit; font-size: var(--fs--1); width: 32px; min-height: 32px;
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
-  color: var(--ink-2); cursor: pointer;
+  color: var(--ink-2); cursor: var(--hand);
 }
 .step:hover { background: var(--hairline); color: var(--ink); }
 
@@ -160,7 +215,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--ink); margin: 
 .seg {
   font: inherit; font-size: var(--fs--1); padding: 6px 10px; border: 0;
   background: transparent; color: var(--ink-2); border-radius: 6px;
-  cursor: pointer; min-height: 32px;
+  cursor: var(--hand); min-height: 32px;
 }
 .seg:hover { background: var(--hairline); color: var(--ink); }
 .seg.on { background: var(--ink); color: #ffffff; }
@@ -170,13 +225,21 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--ink); margin: 
 .chip {
   font: inherit; font-size: var(--fs--1); display: inline-flex; align-items: center;
   gap: 6px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px;
-  background: var(--bg); color: var(--ink); cursor: pointer; min-height: 32px;
+  background: var(--bg); color: var(--ink); cursor: var(--hand); min-height: 32px;
 }
 .chip:hover { border-color: var(--hover-border); }
+/* the selected chip is also tinted with its archetype color (set by app.js) */
 .chip.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .dot {
   display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   flex: none;
+}
+.chip .dot { transition: transform .2s ease; }
+.chip:hover .dot { transform: scale(1.4); }
+
+@media (prefers-reduced-motion: reduce) {
+  .logo, .chip .dot { transition: none; }
+  .brand-link:hover .logo { transform: none; }
 }
 
 /* Inline controls share one height (a segmented track: 32px buttons + 2 × 3px
@@ -189,7 +252,7 @@ select, .labeled input {
   height: var(--control-h); padding: 0 10px; margin: 0;
 }
 select {
-  appearance: none; -webkit-appearance: none; padding-right: 30px; cursor: pointer;
+  appearance: none; -webkit-appearance: none; padding-right: 30px; cursor: var(--hand);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2352514e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 11px center;
 }
