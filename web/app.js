@@ -983,7 +983,7 @@ async function renderDiagnostics() {
       xaxis: { ...AXIS, title: axisTitle("number of archetypes p"), tickvals: ps,
         showgrid: false, fixedrange: true },
       yaxis: { ...AXIS, range: [0, 1], dtick: 0.25, tickformat: ".2f", fixedrange: true,
-        zeroline: false, showline: true },
+        zeroline: false, showline: true, title: axisTitle(`${stat} pairwise distance`) },
     }, PLOTLY_CFG);
     for (const m of Object.keys(LINEAGE_METRICS)) {
       const item = el("span", m === metric ? "legend-item on" : "legend-item");
@@ -1000,8 +1000,6 @@ async function renderDiagnostics() {
 
   // --- precinct-order sensitivity (nb09) ---
   const ord = await getJSON(orderURL(state.year)).catch(() => null);
-  document.getElementById("cmp-order-ylabel").textContent =
-    `y: matched similarity, ${LINEAGE_METRICS[metric]}`;
   if (!ord) {
     document.getElementById("cmp-order-sub").textContent = "";
     diagnosticsNote("cmp-order",
@@ -1055,7 +1053,8 @@ async function renderDiagnostics() {
       ticktext: ord.ps.map((p) => `p = ${p}`), range: [-0.6, ord.ps.length - 0.4],
       showgrid: false, zeroline: false, fixedrange: true },
     yaxis: { ...AXIS, range: [-0.1, 1.0], tickvals: [0, 0.25, 0.5, 0.75, 1],
-      tickformat: ".2f", zeroline: false, fixedrange: true },
+      tickformat: ".2f", zeroline: false, fixedrange: true,
+      title: axisTitle(`matched similarity (${LINEAGE_METRICS[metric]})`) },
   }, PLOTLY_CFG);
 }
 

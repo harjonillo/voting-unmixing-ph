@@ -422,7 +422,6 @@ def tab_compare() -> Section:
                     Div(
                         legend_item(box_swatch("#6b6a65"), "Shuffled precinct order"),
                         legend_item(box_swatch("#ecebe6"), "Varying seed"),
-                        Span(id="cmp-order-ylabel", cls="note"),
                         cls="legend-plain",
                     ),
                     cls="card",
