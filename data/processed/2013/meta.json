@@ -5,16 +5,22 @@
       "LAV"
     ],
     "sen_col_start": 6,
-    "min_candidate_25th_percentile": 1.0,
-    "min_precinct_votes": 1.0,
+    "min_candidate_25th_percentile": 10.0,
+    "min_precinct_votes": 10.0,
     "normalization": "row_max",
+    "randomize_precinct_order": false,
     "n_candidates_before": 33,
-    "n_precincts_before": 77830
+    "n_precincts_before": 77830,
+    "precinct_ids": "[    2     3     4 ... 77827 77828 77829]"
   },
   "hysime_kf": 4,
   "n_archetypes": 4,
+  "method": "mvsa",
+  "method_params": {
+    "MM_iters": 10
+  },
   "seed": 42,
-  "rmse": 0.09424911231397977,
+  "rmse": 0.10392728884005828,
   "candidate_labels": [
     "POE, GRACE [1]",
     "LEGARDA, LOREN (NPC) [2]",
@@ -33,19 +39,7 @@
     "ENRILE, JUAN PONCE JR.(NPC) [15]",
     "MAGSAYSAY, RAMON JR. (LP) [16]",
     "HONTIVEROS, RISA (AKBAYAN) [17]",
-    "HAGEDORN, ED [18]",
-    "VILLANUEVA, BRO.EDDIE (BP) [19]",
-    "MADRIGAL, JAMBY (LP) [20]",
-    "MAGSAYSAY, MITOS (UNA) [21]",
-    "CASINO, TEDDY (MKB) [22]",
-    "MACEDA, MANONG ERNIE (UNA) [23]",
-    "COJUANGCO, TINGTING (UNA) [24]",
-    "DELOS REYES, JC (KPTRAN) [25]",
-    "ALCANTARA, SAMSON (SJS) [26]",
-    "BELGICA, GRECO (DPP) [27]",
-    "PENSON, RICARDO [28]",
-    "DAVID, LITO (KPTRAN) [29]",
-    "MONTANO, MON [30]",
-    "FALCONE, BAL (DPP) [31]"
+    "MADRIGAL, JAMBY (LP) [18]",
+    "MAGSAYSAY, MITOS (UNA) [19]"
   ]
 }

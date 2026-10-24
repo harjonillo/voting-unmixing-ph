@@ -1,6 +1,10 @@
 {
   "p": 6,
   "n_trials": 50,
+  "method": "mvsa",
+  "method_params": {
+    "MM_iters": 10
+  },
   "base_seed": 0,
   "reference_trial": 25,
   "rmse_trials": [
@@ -69,12 +73,14 @@
   "preprocessing": {
     "excluded_regions": [
       "OV",
-      "LAV"
+      "LAV",
+      "OAV"
     ],
     "sen_col_start": 17,
     "min_candidate_25th_percentile": 10.0,
     "min_precinct_votes": 10.0,
     "normalization": "valid_ballots",
+    "randomize_precinct_order": false,
     "n_candidates_before": 66,
     "n_precincts_before": 92488
   },
