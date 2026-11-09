@@ -13,6 +13,16 @@ exception). Full provenance, per-year rosters, sources and caveats:
 The static site reads it (via `scripts/build_static.py`) to offer an alliance grouping
 alongside the party barplots.
 
+## Election areas-of-concern / watchlist dataset (curated, committed)
+
+`elections/areas_of_concern_2013-2025.csv` — cities/municipalities tagged as COMELEC/PNP
+election-security hotspots (2013–16 watchlist categories; 2019–25 green/yellow/orange/red;
+placements under COMELEC control), one row per place × category × source × snapshot date,
+keyed to the exact vote-CSV `PROVINCE`/`CITY_MUNICIPALITY` labels. Compiled from news
+(COMELEC does not publish these lists as documents); complete only for 2025 (PCIJ table).
+Hand-built and **committed** (explicit `.gitignore` exception). Sources, schema and caveats:
+**[`README_areas_of_concern.md`](README_areas_of_concern.md)**.
+
 ## Copied from `../2025-PH-elections/data/`
 
 | file | description |
