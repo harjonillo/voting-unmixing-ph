@@ -71,26 +71,51 @@ an expected number of names per ballot $c_i := \1_L^\top\m_i$; write
 $\mathbf c = [c_1,\dots,c_p]^\top$. The expected vote matrix
 $\mathbf V=[\vv_1,\dots,\vv_n]$ has columns
 \begin{equation}
-  \underbrace{\vv_j}_{\text{votes}} = \underbrace{B_j}_{\text{ballots}}\ \underbrace{\M}_{\text{votes/ballot}}\ \underbrace{\s_j}_{\text{ballots/ballot}} .
+  \underbrace{\vv_j}_{\text{vote}} = \underbrace{B_j}_{\text{ballot}}\ \underbrace{\M}_{\text{vote/ballot}}\ \underbrace{\s_j}_{\text{ballot/ballot}} .
   \label{eq:counts}
 \end{equation}
 
 \paragraph{Units.} Two things are counted: a \emph{ballot} (one voter, who casts
 one ballot) and a \emph{vote} (one name marked on one ballot). A \emph{top vote}
 is a vote for the precinct's top candidate $\ell^\ast=\arg\max_\ell[\vv_j]_\ell$.
-Units are written under braces or in upright brackets, e.g.\ [votes/ballot]. A
+Units are written under braces or in upright brackets, e.g.\ [vote/ballot]. A
 bracket with a subscript, like $[\M]_{\ell i}$, is still a matrix entry.
+Unit symbols are singular, as in SI ([m/s], [mol/mol]): in [vote/vote] both
+sides are the same unit, the vote. Each short unit abbreviates a ratio of two totals over
+precinct $j$ (or over one type's voters). The finest data are clustered-precinct
+totals, so [vote/ballot] is a precinct average, never a count on one physical
+ballot. The denominator is always an observed count: all ballots cast $B_j$, all
+votes cast $\1_L^\top\vv_j$ (marks summed over every candidate and ballot), or
+the top candidate's votes. Numerators split by type are latent. Spelled out:
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+unit & spelled out & where \\
+\midrule
+vote/ballot & votes for $\ell$ / all ballots cast in $j$ & per-ballot $\y_j$ \\
+ballot/ballot & type-$i$ ballots / all ballots cast in $j$ (voter fraction) & per-ballot abundance \\
+vote/vote & votes for $\ell$ / all votes cast in $j$ & vote-sum $\y_j$ \\
+vote/vote & type-$i$ votes / all votes cast in $j$ (vote share) & vote-sum abundance \\
+vote/top vote & votes for $\ell$ / votes for $\ell^\ast$ in $j$ & row-max $\y_j$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+For a type's profile the denominator is that type's ballots: $[\M]_{\ell i}$ is
+[type-$i$ votes for $\ell$ / type-$i$ ballots] and $c_i$ is [type-$i$ votes /
+type-$i$ ballots]. Same-kind ratios are dimensionless; the unit records which
+whole they are a fraction of, which matters (see \emph{Units check}).
 \begin{center}
 \small
 \begin{tabular}{lll}
 \toprule
 symbol & meaning & units \\
 \midrule
-$B_j$ & ballots cast in precinct $j$ & ballots \\
-$[\vv_j]_\ell$ & votes for candidate $\ell$ in precinct $j$ & votes \\
-$[\M]_{\ell i}$ & chance a type-$i$ ballot marks $\ell$ (votes for $\ell$ per type-$i$ ballot) & votes/ballot \\
-$[\Sm]_{ij}$ & type-$i$ ballots per ballot in precinct $j$ (voter fraction) & ballots/ballot \\
-$c_i$ & names per type-$i$ ballot & votes/ballot \\
+$B_j$ & ballots cast in precinct $j$ & ballot \\
+$[\vv_j]_\ell$ & votes for candidate $\ell$ in precinct $j$ & vote \\
+$[\M]_{\ell i}$ & chance a type-$i$ ballot marks $\ell$ & type-$i$ votes for $\ell$ / type-$i$ ballots \\
+$[\Sm]_{ij}$ & voter fraction of type $i$ in precinct $j$ & type-$i$ ballots / all ballots in $j$ \\
+$c_i$ & names per type-$i$ ballot & type-$i$ votes / type-$i$ ballots \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -105,9 +130,9 @@ $\Sm\succeq 0$ alone is a cone model.
 
 \paragraph{Normalizations.} Three are in use or under consideration:
 \begin{align*}
-  \text{per-ballot:}&\quad \y_j = \vv_j / B_j &&\text{[votes/ballot]}, \\
-  \text{vote-sum:}&\quad \y_j = \vv_j / \1_L^\top\vv_j &&\text{[votes/vote]}, \\
-  \text{row-max:}&\quad \y_j = \vv_j / \textstyle\max_\ell\, [\vv_j]_\ell &&\text{[votes/top vote]}.
+  \text{per-ballot:}&\quad \y_j = \vv_j / B_j &&\text{[vote/ballot]}, \\
+  \text{vote-sum:}&\quad \y_j = \vv_j / \1_L^\top\vv_j &&\text{[vote/vote]}, \\
+  \text{row-max:}&\quad \y_j = \vv_j / \textstyle\max_\ell\, [\vv_j]_\ell &&\text{[vote/top vote]}.
 \end{align*}
 The last two have the form $\y = \vv/d(\vv)$, with $d$ positively homogeneous of
 degree one, $d(\alpha\vv)=\alpha\,d(\vv)$ for $\alpha>0$. Then $B_j$ cancels:
@@ -125,9 +150,9 @@ Table~\ref{tab:units} puts the units of every quantity side by side.
 \toprule
  & $\y_j$ & normalized type $\tilde\m_i$ & abundance $=$ share of \dots & width $\1_L^\top\y_j$ & $\Lambda$ \\
 \midrule
-per-ballot & votes/ballot & $\m_i$ \ [votes/ballot] & ballots (voter fraction) & names per ballot [votes/ballot] & --- \\
-vote-sum & votes/vote & $\m_i/c_i$ \ [votes/vote] & votes (vote share) & $1$ [votes/vote] & $1$ \\
-row-max & votes/top vote & $\m_i/\max_\ell[\M]_{\ell i}$ \ [votes/own-top vote] & none: weights sum to $\Lambda$ & votes/top vote & $\ge 1$ \\
+per-ballot & vote/ballot & $\m_i$ \ [vote/ballot] & ballots (voter fraction) & names per ballot [vote/ballot] & --- \\
+vote-sum & vote/vote & $\m_i/c_i$ \ [vote/vote] & votes (vote share) & $1$ [vote/vote] & $1$ \\
+row-max & vote/top vote & $\m_i/\max_\ell[\M]_{\ell i}$ \ [vote/own-top vote] & none: weights sum to $\Lambda$ & vote/top vote & $\ge 1$ \\
 \bottomrule
 \end{tabular}}
 \caption{Units of each quantity under each normalization.}
@@ -135,7 +160,7 @@ row-max & votes/top vote & $\m_i/\max_\ell[\M]_{\ell i}$ \ [votes/own-top vote] 
 \end{table}
 
 \paragraph{Units check.} In ordinary dimensional analysis the vote-sum and
-row-max ratios are both dimensionless (votes/votes). What the denominator counts
+row-max ratios are both dimensionless (vote/vote). What the denominator counts
 still matters, because the LMM is a weighted average: $\y_j=\sum_i[\Sm]_{ij}\m_i$
 only adds up if each abundance is a share of the denominator's quantity, and that
 quantity is split exactly among the types. Every ballot belongs to exactly one
@@ -149,9 +174,9 @@ this exact.
 
 \begin{proposition}[per-ballot]\label{prop:ballot}
 \[
-  \underbrace{\y_j}_{\text{votes/ballot}} = \underbrace{\M}_{\text{votes/ballot}}\ \underbrace{\s_j}_{\text{ballots/ballot}},
+  \underbrace{\y_j}_{\text{vote/ballot}} = \underbrace{\M}_{\text{vote/ballot}}\ \underbrace{\s_j}_{\text{ballot/ballot}},
   \qquad
-  \underbrace{\1_L^\top\y_j}_{\text{votes/ballot}} = \underbrace{\mathbf c^\top}_{\text{votes/ballot}}\ \underbrace{\s_j}_{\text{ballots/ballot}},
+  \underbrace{\1_L^\top\y_j}_{\text{vote/ballot}} = \underbrace{\mathbf c^\top}_{\text{vote/ballot}}\ \underbrace{\s_j}_{\text{ballot/ballot}},
 \]
 i.e.\ $\Y=\M\Sm$. The LMM \eqref{eq:lmm} holds exactly with the true mixing
 matrix and with abundances equal to the voter fractions. The width is the mean
@@ -170,7 +195,7 @@ excludes them, $\y_j = \sum_{i\ge 1}\frac{s_{i}}{1-s_{0}}\m_i$, which is still a
 LMM, over voters who cast a counted senate ballot. What matters is that the
 denominator \emph{counts voters} and does not depend on how they voted. A
 denominator $r_jB_j$ with a precinct-varying factor $r_j$ [counted
-ballots/ballot cast] gives $\1_p^\top\hat\s_j = 1/r_j$, which violates the ASC:
+ballots / ballots cast] gives $\1_p^\top\hat\s_j = 1/r_j$, which violates the ASC:
 the abundances are then shares of a quantity that the types do not split
 exactly. The 2025
 \texttt{numberOfValidBallot} column is such a case: $r_j$ has median $1.08$
@@ -192,7 +217,7 @@ $\tilde\M = [\tilde\m_1,\dots,\tilde\m_p]$. Then
 $\y = \M\s/d(\M\s) = \sum_i s_i\m_i/d(\M\s) = \sum_i \frac{s_i d(\m_i)}{d(\M\s)}\,\tilde\m_i$.
 \end{proof}
 
-Units: $s_i$ is [ballots/ballot], and $d(\m_i)$ and $d(\M\s)$ are both
+Units: $s_i$ is [ballot/ballot], and $d(\m_i)$ and $d(\M\s)$ are both
 ``$d$-quantity per ballot''. So $w_i$ is the fraction of the precinct's
 $d$-quantity that type $i$ contributes, \emph{where type $i$'s contribution is
 measured with its own $d$}.
@@ -205,9 +230,9 @@ $\Lambda(\s)=1$.
 For $d(\vv)=\1_L^\top\vv$, $\Lambda\equiv 1$. The LMM holds exactly with mixing
 matrix $\tilde\M$, $\tilde\m_i = \m_i/c_i$, and abundances
 \[
-  \underbrace{[\hat\Sm]_{ij}}_{\text{votes/vote}} = \frac{\overbrace{c_i}^{\text{votes/ballot}}\ \overbrace{[\Sm]_{ij}}^{\text{ballots/ballot}}}{\underbrace{\mathbf{c}^\top\s_j}_{\text{votes/ballot}}},
+  \underbrace{[\hat\Sm]_{ij}}_{\text{vote/vote}} = \frac{\overbrace{c_i}^{\text{vote/ballot}}\ \overbrace{[\Sm]_{ij}}^{\text{ballot/ballot}}}{\underbrace{\mathbf{c}^\top\s_j}_{\text{vote/ballot}}},
   \qquad
-  \underbrace{\tilde\m_i}_{\text{votes/vote}} = \frac{\overbrace{\m_i}^{\text{votes/ballot}}}{\underbrace{c_i}_{\text{votes/ballot}}},
+  \underbrace{\tilde\m_i}_{\text{vote/vote}} = \frac{\overbrace{\m_i}^{\text{vote/ballot}}}{\underbrace{c_i}_{\text{vote/ballot}}},
 \]
 the share of precinct $j$'s \emph{votes} cast by type $i$. The map
 $\s_j\mapsto\hat\s_j$ is a bijection of $\Delta_p$ (inverse
@@ -247,14 +272,14 @@ holds. This gives the ``iff''.
 \paragraph{Units reading of the proof.} Multiply the numerator and denominator
 of $w_i$ by $B_j$:
 \[
-  w_i = \frac{\overbrace{s_iB_j}^{\text{type-$i$ ballots}}\ \overbrace{d(\m_i)}^{\text{votes for $\ell(i)$ / type-$i$ ballot}}}{\underbrace{B_j\,d(\M\s)}_{\text{votes for $\ell^\ast$}}}
+  w_i = \frac{\overbrace{s_iB_j}^{\text{type-$i$ ballots}}\ \overbrace{d(\m_i)}^{\text{type-$i$ votes for $\ell(i)$ / type-$i$ ballots}}}{\underbrace{B_j\,d(\M\s)}_{\text{votes for $\ell^\ast$}}}
   = \frac{\text{type-$i$ votes for its own top candidate $\ell(i)$}}{\text{all votes for the precinct's top candidate $\ell^\ast$}},
 \]
 \[
   \Lambda = \sum_i w_i = \frac{\sum_i(\text{type-$i$ votes for $\ell(i)$})}{\sum_i(\text{type-$i$ votes for $\ell^\ast$})} \ \ge\ 1,
 \]
 because each type votes for its own top candidate at least as often as for
-$\ell^\ast$. The units match (votes/votes), but the numerator counts votes for
+$\ell^\ast$. The units match (vote/vote), but the numerator counts votes for
 different candidates for different types. For vote-sum the numerator would be
 type-$i$ votes for \emph{anyone}, which do partition the denominator, so
 $\Lambda=1$.
@@ -263,7 +288,7 @@ $\Lambda=1$.
 Row-max is tempting when there is no ballot count, because its denominator grows
 with turnout:
 \[
-  \underbrace{\max_\ell[\vv_j]_\ell}_{\text{top votes}} = \underbrace{B_j}_{\text{ballots}}\ \underbrace{f_j}_{\text{top votes/ballot}},
+  \underbrace{\max_\ell[\vv_j]_\ell}_{\text{top vote}} = \underbrace{B_j}_{\text{ballot}}\ \underbrace{f_j}_{\text{top vote/ballot}},
   \qquad f_j := \max_\ell[\M\s_j]_\ell,
 \]
 where $f_j$ is the top candidate's share of ballots. Replacing $B_j$ by $B_jf_j$
@@ -276,7 +301,7 @@ works only in two steps, each with its own condition.
   votes. The proof of Proposition~\ref{prop:sum} with $d=\mathbf e_{\ell_0}^\top$
   gives an exact LMM with abundances
   \[
-    \underbrace{[\hat\Sm]_{ij}}_{\text{top votes/top vote}} = \frac{[\Sm]_{ij}\,[\M]_{\ell_0 i}}{[\M\s_j]_{\ell_0}},
+    \underbrace{[\hat\Sm]_{ij}}_{\text{top vote/top vote}} = \frac{[\Sm]_{ij}\,[\M]_{\ell_0 i}}{[\M\s_j]_{\ell_0}},
   \]
   type $i$'s share of $\ell_0$'s votes, not of the voters.
   \item \emph{Voter fractions: $f_j$ is also the same in every precinct.} This
@@ -373,7 +398,7 @@ recovered only if the types' top-candidate rates $d(\m_i)$ were known.
 \begin{remark}[row-max width]\label{rem:width}
 Under row-max,
 \[
-  \underbrace{\1_L^\top\y_j}_{\text{votes/top vote}} = \frac{\overbrace{\mathbf c^\top\s_j}^{\text{votes/ballot}}}{\underbrace{\max_\ell[\M\s_j]_\ell}_{\text{top votes/ballot}}}:
+  \underbrace{\1_L^\top\y_j}_{\text{vote/top vote}} = \frac{\overbrace{\mathbf c^\top\s_j}^{\text{vote/ballot}}}{\underbrace{\max_\ell[\M\s_j]_\ell}_{\text{top vote/ballot}}}:
 \]
 names per ballot divided by the top candidate's share of ballots. This quantity
 varies with both ballot width and how concentrated the vote is on one candidate.

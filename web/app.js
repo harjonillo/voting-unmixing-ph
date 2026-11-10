@@ -133,7 +133,7 @@ const UNITS = {
     loading: "votes for candidate / archetype ballots",
     abundance: "archetype ballots / all ballots",
     weight: "ballots",
-    rmse: "votes/ballot",
+    rmse: "votes for candidate / all ballots",
     loadingText: "A loading is the votes a candidate gets per ballot cast by the " +
       "archetype's voters, i.e. the chance such a voter marks them.",
     abundanceText: (unit) => `the share of the ${unit}'s ballots cast by its voters`,
@@ -142,7 +142,7 @@ const UNITS = {
     loading: "votes for candidate / archetype votes",
     abundance: "archetype votes / all votes",
     weight: "votes",
-    rmse: "votes/vote",
+    rmse: "votes for candidate / all votes",
     loadingText: "A loading is the candidate's share of all votes cast by the " +
       "archetype's voters.",
     abundanceText: (unit) => `the share of the ${unit}'s votes cast by its voters`,
@@ -1041,7 +1041,7 @@ async function renderDiagnostics() {
       traces.push({
         type: "scatter", mode: "lines", name: "RMSE", x: ps, y: rmse, yaxis: "y2",
         line: { color: INK, width: 1.75, dash: "dot" },
-        hovertemplate: `RMSE<br>p = %{x}: %{y:.4f} ${units().rmse}<extra></extra>`,
+        hovertemplate: `RMSE<br>p = %{x}: %{y:.4f}<br>(${units().rmse})<extra></extra>`,
       });
     }
     // Selected-metric label sits just inside the plot above its last point, so
@@ -1073,7 +1073,7 @@ async function renderDiagnostics() {
         zeroline: false, showline: true, title: axisTitle(`${stat} pairwise distance`) },
       ...(rmse && { yaxis2: { ...AXIS, overlaying: "y", side: "right",
         range: [0, 4 * rmseStep], dtick: rmseStep, tickformat: rmseFmt, showgrid: false, zeroline: false, showline: true,
-        fixedrange: true, title: axisTitle(`RMSE (${units().rmse})`) } }),
+        fixedrange: true, title: axisTitle(`RMSE<br>(${units().rmse})`) } }),
     }, PLOTLY_CFG);
     for (const m of Object.keys(LINEAGE_METRICS)) {
       const item = el("span", m === metric ? "legend-item on" : "legend-item");
