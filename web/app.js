@@ -133,6 +133,7 @@ const UNITS = {
     loading: "votes for candidate / archetype ballots",
     abundance: "archetype ballots / all ballots",
     weight: "ballots",
+    rmse: "votes/ballot",
     loadingText: "A loading is the votes a candidate gets per ballot cast by the " +
       "archetype's voters, i.e. the chance such a voter marks them.",
     abundanceText: (unit) => `the share of the ${unit}'s ballots cast by its voters`,
@@ -141,6 +142,7 @@ const UNITS = {
     loading: "votes for candidate / archetype votes",
     abundance: "archetype votes / all votes",
     weight: "votes",
+    rmse: "votes/vote",
     loadingText: "A loading is the candidate's share of all votes cast by the " +
       "archetype's voters.",
     abundanceText: (unit) => `the share of the ${unit}'s votes cast by its voters`,
@@ -815,13 +817,15 @@ async function renderLineage(divId) {
   const metric = state.cmp.lineageMetric, stat = state.cmp.lineageStat;
   const simOf = (l) => l.sims[metric];
   const ps = lin.ps, hysime = yearMeta(state.year).hysime_kf;
+  const sweepRmse = yearMeta(state.year).sweep_rmse || {};
   const anchorP = lin.anchor_p ?? ps[0];
 
   document.getElementById("cmp-lineage-sub").textContent =
     "One column per p. Each box lists an archetype's top candidates. Color follows " +
     `an archetype across p, matched to the p = ${anchorP} run on the Overview tab. ` +
     `Above each column: ${stat} pairwise distance between that run's archetypes ` +
-    "(0 = identical, 1 = distinct).";
+    "(0 = identical, 1 = distinct), and the reconstruction RMSE averaged over the " +
+    `sweep's trials (${units().rmse}).`;
   document.getElementById("cmp-lineage-new-label").textContent =
     `No counterpart at p = ${anchorP} (takes the next free color)`;
 
@@ -891,6 +895,14 @@ async function renderLineage(divId) {
       s.title = `${stat} pairwise distance between the ${p} archetypes of one run at ` +
         `the config seed (${LINEAGE_METRICS[metric]}; 0 = identical, 1 = distinct)`;
       col.appendChild(s);
+    }
+    const rmse = sweepRmse[String(p)];
+    if (rmse != null) {
+      const r = el("span", "d", `RMSE ${rmse.toFixed(4)}`);
+      r.title = `Reconstruction RMSE at p = ${p}, averaged over the sweep's trials: ` +
+        `root mean squared Y − M·S over every candidate × precinct entry (${units().rmse}). ` +
+        "Compare across p within one run; not across normalizations.";
+      col.appendChild(r);
     }
     fig.appendChild(col);
   }

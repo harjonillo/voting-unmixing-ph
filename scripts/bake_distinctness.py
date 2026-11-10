@@ -12,6 +12,13 @@ it to two scalars per metric:
   one.
 - **mean** off-diagonal distance — overall spread.
 
+Each p also gets the reconstruction **RMSE** of that same run: SUNSAL
+abundances (positivity + sum-to-one, the config's ``sunsal_al_iters`` /
+``sunsal_tol``, as in scripts/run_sweep.py) and
+``sqrt(mean((Y - M A)**2))`` over every candidate × precinct entry, in the
+normalization's units (votes/ballot or votes/vote). It is one run at the config
+seed, so at p ≤ 7 it is comparable to, not equal to, the sweep's trial mean.
+
 Metrics (notebook 08's sweep set, implementations from ``src.unmixing.matching``):
 cosine on the top-12 union, full cosine, Spearman ρ, weighted Kendall τ, RBO and
 top-12 Jaccard. Signed [-1, 1] similarities map to distance as (1 − s) / 2,
@@ -26,7 +33,9 @@ HySime don't touch the RNG and only matter when p is left to HySime, and SUNSAL
 unchanged. Runs within a year go in parallel (``[sweep] n_jobs`` of that year's
 config unless ``--n-jobs``) and are cached as ``.npy`` under
 ``data/notebook_experiments/08_distinctness/{year}/`` (gitignored); delete a file
-or pass ``--recompute`` to rerun.
+or pass ``--recompute`` to rerun. RMSEs are cached next to them
+(``rmse_p{p}_seed{seed}_{tag}_al{iters}_tol{tol}.json``), so adding RMSE to an
+existing bake reuses the cached endmembers and only runs SUNSAL.
 
 Writes ``data/distinctness/{year}.json`` (NMF: ``data/distinctness/nmf/{year}.json``)
 — small, *committed* files that scripts/build_static.py copies into site/data/::
@@ -34,7 +43,8 @@ Writes ``data/distinctness/{year}.json`` (NMF: ``data/distinctness/nmf/{year}.js
     {
       "year": "2025", "method": "mvsa", "seed": 42, "ps": [2, ...],
       "metrics": ["cos12", "cos", "spearman", "wtau", "rbo", "jac12"],
-      "distinct": {"<p>": {metric: {"min": d, "mean": d}}}
+      "distinct": {"<p>": {metric: {"min": d, "mean": d}}},
+      "rmse": {"<p>": rmse}
     }
 
 Metric keys match lineage/{year}.json's "sims" and order_sensitivity/{year}.json,
@@ -63,7 +73,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.config import load_config, run_subdir, set_normalization
 from src.data import load_complete
 from src.data.preprocessing import NORMALIZATIONS, preprocess_from_config
-from src.unmixing import METHODS, extract_endmembers, method_params
+from src.unmixing import METHODS, extract_endmembers, method_params, sunsal_mod
 from src.unmixing.methods import params_tag
 from src.unmixing.matching import similarity_matrix
 
@@ -101,6 +111,15 @@ def distinctness(E: np.ndarray) -> dict:
     return out
 
 
+def reconstruction_rmse(Y: np.ndarray, M: np.ndarray, al_iters: int, tol: float) -> float:
+    """RMSE of Y ≈ M A with SUNSAL abundances, as in scripts/run_sweep.py."""
+    A, _, _ = sunsal_mod(
+        M, Y, positivity="yes", addone="yes", AL_iters=al_iters, lambda_=0.0,
+        tol=tol, verbose="no",
+    )
+    return float(np.sqrt(np.mean((Y - M @ A) ** 2)))
+
+
 def year_config(year: str, normalization: str | None):
     """The year's config, with the --normalization override applied."""
     return set_normalization(
@@ -128,9 +147,18 @@ def bake_year(
     tag = params_tag(method, params)
     path = {p: cache / f"endm_p{p}_seed{seed}_{tag}.npy" for p in ps}
     todo = [p for p in ps if recompute or not path[p].exists()]
+    al_iters = config["unmixing"].getint("sunsal_al_iters")
+    tol = config["unmixing"].getfloat("sunsal_tol")
+    rmse_path = {
+        p: cache / f"rmse_p{p}_seed{seed}_{tag}_al{al_iters}_tol{tol:g}.json" for p in ps
+    }
+    rmse_todo = [p for p in ps if p in todo or not rmse_path[p].exists()]
+
+    Y = None
+    if todo or rmse_todo:
+        Y = preprocess_from_config(load_complete(config), config, verbose=False).Y
 
     if todo:
-        Y = preprocess_from_config(load_complete(config), config, verbose=False).Y
         print(
             f"{year}: Y {Y.shape}, running {METHODS[method]} p={todo} (n_jobs={n_jobs})"
         )
@@ -146,6 +174,17 @@ def bake_year(
     else:
         print(f"{year}: all p cached")
 
+    if rmse_todo:
+        print(f"{year}: SUNSAL for RMSE at p={rmse_todo} (n_jobs={n_jobs})")
+        t0 = time.time()
+        order = sorted(rmse_todo, reverse=True)
+        rmses = Parallel(n_jobs=n_jobs)(
+            delayed(reconstruction_rmse)(Y, np.load(path[p]), al_iters, tol) for p in order
+        )
+        for p, r in zip(order, rmses):
+            rmse_path[p].write_text(json.dumps({"rmse": r}))
+        print(f"{year}: RMSE done in {time.time() - t0:.0f}s")
+
     return {
         "year": year,
         "method": method,
@@ -154,6 +193,8 @@ def bake_year(
         "ps": ps,
         "metrics": list(METRICS),
         "distinct": {str(p): distinctness(np.load(path[p])) for p in ps},
+        # one run at the config seed; normalization's units (votes/ballot or votes/vote)
+        "rmse": {str(p): json.loads(rmse_path[p].read_text())["rmse"] for p in ps},
     }
 
 
