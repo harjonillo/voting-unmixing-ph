@@ -8,7 +8,10 @@ recent version (trial-clustering notebook) as the reference:
 2. keep candidates whose 25th percentile of per-precinct votes >= threshold,
 3. keep precincts with >= threshold total votes over the kept candidates,
 4. rank candidates by national total votes,
-5. normalize each precinct's votes (valid ballots / row max / none).
+5. normalize each precinct's votes (see ``NORMALIZATIONS``).
+
+Which normalizations keep the linear mixing model exact, and what the loadings
+and abundances then mean in votes and ballots, is worked out in notebook 14.
 """
 
 import configparser
@@ -32,7 +35,26 @@ INFO_COLS = [
     "information.turnout",
 ]
 
-NORMALIZATIONS = ("valid_ballots", "row_max", "none")
+# Per-precinct denominator of the vote counts -> units of Y, of the loadings and
+# of the abundances (notebook 14):
+#   valid_ballots  numberOfValidBallot   votes/ballot; abundance = share of ballots
+#   actual_voters  numberOfActuallyVoters  same units; use for 2025, whose
+#                  numberOfValidBallot is not a ballot count (notebook 13)
+#   vote_sum       sum of the kept candidates' votes  votes/vote; abundance =
+#                  share of votes (needs no ballot count: 2013, 2016)
+#   row_max        the precinct's top candidate's votes (breaks the sum-to-one
+#                  LMM when voter types disagree on the top candidate; kept for
+#                  reproducing old runs only)
+#   none           raw counts
+NORMALIZATIONS = ("valid_ballots", "actual_voters", "vote_sum", "row_max", "none")
+# Normalizations that divide by a count of ballots (voters): abundances are voter
+# fractions. Outputs of these sit at the top of a year's processed folder; every
+# other normalization gets its own subfolder (src.config.norm_subdir).
+PER_BALLOT_NORMALIZATIONS = ("valid_ballots", "actual_voters")
+# Column added to df_geo holding each precinct's normalization denominator. The
+# abundances are fractions of this quantity (ballots, or votes for vote_sum), so
+# it is the weight for aggregating them across precincts.
+DENOMINATOR_COL = "norm_denominator"
 
 
 @dataclass
@@ -49,8 +71,8 @@ class PreprocessedData:
     Y : ndarray, shape (L, N)
         Normalized vote matrix, same orientation and alignment as `Y_raw`.
     df_geo : pandas.DataFrame, shape (N, n_geo)
-        One row per precinct (GEO_COLS + INFO_COLS), row j aligned with
-        column j of `Y`.
+        One row per precinct (GEO_COLS + INFO_COLS + ``DENOMINATOR_COL``),
+        row j aligned with column j of `Y`.
     ranked_columns : list of str, length L
         Original CSV column names in national-rank order (row order of `Y`).
     candidate_labels : list of str, length L
@@ -131,8 +153,9 @@ def preprocess(
     min_precinct_votes : float, default 10
         Precinct kept only if its total votes over the kept candidates is at
         least this.
-    normalization : {'valid_ballots', 'row_max', 'none'}, default 'valid_ballots'
-        Per-precinct denominator for the vote counts.
+    normalization : str, default 'valid_ballots'
+        Per-precinct denominator for the vote counts; one of
+        ``NORMALIZATIONS`` (see the comment there for units).
     randomize_precinct_order : bool, default False
         If True, shuffle the kept precincts (columns of ``Y`` and rows of
         ``df_geo``, which stay aligned) using the global NumPy RNG — seed
@@ -183,6 +206,12 @@ def preprocess(
         denom = df.loc[
             kept_precincts, "information.numberOfValidBallot"
         ].values.reshape(-1, 1)
+    elif normalization == "actual_voters":
+        denom = df.loc[
+            kept_precincts, "information.numberOfActuallyVoters"
+        ].values.reshape(-1, 1)
+    elif normalization == "vote_sum":
+        denom = vote_raw.sum(axis=1, keepdims=True)
     elif normalization == "row_max":
         denom = vote_raw.max(axis=1, keepdims=True)
     else:
@@ -194,6 +223,7 @@ def preprocess(
 
     keep_cols = [c for c in GEO_COLS + INFO_COLS if c in df.columns]
     df_geo = df.loc[kept_precincts, keep_cols].reset_index(drop=True)
+    df_geo[DENOMINATOR_COL] = denom.ravel().astype(float)
 
     params = {
         "excluded_regions": list(excluded_regions),

@@ -8,7 +8,7 @@
     "sen_col_start": 17,
     "min_candidate_25th_percentile": 10.0,
     "min_precinct_votes": 10.0,
-    "normalization": "valid_ballots",
+    "normalization": "actual_voters",
     "randomize_precinct_order": false,
     "n_candidates_before": 66,
     "n_precincts_before": 92488,
@@ -25,7 +25,7 @@
     "tol": 0.0001
   },
   "seed": 42,
-  "rmse": 0.05676644972254785,
+  "rmse": 0.059835076969883036,
   "candidate_labels": [
     "GO, BONG GO (PDPLBN) [1]",
     "AQUINO, BAM (KNP) [2]",

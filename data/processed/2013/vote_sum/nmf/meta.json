@@ -1,0 +1,49 @@
+{
+  "preprocessing": {
+    "excluded_regions": [
+      "OV",
+      "LAV"
+    ],
+    "sen_col_start": 6,
+    "min_candidate_25th_percentile": 10.0,
+    "min_precinct_votes": 10.0,
+    "normalization": "vote_sum",
+    "randomize_precinct_order": false,
+    "n_candidates_before": 33,
+    "n_precincts_before": 77830,
+    "precinct_ids": "[    2     3     4 ... 77827 77828 77829]"
+  },
+  "hysime_kf": 3,
+  "n_archetypes": 4,
+  "method": "nmf",
+  "method_params": {
+    "init": "random",
+    "beta_loss": "kullback-leibler",
+    "solver": "mu",
+    "max_iter": 1000,
+    "tol": 0.0001
+  },
+  "seed": 42,
+  "rmse": 0.009972434967126968,
+  "candidate_labels": [
+    "POE, GRACE [1]",
+    "LEGARDA, LOREN (NPC) [2]",
+    "ESCUDERO, CHIZ [3]",
+    "CAYETANO, ALAN PETER (NP) [4]",
+    "BINAY, NANCY (UNA) [5]",
+    "ANGARA, EDGARDO (LDP) [6]",
+    "AQUINO, BENIGNO BAM (LP) [7]",
+    "PIMENTEL, KOKO (PDP) [8]",
+    "TRILLANES, ANTONIO IV (NP) [9]",
+    "VILLAR, CYNTHIA HANEPBUHAY (NP) [10]",
+    "EJERCITO ESTRADA, JV (UNA) [11]",
+    "HONASAN, GRINGO (UNA) [12]",
+    "GORDON, DICK (UNA) [13]",
+    "ZUBIRI, MIGZ (UNA) [14]",
+    "ENRILE, JUAN PONCE JR.(NPC) [15]",
+    "MAGSAYSAY, RAMON JR. (LP) [16]",
+    "HONTIVEROS, RISA (AKBAYAN) [17]",
+    "MADRIGAL, JAMBY (LP) [18]",
+    "MAGSAYSAY, MITOS (UNA) [19]"
+  ]
+}

@@ -111,7 +111,7 @@ Recto, de Lima), so the feed is parsed correctly.
 | geography | `REGION … BARANGAY` names | **numeric precinct id only** |
 | turnout / valid-ballot cols | `information.*`, `statistic.*` | **absent** (only unlabeled proxies, cols 7–9) |
 | contests | senators only | **all races mixed** (filter by contest code) |
-| normalization input | `information.numberOfValidBallot` | **not present** (uses `row_max`, as 2013 does) |
+| normalization input | `information.numberOfValidBallot` | **not present** (uses `vote_sum`, as 2013 does; `row_max` until 2026-11-09) |
 
 ### Geography — recovered from the 2016 Project of Precincts
 The feed carries only an 8-digit precinct id. `scripts/scrape_2016_pop.py` builds
@@ -146,10 +146,12 @@ The lookup joins the shapefiles about as well as 2019 (municipality match ~0.95)
   (`REGION, PROVINCE, CITY_MUNICIPALITY, BARANGAY, CLUSTERED_PRECINCT,
   information.numberOfRegisteredVoters`, then 50 `N. ` candidate columns,
   `sen_col_start = 6`). Precinct ids are kept zero-padded to 8 digits. col 7 is
-  stored as the registered-voters proxy (unverified; `row_max` does not use it).
+  stored as the registered-voters proxy (unverified; the normalization does not use it).
   The ~2% of precincts without a POP/2019 match keep `PLACEHOLDER` geography and
   drop out of the province/municipality maps (like other years' unmatched rows).
-- **Pipeline** (`config_2016.ini`, `normalization = row_max`, `n_archetypes =
+- **Pipeline, row_max era** (superseded 2026-11-09: 2016 now uses `vote_sum`,
+  see notebook 14; numbers below are from the old run) (`config_2016.ini`,
+  `normalization = row_max`, `n_archetypes =
   4`): all 50 candidates and all 22,986 precincts pass the filters; HySime
   `kf = 6`; reconstruction RMSE ≈ 0.084 (row_max scale). The four archetypes are
   politically coherent: an LP/administration bloc (Drilon, De Lima, Pangilinan),
@@ -213,13 +215,14 @@ gives one national table. Precinct-level granularity (not clustered precincts).
   the pipeline drops on its own (total votes < 1). They ARE geographically
   skewed — as a share of each region's rows: ARMM ~65%, Region IX / CAR ~38%,
   Region II / X ~30%, down to NCR ~9%. That skew is why a registration-based
-  normalization was rejected (it would have thinned ARMM/Mindanao/CAR); `row_max`
-  sidesteps it, and because the skew lives entirely in dropped empty rows the
+  normalization was rejected (it would have thinned ARMM/Mindanao/CAR); `vote_sum`
+  (`row_max` until 2026-11-09) sidesteps it, and because the skew lives entirely in dropped empty rows the
   retained precincts and their maps are not biased by it.
 - Blank candidate cells = 0 votes (filled with 0 when building the CSV).
 - Only `Total Registered Voters` is available as a size/denominator — no
   valid-ballot or turnout stats — so `normalization = valid_ballots` has no
-  analog; the build uses `row_max` (self-contained, keeps every real precinct).
+  analog; the build uses `vote_sum` (`row_max` until 2026-11-09; notebook 14) —
+  self-contained, keeps every real precinct.
 - Vote values range 0–975; per-precinct senator-vote sum ÷ registered voters has
   median ≈ 7.65 (a ballot allows up to 12 senator votes) — consistent with real
   per-precinct senator votes.
@@ -265,8 +268,9 @@ consume a 2013 dataset (reading the `.xls` needs `xlrd>=2.0.1`, now in
   candidate columns prefixed `N. ` (so `candidate_label`'s `.`-split keeps names
   like `ENRILE, JUAN PONCE JR.(NPC)`). `REGION` canonicalized to the other
   years' scheme (`N.C.R.`→`NCR`, `Region IV - A`→`REGION IV-A`, …).
-- **Pipeline** (`config_2013.ini`, `sen_col_start = 6`, `normalization =
-  row_max`, `n_archetypes = 4`): filters to 31 candidates × 59,679 precincts
+- **Pipeline, row_max era** (superseded 2026-11-09: 2013 now uses `vote_sum`,
+  see notebook 14; numbers below are from the old run) (`config_2013.ini`,
+  `sen_col_start = 6`, `normalization = row_max`, `n_archetypes = 4`): filters to 31 candidates × 59,679 precincts
   (2 fringe candidates below the 25th-pctile cut; empty rows dropped),
   reconstruction RMSE ≈ 0.094 (row_max scale — not comparable to the
   valid-ballot years). Top archetype loads on **POE, GRACE** (the 2013
@@ -278,7 +282,8 @@ consume a 2013 dataset (reading the `.xls` needs `xlrd>=2.0.1`, now in
 - **Site**: `build_static.py` `YEARS` now includes `2013`; `site/data` rebuilt
   and the shell regenerated. The year selector picks up 2013 from the manifest.
 
-**Caveats for 2013 on the site:** no turnout layer (no actual-voter counts), and
-the ballot-weighted / unweighted map toggle shows identical maps (uniform
-weighting). Everything else — region/province/municipality maps, loadings, the
+**Caveats for 2013 on the site:** no turnout layer (no actual-voter counts). Since
+2026-11-09 the weighted maps weight precincts by their total votes (the
+`vote_sum` denominator), so the weighted / unweighted toggle now differs; before
+that it showed identical maps (uniform weighting). Everything else — region/province/municipality maps, loadings, the
 p-sweep comparison and lineage — is populated.

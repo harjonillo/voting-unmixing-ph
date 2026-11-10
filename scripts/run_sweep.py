@@ -17,7 +17,9 @@ similarity, reference = lowest-RMSE trial), and write per-p artifacts under
                                            resolution (geography + arch cols)
     meta.json                              seeds, rmse_trials, stability, ...
 
-NMF sweeps are written to <processed_path>/nmf/sweep/p{p}/ instead (same files).
+NMF sweeps are written to <processed_path>/nmf/sweep/p{p}/ instead (same files),
+and --normalization vote_sum runs to <processed_path>/vote_sum/[nmf/]sweep/p{p}/
+(src.config.run_subdir).
 
 Municipality-level aggregates carry summed ballot weights, so province- and
 region-level means can be re-derived exactly (weighted mean of weighted means).
@@ -28,6 +30,7 @@ via --config (e.g. configs/config_2025.ini).
 Run from the repo root (takes a few minutes; trials run in parallel):
     python scripts/run_sweep.py --config configs/config_2025.ini
     python scripts/run_sweep.py --config configs/config_2025.ini --method nmf
+    python scripts/run_sweep.py --config configs/config_2025.ini --normalization vote_sum
 """
 
 import argparse
@@ -43,10 +46,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from joblib import Parallel, delayed
 
-from src.config import load_config, method_path
+from src.config import load_config, method_path, set_normalization
 from src.data import load_complete
 from src.data.loading import PARQUET_COMPRESSION, round_arch
-from src.data.preprocessing import preprocess_from_config
+from src.data.preprocessing import (
+    DENOMINATOR_COL,
+    NORMALIZATIONS,
+    preprocess_from_config,
+)
 from src.unmixing import (
     METHODS,
     extract_endmembers,
@@ -56,7 +63,10 @@ from src.unmixing import (
 )
 
 MUNI_COLS = ["REGION", "PROVINCE", "CITY_MUNICIPALITY"]
-WEIGHT_COL = "information.numberOfValidBallot"
+# Weights for the "weighted" aggregates: each precinct's normalization
+# denominator (ballots, or votes under vote_sum). The abundances are fractions
+# of that quantity, so the weighted mean is the unit's share of ballots (votes).
+WEIGHT_COL = DENOMINATOR_COL
 
 # Grouping columns for each aggregation level the app exposes (a prefix of
 # MUNI_COLS). The site build reads the per-level stats written below instead of
@@ -83,7 +93,8 @@ def level_stats_from_trials(
 
     Rows carry only the key columns their level uses (finer ones are NaN);
     ``n_precincts`` is the number of municipalities in the unit and the weight
-    column their summed ballots (both trial-invariant).
+    column their summed normalization denominators (ballots, or votes under
+    vote_sum; both trial-invariant).
     """
     frames = []
     for level, gcols in LEVEL_COLS.items():
@@ -137,7 +148,7 @@ def aggregate_to_municipality(A, codes, w, n_units):
 
     A     : (p, N) abundances
     codes : (N,) municipality group code per precinct
-    w     : (N,) weights (valid ballots)
+    w     : (N,) weights (normalization denominators)
     """
     w_sum = np.bincount(codes, weights=w, minlength=n_units)
     out = np.empty((n_units, A.shape[0]))
@@ -158,9 +169,16 @@ def main():
         default="mvsa",
         help="endmember extraction method (default: mvsa)",
     )
+    parser.add_argument(
+        "--normalization",
+        choices=list(NORMALIZATIONS),
+        default=None,
+        help="override [preprocessing] normalization; non-per-ballot runs are "
+        "written to a subfolder named after it (src.config.run_subdir)",
+    )
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    config = set_normalization(load_config(args.config), args.normalization)
     sweep = config["sweep"]
     unmix = config["unmixing"]
     p_range = range(sweep.getint("p_min"), sweep.getint("p_max") + 1)
@@ -177,14 +195,8 @@ def main():
     # municipality grouping, shared by all trials
     muni_index = pd.MultiIndex.from_frame(pre.df_geo[MUNI_COLS])
     codes, uniques = pd.factorize(muni_index)
-    # Ballot-weighted means where valid-ballot counts exist; uniform weights
-    # otherwise (e.g. 2013, whose source has no valid-ballot column) — so the
-    # weighted view collapses to the unweighted one, matching build_static's
-    # own fallback for the main tables rather than crashing.
-    if WEIGHT_COL in pre.df_geo.columns:
-        w = pre.df_geo[WEIGHT_COL].to_numpy(dtype=float)
-    else:
-        w = np.ones(len(pre.df_geo), dtype=float)
+    # Weighted means use each precinct's normalization denominator (WEIGHT_COL).
+    w = pre.df_geo[WEIGHT_COL].to_numpy(dtype=float)
     muni_table = pd.DataFrame(list(uniques), columns=MUNI_COLS)
     muni_table["n_precincts"] = np.bincount(codes)
     muni_table[WEIGHT_COL] = np.bincount(codes, weights=w)

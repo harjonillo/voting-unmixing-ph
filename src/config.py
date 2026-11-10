@@ -70,14 +70,55 @@ def processed_path(config: configparser.ConfigParser, *parts: Union[str, Path]) 
     return REPO_ROOT / config["DEFAULT"]["processed_path"] / Path(*parts)
 
 
+# Normalizations whose denominator counts ballots (voters); mirrors
+# src.data.preprocessing.PER_BALLOT_NORMALIZATIONS (not imported, to keep this
+# module free of the data stack).
+PER_BALLOT_NORMALIZATIONS = ("valid_ballots", "actual_voters")
+
+
+def normalization(config: configparser.ConfigParser) -> str:
+    """The config's ``[preprocessing] normalization``."""
+    return config["preprocessing"]["normalization"]
+
+
+def set_normalization(
+    config: configparser.ConfigParser, norm: Optional[str]
+) -> configparser.ConfigParser:
+    """Override the config's normalization in place (no-op for None); returns
+    the config. Every script's ``--normalization`` flag goes through this, so
+    preprocessing and all output paths follow the override."""
+    if norm:
+        config["preprocessing"]["normalization"] = norm
+    return config
+
+
+def norm_subdir(config: configparser.ConfigParser) -> str:
+    """Output subfolder for the config's normalization: "" for the per-ballot
+    normalizations (the original layout), else the normalization's name
+    (e.g. "vote_sum")."""
+    norm = normalization(config)
+    return "" if norm in PER_BALLOT_NORMALIZATIONS else norm
+
+
+def run_subdir(config: configparser.ConfigParser, method: str) -> Path:
+    """<norm_subdir>/<method> below an output root, each part omitted when
+    default (per-ballot normalization; MVSA). Shared by the processed outputs,
+    the bake scripts' outputs and caches, and the site data tree."""
+    parts = [norm_subdir(config)] + ([] if method == "mvsa" else [method])
+    return Path(*[p for p in parts if p]) if any(parts) else Path()
+
+
 def method_path(
     config: configparser.ConfigParser, method: str, *parts: Union[str, Path]
 ) -> Path:
-    """Absolute path inside one extraction method's processed-outputs folder.
+    """Absolute path inside one (normalization, extraction method) run's
+    processed-outputs folder.
 
-    MVSA (the original method) keeps the top of ``processed_path``; every other
-    method gets its own subfolder (``processed_path``/<method>/), with the same
-    layout inside (endmembers.csv, abundances.parquet, meta.json, sweep/).
+    Per-ballot MVSA (the original run) keeps the top of ``processed_path``;
+    other normalizations get a subfolder named after them, and other methods a
+    subfolder below that (``processed_path``/[vote_sum/][nmf/]), with the same
+    layout inside (endmembers.csv, abundances.parquet, meta.json, sweep/). See
+    ``run_subdir``.
 
     Parameters
     ----------
@@ -93,9 +134,7 @@ def method_path(
     pathlib.Path
         The absolute path.
     """
-    if method == "mvsa":
-        return processed_path(config, *parts)
-    return processed_path(config, method, *parts)
+    return processed_path(config, run_subdir(config, method), *parts)
 
 
 def shapefile_path(config: configparser.ConfigParser, *parts: Union[str, Path]) -> Path:

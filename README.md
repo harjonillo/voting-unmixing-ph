@@ -117,7 +117,14 @@ change. `site/` is generated (gitignored) and rebuilt in CI from the committed
   data's own province→region assignment, so post-2024 regions (BARMM, NIR)
   render correctly despite the older shapefiles.
 - Normalization of the vote matrix is configurable
-  (`[preprocessing] normalization`): `valid_ballots` (default), `row_max`, `none`.
+  (`[preprocessing] normalization`): `valid_ballots`, `actual_voters`,
+  `vote_sum`, `row_max`, `none`. Per-ballot runs (2019/2022 `valid_ballots`,
+  2025 `actual_voters`) give loadings in votes per ballot and abundances as
+  shares of ballots; `vote_sum` gives both as shares of votes and is the only
+  option for 2013/2016, which have no ballot count. `row_max` is not an exact
+  linear mixing model (notebook 14) and is kept only to reproduce old runs.
+  Every script takes `--normalization` to override the config; `vote_sum` runs
+  are written to a `vote_sum/` subfolder, and the site switches between the two.
 - **NMF with NNDSVD initialization (`run_nndsvd.py`): caveat for the paper.**
   With the KL loss, sklearn only offers the multiplicative-update (`mu`) solver,
   which can never move entries that start at 0. So 18–45% of the NNDSVD loadings

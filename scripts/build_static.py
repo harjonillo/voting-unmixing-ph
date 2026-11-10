@@ -38,6 +38,12 @@ What it writes under ``--out`` (default ``site/data``)::
                                        the sidebar's extraction-method switch.
                                        Geometry stays shared at the top level.
                                        Years without NMF outputs are skipped.
+    vote_sum/[nmf/]...                 the same tree again for vote-sum
+                                       normalization (the sidebar's
+                                       normalization switch; NORMS). The top
+                                       level holds per-ballot runs, which
+                                       2013/2016 lack (no ballot count): those
+                                       years exist only under vote_sum/.
 
 Aggregation, matching and geo-join all go through the shared library
 (``src.aggregation``, ``src.geo``, ``src.unmixing.matching``), so the baked
@@ -60,7 +66,9 @@ configs/config_{year}.ini; rerun them after changing a year's data or its
 
 NMF counterparts come from the same scripts with ``--method nmf`` (outputs
 under data/processed/<year>/nmf/, data/distinctness/nmf/,
-data/order_sensitivity/nmf/). The NMF loadings bars also overlay the
+data/order_sensitivity/nmf/), and vote-sum counterparts with
+``--normalization vote_sum`` (one more vote_sum/ level above nmf/; 2013/2016
+default to vote_sum in their configs). The NMF loadings bars also overlay the
 deterministic NNDSVD-initialized run when ``scripts/run_nndsvd.py`` has
 written it next to the NMF sweep (optional; skipped silently otherwise).
 
@@ -90,8 +98,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.aggregation import LEVEL_COLS, aggregate_abundances, dominant_archetype
-from src.config import load_config, method_path
+from src.config import (
+    PER_BALLOT_NORMALIZATIONS,
+    load_config,
+    method_path,
+    normalization,
+    run_subdir,
+    set_normalization,
+)
 from src.data.loading import load_processed, load_sweep
+from src.data.preprocessing import DENOMINATOR_COL
 from src.geo import (
     canonical_province,
     join_municipalities,
@@ -124,14 +140,26 @@ LEVEL_LABELS = {
     "municipality": "City / municipality",
 }
 VALUE_KINDS = ["Archetype abundance", "Dominant archetype", "Turnout"]
-WEIGHTINGS = [True, False]  # ballot-weighted / plain mean
+WEIGHTINGS = [True, False]  # weighted by the normalization denominator / plain mean
+# Normalization families the sidebar switches between. "ballot" = each year's
+# config normalization when it divides by a ballot count (valid_ballots 2019/2022,
+# actual_voters 2025); "vote_sum" = the --normalization vote_sum runs (the only
+# runs 2013/2016 have). Units of every quantity under each: notebook 14.
+NORMS = {
+    "ballot": {"label": "Per ballot", "subdir": ""},
+    "vote_sum": {"label": "Per vote", "subdir": "vote_sum"},
+}
+DEFAULT_NORM = "ballot"
 # Default of the sidebar's archetype-count selector. Every tab shows the sweep's
 # trial mean at the selected p (per-level abundances, loadings ± 1 SD); years
 # without a sweep fall back to the main (HySime-k) run. Lineage colors (and so
 # archetype names and colors at every p) are anchored to the archetypes at this p.
 DEFAULT_P = 4
 
-BALLOT_COL = "information.numberOfValidBallot"
+# Weight for the "weighted" means: each precinct's normalization denominator
+# (ballots, or votes under vote_sum), so a weighted mean abundance is the unit's
+# share of ballots (votes). Written by preprocessing; see run_sweep.WEIGHT_COL.
+WEIGHT_COL = DENOMINATOR_COL
 VOTERS_COL = "information.numberOfActuallyVoters"
 REGISTERED_COL = "information.numberOfRegisteredVoters"
 
@@ -293,7 +321,7 @@ def build_level_agg(
     per unit + dominant archetype + turnout (mirror of build_view)."""
     arch_cols = [c for c in abundances.columns if c.startswith("arch_")]
     agg = aggregate_abundances(
-        abundances, level=level, weight_col=(BALLOT_COL if weighted else None)
+        abundances, level=level, weight_col=(WEIGHT_COL if weighted else None)
     )
     agg["dominant"] = dominant_archetype(agg, arch_cols) if len(agg) else []
     add_turnout(agg)
@@ -312,7 +340,7 @@ def join_agg_to_boundaries(
     Returns (gdf, key_col)."""
     if level == "region":
         agg_prov = aggregate_abundances(
-            abundances, level="province", weight_col=(BALLOT_COL if weighted else None)
+            abundances, level="province", weight_col=(WEIGHT_COL if weighted else None)
         )
         gdf, _ = join_regions(agg_prov, provinces, agg)
         return gdf, "REGION"
@@ -475,7 +503,7 @@ def _level_frame(
     """Slice one (level, weighting, stat) table out of the long-format stats,
     keeping only that level's key columns (and, optionally, the count columns)."""
     group_cols = LEVEL_COLS[level]
-    cols = group_cols + (["n_precincts", BALLOT_COL] if keep_counts else []) + arch_cols
+    cols = group_cols + (["n_precincts", WEIGHT_COL] if keep_counts else []) + arch_cols
     sel = level_stats[
         (level_stats["level"] == level)
         & (level_stats["weighted"] == weighted)
@@ -701,14 +729,28 @@ def build_lineage(
 # ---------------------------------------------------------------------------
 
 
-def method_dir(out: Path, method: str) -> Path:
-    """Where one method's per-year data lives: MVSA at the top of ``out`` (the
-    original layout), every other method in ``out``/<method>/ (same layout)."""
-    return out if method == "mvsa" else out / method
+def norm_config(year: str, norm: str):
+    """The year's config for one normalization family, or None if the year has
+    no run of that family: "ballot" needs the config's own normalization to be
+    per-ballot (2013/2016's isn't); "vote_sum" overrides it."""
+    cfg = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
+    if norm == "ballot":
+        return cfg if normalization(cfg) in PER_BALLOT_NORMALIZATIONS else None
+    return set_normalization(cfg, norm)
+
+
+def run_dir(out: Path, norm: str, method: str) -> Path:
+    """Where one (normalization, method) run's per-year data lives: per-ballot
+    MVSA at the top of ``out`` (the original layout), then [vote_sum/][nmf/]
+    (same layout inside), mirroring src.config.run_subdir."""
+    parts = [NORMS[norm]["subdir"]] + ([] if method == "mvsa" else [method])
+    return out.joinpath(*[x for x in parts if x])
 
 
 def bake_year(
     year: str,
+    cfg,
+    norm: str,
     method: str,
     out: Path,
     provinces,
@@ -717,23 +759,29 @@ def bake_year(
     sizes: dict[str, int],
     geo: dict | None,
 ) -> dict | None:
-    """Bake one (year, method): value tables, loadings, sweep detail and lineage
-    under ``method_dir(out, method)``. Returns the manifest's years_meta entry,
-    or None when that method's pipeline outputs don't exist for the year.
+    """Bake one (year, normalization, method): value tables, loadings, sweep
+    detail and lineage under ``run_dir(out, norm, method)``. Returns the
+    manifest's years_meta entry, or None when that run's pipeline outputs don't
+    exist.
 
-    `geo` (MVSA pass only) collects the year's region GeoJSON + municipal
-    geometry; geometry is method-independent, so other methods skip it."""
-    cfg = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
+    `geo` collects the year's region GeoJSON + municipal geometry; geometry is
+    method- and normalization-independent, so it is taken from the first run
+    baked for each year (``geo["years"]`` records which years are done)."""
     if not method_path(cfg, method, "endmembers.csv").exists():
-        if method == "mvsa":
-            raise FileNotFoundError(f"no MVSA pipeline outputs for {year}")
+        flags = f" --method {method}" if method != "mvsa" else ""
+        if norm != "ballot":
+            flags += f" --normalization {normalization(cfg)}"
         print(
-            f"  (!) {year}: no {METHODS[method]} outputs — run `python "
-            f"scripts/run_pipeline.py --config configs/config_{year}.ini --method "
-            f"{method}` (and run_sweep.py) to add it; skipped"
+            f"  (!) {year}: no {METHODS[method]} {NORMS[norm]['label'].lower()} "
+            f"outputs — run `python scripts/run_pipeline.py --config "
+            f"configs/config_{year}.ini{flags}` (and run_sweep.py) to add it; skipped"
         )
         return None
-    root = method_dir(out, method)
+    root = run_dir(out, norm, method)
+    if geo is not None and year in geo["years"]:
+        geo = None  # this year's geometry was already taken from another run
+    elif geo is not None:
+        geo["years"].add(year)
     rel_root = root.relative_to(out)
     endmembers, abundances, meta = load_processed(cfg, method)
     arch_cols = list(endmembers.columns)
@@ -765,9 +813,9 @@ def bake_year(
             }
             write(f"values/{year}_{level}_{w_tag(weighted)}.json", payload)
 
-            # geometry (year-specific for region/municipality) — written once,
-            # from the MVSA weighted pass (geometry is method- and
-            # weighting-independent).
+            # geometry (year-specific for region/municipality) — written once
+            # per year, from its first run's weighted pass (geometry is
+            # method-, normalization- and weighting-independent).
             if geo is not None and weighted and level == "region":
                 sizes[f"geo/{year}_region.geojson"] = write_geojson(
                     gdf, key_col, level, out / "geo" / f"{year}_region.geojson"
@@ -843,6 +891,8 @@ def bake_year(
         write(f"lineage/{year}.json", build_lineage(year, sweep, short, endmembers))
 
     return {
+        # exact normalization (valid_ballots / actual_voters / vote_sum)
+        "normalization": normalization(cfg),
         "n_archetypes": n_arch,
         "candidate_labels": [short[c] for c in endmembers.index],
         "rmse": meta.get("rmse"),
@@ -871,7 +921,8 @@ def build(out: Path, verify: bool, methods: list[str] | None = None) -> None:
     )
 
     sizes: dict[str, int] = {}
-    geo = {"muni_gdfs": []}  # per-year matched municipal geometries (deduped later)
+    # per-year matched municipal geometries (deduped later); years already taken
+    geo = {"muni_gdfs": [], "years": set()}
 
     # Province geometry is shared across years (full shapefile, left-joined).
     sizes["geo/province.geojson"] = write_geojson(
@@ -883,32 +934,44 @@ def build(out: Path, verify: bool, methods: list[str] | None = None) -> None:
 
     amap = load_alliance_map()
 
+    # method -> {label, norms: {norm -> {base, years, years_meta}}}
     methods_meta: dict[str, dict] = {}
     for method, label in METHODS.items():
         if methods and method not in methods:
             continue
-        print(f"== {label} ==")
-        years_meta: dict[str, dict] = {}
-        for year in YEARS:
-            entry = bake_year(
-                year,
-                method,
-                out,
-                provinces,
-                municipalities,
-                amap,
-                sizes,
-                geo if method == "mvsa" else None,
-            )
-            if entry is not None:
-                years_meta[year] = entry
-        if years_meta:
-            methods_meta[method] = {
-                "label": label,
-                "base": "" if method == "mvsa" else method,
-                "years": [y for y in YEARS if y in years_meta],
-                "years_meta": years_meta,
-            }
+        norms_meta: dict[str, dict] = {}
+        for norm, nm in NORMS.items():
+            print(f"== {label}, {nm['label'].lower()} ==")
+            years_meta: dict[str, dict] = {}
+            for year in YEARS:
+                cfg = norm_config(year, norm)
+                if cfg is None:
+                    continue
+                entry = bake_year(
+                    year,
+                    cfg,
+                    norm,
+                    method,
+                    out,
+                    provinces,
+                    municipalities,
+                    amap,
+                    sizes,
+                    geo if method == "mvsa" else None,
+                )
+                if entry is not None:
+                    years_meta[year] = entry
+            if years_meta:
+                norms_meta[norm] = {
+                    "base": run_dir(Path(), norm, method).as_posix().strip("."),
+                    "years": [y for y in YEARS if y in years_meta],
+                    "years_meta": years_meta,
+                }
+        if norms_meta:
+            methods_meta[method] = {"label": label, "norms": norms_meta}
+    missing = set(YEARS) - geo["years"]
+    if missing:
+        raise FileNotFoundError(f"no MVSA pipeline outputs at all for {sorted(missing)}")
 
     # --- shared municipality geometry (union across years) ---
     import geopandas as gpd
@@ -934,31 +997,42 @@ def build(out: Path, verify: bool, methods: list[str] | None = None) -> None:
         "value_kinds": VALUE_KINDS,
         "weightings": [w_tag(w) for w in WEIGHTINGS],
         "theme": theme_payload(),
-        # extraction method -> {label, base (data subdir, "" = top level),
-        # years (those with data), years_meta}
+        # extraction method -> {label, norms: {normalization family -> {base
+        # (data subdir, "" = top level), years (those with data), years_meta}}}
         "default_method": "mvsa",
         "default_p": DEFAULT_P,
         "methods": methods_meta,
+        "normalizations": {k: v["label"] for k, v in NORMS.items()},
+        "default_normalization": DEFAULT_NORM,
     }
     sizes["manifest.json"] = dump_json(manifest, out / "manifest.json")
 
     # --- pre-baked compare-tab diagnostics (see PREBAKED) ---
-    # data/<sub>/*.json (MVSA) -> <out>/<sub>/, data/<sub>/<method>/*.json ->
-    # <out>/<method>/<sub>/, mirroring method_dir.
+    # data/<sub>/[vote_sum/][<method>/]{year}.json ->
+    # <out>/[vote_sum/][<method>/]<sub>/{year}.json, mirroring run_dir; only the
+    # years that run has.
     for sub, script in PREBAKED.items():
-        for method in methods_meta:
-            src = REPO_ROOT / "data" / sub
-            if method != "mvsa":
-                src = src / method
-            files = sorted(src.glob("*.json"))
-            if not files:
-                flag = "" if method == "mvsa" else f" --method {method}"
-                print(f"WARNING: {src.relative_to(REPO_ROOT)}/ is empty — run {script}{flag} first")
-            dest = method_dir(out, method) / sub
-            for f in files:
-                dest.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(f, dest / f.name)
-                sizes[str((dest / f.name).relative_to(out))] = f.stat().st_size
+        for method, mm in methods_meta.items():
+            for norm, run in mm["norms"].items():
+                src = run_dir(REPO_ROOT / "data" / sub, norm, method)
+                dest = run_dir(out, norm, method) / sub
+                missing = []
+                for year in run["years"]:
+                    f = src / f"{year}.json"
+                    if not f.exists():
+                        missing.append(year)
+                        continue
+                    dest.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(f, dest / f.name)
+                    sizes[str((dest / f.name).relative_to(out))] = f.stat().st_size
+                if missing:
+                    flags = "" if method == "mvsa" else f" --method {method}"
+                    if norm != "ballot":
+                        flags += f" --normalization {norm}"
+                    print(
+                        f"WARNING: {src.relative_to(REPO_ROOT)}/ lacks {missing} — "
+                        f"run {script}{flags} first"
+                    )
 
     total = sum(sizes.values())
     print(f"Wrote {len(sizes)} files to {out} ({total / 1e6:.2f} MB total)")
@@ -1002,25 +1076,26 @@ def _verify(out: Path, provinces, municipalities, methods_meta: dict) -> None:
     print("\n== verify ==")
     ok = True
     for method, mm in methods_meta.items():
-        for year in mm["years"]:
-            cfg = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
-            _, abundances, _ = load_processed(cfg, method)
-            root = method_dir(out, method)
-            for level in LEVELS:
-                for weighted in WEIGHTINGS:
-                    agg = build_level_agg(abundances, level, weighted)
-                    gdf, key_col = join_agg_to_boundaries(
-                        abundances, agg, level, weighted, provinces, municipalities
-                    )
-                    recs = records_from_gdf(
-                        gdf, key_col, [c for c in agg if c.startswith("arch_")]
-                    )
-                    baked = json.loads(
-                        (root / f"values/{year}_{level}_{w_tag(weighted)}.json").read_text()
-                    )["records"]
-                    if recs != baked:
-                        ok = False
-                        print(f"  MISMATCH {method} {year} {level} {w_tag(weighted)}")
+        for norm, run in mm["norms"].items():
+            for year in run["years"]:
+                cfg = norm_config(year, norm)
+                _, abundances, _ = load_processed(cfg, method)
+                root = run_dir(out, norm, method)
+                for level in LEVELS:
+                    for weighted in WEIGHTINGS:
+                        agg = build_level_agg(abundances, level, weighted)
+                        gdf, key_col = join_agg_to_boundaries(
+                            abundances, agg, level, weighted, provinces, municipalities
+                        )
+                        recs = records_from_gdf(
+                            gdf, key_col, [c for c in agg if c.startswith("arch_")]
+                        )
+                        baked = json.loads(
+                            (root / f"values/{year}_{level}_{w_tag(weighted)}.json").read_text()
+                        )["records"]
+                        if recs != baked:
+                            ok = False
+                            print(f"  MISMATCH {method} {norm} {year} {level} {w_tag(weighted)}")
     print(
         "  all baked value tables reproduce the in-process aggregation"
         if ok

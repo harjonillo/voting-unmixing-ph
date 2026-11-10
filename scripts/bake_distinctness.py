@@ -60,9 +60,9 @@ from joblib import Parallel, delayed
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.config import load_config
+from src.config import load_config, run_subdir, set_normalization
 from src.data import load_complete
-from src.data.preprocessing import preprocess_from_config
+from src.data.preprocessing import NORMALIZATIONS, preprocess_from_config
 from src.unmixing import METHODS, extract_endmembers, method_params
 from src.unmixing.methods import params_tag
 from src.unmixing.matching import similarity_matrix
@@ -101,15 +101,29 @@ def distinctness(E: np.ndarray) -> dict:
     return out
 
 
+def year_config(year: str, normalization: str | None):
+    """The year's config, with the --normalization override applied."""
+    return set_normalization(
+        load_config(REPO_ROOT / "configs" / f"config_{year}.ini"), normalization
+    )
+
+
 def bake_year(
-    year: str, ps: list[int], method: str, n_jobs: int | None, recompute: bool
+    year: str,
+    ps: list[int],
+    method: str,
+    n_jobs: int | None,
+    recompute: bool,
+    normalization: str | None = None,
 ) -> dict:
-    config = load_config(REPO_ROOT / "configs" / f"config_{year}.ini")
+    config = year_config(year, normalization)
     seed = config["unmixing"].getint("seed")
     params = method_params(config["unmixing"], method)
     n_jobs = n_jobs or config["sweep"].getint("n_jobs")
 
-    cache = CACHE_DIR / year
+    # cache keyed by the exact normalization (params_tag covers the method):
+    # valid_ballots and actual_voters share an output folder but not a cache
+    cache = CACHE_DIR / config["preprocessing"]["normalization"] / year
     cache.mkdir(parents=True, exist_ok=True)
     tag = params_tag(method, params)
     path = {p: cache / f"endm_p{p}_seed{seed}_{tag}.npy" for p in ps}
@@ -135,6 +149,7 @@ def bake_year(
     return {
         "year": year,
         "method": method,
+        "normalization": config["preprocessing"]["normalization"],
         "seed": seed,
         "ps": ps,
         "metrics": list(METRICS),
@@ -156,17 +171,27 @@ def main() -> None:
     ap.add_argument(
         "--n-jobs", type=int, default=None, help="default: the config's [sweep] n_jobs"
     )
+    ap.add_argument(
+        "--normalization",
+        choices=list(NORMALIZATIONS),
+        default=None,
+        help="override [preprocessing] normalization; non-per-ballot runs are "
+        "written to a subfolder named after it (src.config.run_subdir)",
+    )
     ap.add_argument("--recompute", action="store_true", help="ignore the run cache")
     ap.add_argument("--out", type=Path, default=REPO_ROOT / "data")
     args = ap.parse_args()
 
     ps = list(range(args.p_min, args.p_max + 1))
-    out_dir = args.out / "distinctness"
-    if args.method != "mvsa":
-        out_dir = out_dir / args.method
-    out_dir.mkdir(parents=True, exist_ok=True)
     for year in args.years:
-        payload = bake_year(year, ps, args.method, args.n_jobs, args.recompute)
+        payload = bake_year(
+            year, ps, args.method, args.n_jobs, args.recompute, args.normalization
+        )
+        # data/distinctness/[<normalization>/][<method>/]{year}.json
+        out_dir = args.out / "distinctness" / run_subdir(
+            year_config(year, args.normalization), args.method
+        )
+        out_dir.mkdir(parents=True, exist_ok=True)
         out = out_dir / f"{year}.json"
         out.write_text(json.dumps(payload, separators=(",", ":")))
         print(f"{year}: wrote {out} ({out.stat().st_size / 1024:.1f} kB)")

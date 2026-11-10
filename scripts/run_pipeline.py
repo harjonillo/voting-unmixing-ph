@@ -15,6 +15,7 @@ via --config (e.g. configs/config_2025.ini).
 Run from the repo root:
     python scripts/run_pipeline.py --config configs/config_2025.ini [--n-archetypes 7]
     python scripts/run_pipeline.py --config configs/config_2025.ini --method nmf
+    python scripts/run_pipeline.py --config configs/config_2025.ini --normalization vote_sum
 """
 
 import argparse
@@ -26,10 +27,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import load_config
+from src.config import load_config, set_normalization
 from src.data import load_complete
 from src.data.loading import save_processed
-from src.data.preprocessing import preprocess_from_config
+from src.data.preprocessing import NORMALIZATIONS, preprocess_from_config
 from src.unmixing import (
     METHODS,
     est_noise,
@@ -57,9 +58,16 @@ def main():
         default="mvsa",
         help="endmember extraction method (default: mvsa)",
     )
+    parser.add_argument(
+        "--normalization",
+        choices=list(NORMALIZATIONS),
+        default=None,
+        help="override [preprocessing] normalization; non-per-ballot runs are "
+        "written to a subfolder named after it (src.config.run_subdir)",
+    )
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    config = set_normalization(load_config(args.config), args.normalization)
     unmix = config["unmixing"]
     seed = unmix.getint("seed")
     np.random.seed(seed)

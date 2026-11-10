@@ -1,0 +1,11 @@
+\begin{tabular}{lrrrrrll}
+\toprule
+ & \multicolumn{3}{c}{RMSE $/$ noise floor} & \multicolumn{4}{c}{blind MVSA endmembers $\hat{\mathbf M}$} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-8}
+normalization & true $\tilde{\mathbf M}$ & MVSA & noise floor & min loading & \# negative & column sums & true column sums \\
+\midrule
+per-ballot & 1.05 & 1.05 & 0.0180 & 1.6\% & 0 & 5.76/3.67/2.14 & 5.60/3.70/2.25 \\
+vote-sum & 1.00 & 1.00 & 0.0049 & -7.1\% & 4 & 1.00/1.00/1.00 & 1.00/1.00/1.00 \\
+row-max & 6.02 & 3.03 & 0.0325 & -16.8\% & 4 & 10.01/6.52/3.61 & 6.59/4.11/2.81 \\
+\bottomrule
+\end{tabular}

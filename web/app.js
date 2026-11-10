@@ -43,7 +43,11 @@ async function getJSON(url, init) {
 let MANIFEST = null;
 const state = {
   // p: the sidebar's archetype count (every tab; manifest default_p at start).
-  year: null, method: "mvsa", level: "province", weighted: true, topN: 6, tab: "map", p: 4,
+  // norm: the sidebar's normalization pick ("ballot" | "vote_sum"); a year
+  // without that run (2013/2016 have no ballot count) shows its only one, see
+  // activeNorm.
+  year: null, method: "mvsa", norm: "ballot", level: "province", weighted: true, topN: 6,
+  tab: "map", p: 4,
   // range: map color range, "data" (autoscale) | "fixed" (0 to 1, or 0 to 100%).
   map: { quantity: "Archetype abundance", arch: "arch_0", groupBy: "alliance", range: "data" },
   // Loadings x-axis on the map tab: "shared" across archetypes | "own" per chart.
@@ -102,11 +106,54 @@ const TURNOUT_RAMP = [
 ].map((c, i, a) => [i / (a.length - 1), c]);
 // Signed number with a true minus sign.
 const fmtSigned = (v, d) => (v < -1e-12 ? "−" : "") + Math.abs(v).toFixed(d);
-// Endmember-extraction method (sidebar): MANIFEST.methods[key] =
-// {label, base, years, years_meta}; each method has its own baked data tree.
-const methodMeta = () => MANIFEST.methods[state.method];
-const methodLabel = () => methodMeta().label;
+// Endmember-extraction method x normalization (sidebar): MANIFEST.methods[key] =
+// {label, norms: {norm: {base, years, years_meta}}}; each (method, normalization)
+// run has its own baked data tree.
+const methodRuns = () => MANIFEST.methods[state.method].norms;
+// Normalizations with a run for this year (2013/2016: vote-sum only).
+const normsFor = (year) =>
+  Object.keys(MANIFEST.normalizations).filter((n) => methodRuns()[n]?.years.includes(year));
+// The normalization shown: the sidebar pick when the year has it, else the year's
+// first available one. state.norm keeps the pick, so going back to 2019 restores it.
+function activeNorm() {
+  const ok = normsFor(state.year);
+  return ok.includes(state.norm) ? state.norm : ok[0];
+}
+const methodMeta = () => methodRuns()[activeNorm()];
+const methodLabel = () => MANIFEST.methods[state.method].label;
 const yearMeta = (year) => methodMeta().years_meta[year];
+
+// Units of loadings and abundances per normalization family (notebook 14). Per
+// ballot, a loading is the votes a candidate gets per ballot cast by the
+// archetype's voters (the chance such a voter marks them), and an abundance is
+// the archetype's share of ballots. Per vote, both are shares of votes. Weighted
+// means weight each precinct by the same denominator.
+const UNITS = {
+  ballot: {
+    loading: "votes for candidate / archetype ballots",
+    abundance: "archetype ballots / all ballots",
+    weight: "ballots",
+    loadingText: "A loading is the votes a candidate gets per ballot cast by the " +
+      "archetype's voters, i.e. the chance such a voter marks them.",
+    abundanceText: (unit) => `the share of the ${unit}'s ballots cast by its voters`,
+  },
+  vote_sum: {
+    loading: "votes for candidate / archetype votes",
+    abundance: "archetype votes / all votes",
+    weight: "votes",
+    loadingText: "A loading is the candidate's share of all votes cast by the " +
+      "archetype's voters.",
+    abundanceText: (unit) => `the share of the ${unit}'s votes cast by its voters`,
+  },
+};
+const units = () => UNITS[activeNorm()];
+// What each exact normalization divides by (manifest years_meta.normalization).
+const NORM_NOTES = {
+  valid_ballots: "Divides each precinct's votes by its valid ballots.",
+  actual_voters: "Divides each precinct's votes by its voters (2025's valid-ballot " +
+    "count is not a ballot count).",
+  vote_sum: "Divides each precinct's votes by its total votes, so each precinct sums to 1.",
+};
 function nArchFor(year) {
   return yearMeta(year).n_archetypes;
 }
@@ -280,7 +327,7 @@ function loadingsChart(plotEl, c, topRows, dom, payload, height) {
     xaxis: {
       ...AXIS, range: dom.range, dtick: dom.dtick, fixedrange: true,
       zeroline: true, zerolinewidth: 1, showline: true,
-      title: axisTitle("loading"),
+      title: axisTitle(`loading<br>(${units().loading})`),
     },
     yaxis: {
       automargin: true, fixedrange: true, tickvals: ys, ticktext,
@@ -333,7 +380,7 @@ function animateLoadingsAxis(hostId, axis) {
 
 // Caption under a loadings card title (error-bar source + NNDSVD overlay).
 function loadingsCaption(prefix, payload) {
-  return prefix + (payload.std
+  return prefix + " " + units().loadingText + (payload.std
     ? " Error bars: 1 SD across the sweep's trials at this archetype count."
     : " Run the sweep for this year to add trial-based error bars.") +
     (payload.nndsvd ? NNDSVD_CAPTION : "");
@@ -423,7 +470,8 @@ function partylistMixing(plotId, tableId, payload, arch_cols, mode) {
   };
   document.getElementById(`${plotId}-sub`).textContent =
     `Summed endmember loading of each ${noun}'s candidates per archetype (sums, ` +
-    "not correlations). Blue is positive, red negative, gray near zero.";
+    `not correlations), in ${units().loading.replace("candidate", noun)}. Blue is ` +
+    "positive, red negative, gray near zero.";
   const host = document.getElementById(plotId);
   host.innerHTML = "";
   const wrap = el("div", "matrix-wrap scroll");
@@ -685,6 +733,7 @@ async function renderMap() {
       colorFn: (r) => (r[sel] == null ? null : r[sel]),
       hover: "%{text}<br>SD %{z:.3f}<extra></extra>", colorscale: archRamp(sel),
       fmt: (v) => v.toFixed(3), title: `${archLabel(sel)} abundance, 1 SD across trials`,
+      subtitle: `${fig.subtitle} · ${units().abundance}`,
     });
     lede = `How much the selected archetype's abundance in each ${unit} varies across ` +
       `the sweep's trials at p = ${p}, next to the candidate weights that define every ` +
@@ -694,17 +743,19 @@ async function renderMap() {
       colorFn: (r) => (r[sel] == null ? null : r[sel]),
       hover: "%{text}<br>abundance %{z:.3f}<extra></extra>", colorscale: archRamp(sel),
       fmt: (v) => v.toFixed(2), title: `${archLabel(sel)} abundance`,
+      subtitle: `${fig.subtitle} · ${units().abundance}`,
     });
-    lede = `Abundance of the selected archetype in each ${unit}, next to the candidate ` +
-      "weights that define every archetype.";
+    lede = `Abundance of the selected archetype in each ${unit}: ` +
+      `${units().abundanceText(unit)}. Next to it, the candidate weights that define ` +
+      "every archetype.";
   }
   renderMapFigure("map", geo, kind === SD_KIND ? std : records, fig);
   document.getElementById("map-lede").textContent = lede;
 
   const trials = yearMeta(year).sweep_trials;
   document.getElementById("map-loadings-sub").textContent = fromSweep
-    ? `${methodLabel()} at p = ${p}, national level. Mean ± 1 SD over ${trials ?? "the sweep's"} ` +
-      "trials." + (loadings.nndsvd ? NNDSVD_CAPTION : "")
+    ? `${methodLabel()} at p = ${p}, national level. ${units().loadingText} Mean ± 1 SD ` +
+      `over ${trials ?? "the sweep's"} trials.` + (loadings.nndsvd ? NNDSVD_CAPTION : "")
     : loadingsCaption(`${methodLabel()}, national level.`, loadings);
   loadingsGrid("map-loadings", loadings, cols, state.topN, state.loadingsAxis);
 
@@ -1146,7 +1197,8 @@ async function renderDist() {
         showarrow: false, text: "median", font: { size: 11, color: INK }, bgcolor: "#ffffff",
       }],
       xaxis: { ...AXIS, range: [s.lo, s.hi], showgrid: false, zeroline: false, showline: true,
-        tickformat: ".2f", fixedrange: true, title: axisTitle("abundance"),
+        tickformat: ".2f", fixedrange: true,
+        title: axisTitle(`abundance (${units().abundance})`),
         ...(xMode === "fixed" ? { dtick: 0.25 } : { nticks: 5 }) },
       yaxis: { ...AXIS, range: [0, yTop], dtick: yStep, zeroline: false, fixedrange: true,
         tickformat: yMode === "share" ? ".0%" : "d", gridcolor: "#f1f0ec" },
@@ -1188,7 +1240,8 @@ async function renderDist() {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
     font: FONT, hoverlabel: HOVERLABEL, hovermode: "closest",
     xaxis: { ...AXIS, range: [0, 1], dtick: 0.25, tickformat: ".2f", zeroline: false,
-      gridcolor: "#f1f0ec", fixedrange: true, title: axisTitle("abundance") },
+      gridcolor: "#f1f0ec", fixedrange: true,
+      title: axisTitle(`abundance (${units().abundance})`) },
     yaxis: { range: [-series.length + 0.5, 0.5], fixedrange: true, zeroline: false,
       showgrid: false, automargin: true, ticks: "", ticklabelstandoff: 8,
       tickvals: series.map((_, i) => -i),
@@ -1261,11 +1314,13 @@ function renderSummary() {
 // may lack a year; years could differ in their sweep's p range), then refill
 // both. Without a sweep the p selector hides and the tabs show the main run.
 function syncYearAndP() {
-  const years = methodMeta().years;
-  if (!years.includes(state.year)) {
-    state.year = years.includes(MANIFEST.default_year) ? MANIFEST.default_year : years[0];
+  // years with any normalization's run for this method
+  const uniq = [...new Set(Object.values(methodRuns()).flatMap((r) => r.years))];
+  if (!uniq.includes(state.year)) {
+    state.year = uniq.includes(MANIFEST.default_year) ? MANIFEST.default_year : uniq[0];
   }
-  fillSeg("year", [...years].sort().map((y) => [y, y]), state.year);
+  fillSeg("year", [...uniq].sort().map((y) => [y, y]), state.year);
+  syncNorm();
   const ps = yearMeta(state.year).sweep_ps;
   if (ps.length && !ps.includes(state.p)) {
     // nearest available p
@@ -1273,6 +1328,23 @@ function syncYearAndP() {
   }
   fillSeg("p", ps.map((p) => [p, String(p)]), state.p);
   document.getElementById("p").closest(".field").hidden = !ps.length;
+}
+
+// Normalization switch: a run the year lacks (per ballot in 2013/2016) is shown
+// faded and can't be picked; the pressed button is the normalization actually
+// shown. The note under it and the weighting checkbox name the denominator.
+function syncNorm() {
+  const ok = normsFor(state.year), active = activeNorm();
+  fillSeg("norm", Object.entries(MANIFEST.normalizations), active);
+  for (const b of document.getElementById("norm").querySelectorAll("button")) {
+    b.disabled = !ok.includes(b.dataset.value);
+  }
+  const missing = Object.keys(MANIFEST.normalizations).filter((n) => !ok.includes(n));
+  document.getElementById("norm-note").textContent =
+    NORM_NOTES[yearMeta(state.year).normalization] +
+    (missing.includes("ballot") ? ` ${state.year} has no ballot count.` : "");
+  document.getElementById("weighted-label").textContent =
+    `Weight means by ${units().weight}`;
 }
 
 // --------------------------------------------------------------------- controls
@@ -1299,7 +1371,7 @@ function fillSeg(id, options, value) {
 function wireSeg(id, onPick) {
   document.getElementById(id).addEventListener("click", (e) => {
     const b = e.target.closest("button");
-    if (!b || b.classList.contains("on")) return;
+    if (!b || b.disabled || b.classList.contains("on")) return;
     markSeg(id, b.dataset.value);
     onPick(b.dataset.value);
   });
@@ -1376,6 +1448,7 @@ async function init() {
   MANIFEST = await getJSON(`${DATA}/manifest.json`, { cache: "no-cache" });
   state.year = MANIFEST.default_year;
   state.method = MANIFEST.default_method;
+  state.norm = MANIFEST.default_normalization;
   state.p = MANIFEST.default_p ?? state.p;
 
   // only the methods actually baked (e.g. NMF absent until its pipeline runs)
@@ -1418,6 +1491,10 @@ async function init() {
   });
   wireSeg("method", (v) => {
     state.method = v;
+    syncYearAndP(); renderSummary(); renderActive();
+  });
+  wireSeg("norm", (v) => {
+    state.norm = v;
     syncYearAndP(); renderSummary(); renderActive();
   });
   document.getElementById("topN").addEventListener("change", (e) => setTopN(+e.target.value));

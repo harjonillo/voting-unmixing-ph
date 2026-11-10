@@ -9,11 +9,17 @@
     "min_candidate_25th_percentile": 10.0,
     "min_precinct_votes": 10.0,
     "normalization": "valid_ballots",
+    "randomize_precinct_order": false,
     "n_candidates_before": 64,
-    "n_precincts_before": 105033
+    "n_precincts_before": 105033,
+    "precinct_ids": "[     0      1      2 ... 106021 106022 106023]"
   },
   "hysime_kf": 6,
   "n_archetypes": 6,
+  "method": "mvsa",
+  "method_params": {
+    "MM_iters": 10
+  },
   "seed": 42,
   "rmse": 0.052590678035930226,
   "candidate_labels": [

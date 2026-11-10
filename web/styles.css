@@ -219,6 +219,10 @@ input[type="radio"], input[type="checkbox"] {
 }
 .seg:hover { background: var(--hairline); color: var(--ink); }
 .seg.on { background: var(--ink); color: #ffffff; }
+/* An option the current selection doesn't have (per ballot in 2013/2016). */
+.seg:disabled, .seg:disabled:hover {
+  background: transparent; color: var(--ink-2); opacity: 0.35; cursor: not-allowed;
+}
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips[hidden] { display: none; }

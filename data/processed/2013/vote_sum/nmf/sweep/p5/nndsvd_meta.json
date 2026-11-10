@@ -1,0 +1,21 @@
+{
+  "p": 5,
+  "init": "nndsvd",
+  "method_params": {
+    "init": "nndsvd",
+    "beta_loss": "kullback-leibler",
+    "solver": "mu",
+    "max_iter": 1000,
+    "tol": 0.0001
+  },
+  "rmse": 0.00959677664401436,
+  "rmse_rank_frac": 0.0,
+  "matched_cosine_to_sweep_mean": [
+    0.7475585583160022,
+    0.9600251812558894,
+    0.7513794777331204,
+    0.8848305256182367,
+    0.9449856848850774
+  ],
+  "zero_fraction": 0.4105263157894737
+}

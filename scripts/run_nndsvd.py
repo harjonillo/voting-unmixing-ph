@@ -33,10 +33,10 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import load_config, method_path
+from src.config import load_config, method_path, set_normalization
 from src.data import load_complete
 from src.data.loading import load_sweep
-from src.data.preprocessing import preprocess_from_config
+from src.data.preprocessing import NORMALIZATIONS, preprocess_from_config
 from src.unmixing import extract_endmembers, match_to_reference, method_params, sunsal_mod
 
 
@@ -51,9 +51,16 @@ def main():
         default="nndsvd",
         help="deterministic NMF initialization (default: nndsvd)",
     )
+    parser.add_argument(
+        "--normalization",
+        choices=list(NORMALIZATIONS),
+        default=None,
+        help="override [preprocessing] normalization; non-per-ballot runs are "
+        "written to a subfolder named after it (src.config.run_subdir)",
+    )
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    config = set_normalization(load_config(args.config), args.normalization)
     unmix = config["unmixing"]
     params = {**method_params(unmix, "nmf"), "init": args.init}
 

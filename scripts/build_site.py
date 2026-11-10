@@ -162,6 +162,15 @@ def sidebar() -> Aside:
         Section(
             H2("Data", cls="overline"),
             field("Election year", seg_group("year", "Election year")),
+            # Per ballot / per vote (manifest "normalizations"); app.js fades and
+            # disables per ballot for years without a ballot count (2013/2016)
+            # and fills the note with what the year's run divides by.
+            Div(
+                Span("Normalization", cls="field-label"),
+                seg_group("norm", "Normalization", fill=True),
+                Span(id="norm-note", cls="note"),
+                cls="field",
+            ),
             Fieldset(
                 Legend("Aggregation level", cls="field-label"),
                 Div(id="levels", cls="radios"),
@@ -169,7 +178,8 @@ def sidebar() -> Aside:
             ),
             Label(
                 Input(type="checkbox", id="weighted", checked=True),
-                "Weight means by valid ballots",
+                # app.js names the run's denominator (ballots / votes)
+                Span("Weight means by ballots", id="weighted-label"),
                 cls="check",
             ),
             cls="side-group",
