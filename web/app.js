@@ -1001,7 +1001,8 @@ async function renderDiagnostics() {
   const dist = await getJSON(distinctURL(state.year)).catch(() => null);
   document.getElementById("cmp-distinct-sub").textContent =
     `${capitalize(stat)} pairwise distance between one run's archetypes (config seed). ` +
-    "Past the floor, each added archetype mostly duplicates an existing one.";
+    "Past the floor, each added archetype mostly duplicates an existing one. " +
+    `Dotted, right axis: that run's reconstruction RMSE (${units().rmse}).`;
   const legend = document.getElementById("cmp-distinct-legend");
   legend.innerHTML = "";
   if (dist) {
@@ -1023,9 +1024,32 @@ async function renderDiagnostics() {
       marker: { color: metricColor(metric), size: 8, line: { color: "#ffffff", width: 2 } },
       hovertemplate: `${LINEAGE_METRICS[metric]}<br>p = %{x}: %{y:.3f}<extra></extra>`,
     });
+    // Reconstruction RMSE of the same config-seed run, on a right-hand axis
+    // (older bakes have no "rmse" key: the chart then stays single-axis).
+    const rmse = dist.rmse ? ps.map((p) => dist.rmse[p] ?? null) : null;
+    // Right axis in quarters of a round max (1/2/2.5/5 × 10^k per step), so its
+    // ticks sit on the left axis's 0.25 gridlines.
+    let rmseStep = null, rmseFmt = null;
+    if (rmse) {
+      const q = Math.max(...rmse.filter((v) => v != null)) / 4;
+      const mag = 10 ** Math.floor(Math.log10(q));
+      rmseStep = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((st) => st >= q);
+      // fixed decimals, as few as the step needs (0.02 → .2f, 0.025 → .3f)
+      const dp = [0, 1, 2, 3, 4, 5, 6].find((d) =>
+        Math.abs(rmseStep * 10 ** d - Math.round(rmseStep * 10 ** d)) < 1e-9);
+      rmseFmt = `.${dp}f`;
+      traces.push({
+        type: "scatter", mode: "lines", name: "RMSE", x: ps, y: rmse, yaxis: "y2",
+        line: { color: INK, width: 1.75, dash: "dot" },
+        hovertemplate: `RMSE<br>p = %{x}: %{y:.4f} ${units().rmse}<extra></extra>`,
+      });
+    }
+    // Selected-metric label sits just inside the plot above its last point, so
+    // it clears the RMSE axis ticks on the right.
     const last = sel.length - 1;
     const annotations = [{
-      x: ps[last], y: sel[last], xanchor: "left", xshift: 8, showarrow: false,
+      x: ps[last], y: sel[last], xanchor: "right", yanchor: "bottom", yshift: 6,
+      showarrow: false,
       text: `<b>${LINEAGE_METRICS[metric]}</b>`, font: { size: 11, color: INK },
     }];
     const shapes = [];
@@ -1040,13 +1064,16 @@ async function renderDiagnostics() {
       });
     }
     Plotly.react("cmp-distinct", traces, {
-      height: 272, margin: { l: 44, r: 96, t: 20, b: 40 }, showlegend: false,
+      height: 272, margin: { l: 44, r: rmse ? 16 : 96, t: 20, b: 40 }, showlegend: false,
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
       hoverlabel: HOVERLABEL, shapes, annotations,
       xaxis: { ...AXIS, title: axisTitle("number of archetypes p"), tickvals: ps,
         showgrid: false, fixedrange: true },
       yaxis: { ...AXIS, range: [0, 1], dtick: 0.25, tickformat: ".2f", fixedrange: true,
         zeroline: false, showline: true, title: axisTitle(`${stat} pairwise distance`) },
+      ...(rmse && { yaxis2: { ...AXIS, overlaying: "y", side: "right",
+        range: [0, 4 * rmseStep], dtick: rmseStep, tickformat: rmseFmt, showgrid: false, zeroline: false, showline: true,
+        fixedrange: true, title: axisTitle(`RMSE (${units().rmse})`) } }),
     }, PLOTLY_CFG);
     for (const m of Object.keys(LINEAGE_METRICS)) {
       const item = el("span", m === metric ? "legend-item on" : "legend-item");
@@ -1054,6 +1081,13 @@ async function renderDiagnostics() {
       sw.style.height = m === metric ? "2.5px" : "1.5px";
       sw.style.background = metricColor(m);
       item.append(sw, capitalize(LINEAGE_METRICS[m]));
+      legend.appendChild(item);
+    }
+    if (rmse) {
+      const item = el("span", "legend-item");
+      const sw = el("span", "line-swatch");
+      sw.style.borderTop = `2px dotted ${INK}`;
+      item.append(sw, "Reconstruction RMSE");
       legend.appendChild(item);
     }
   } else {
