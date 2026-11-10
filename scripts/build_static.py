@@ -32,6 +32,9 @@ What it writes under ``--out`` (default ``site/data``)::
                                        Prerequisites).
     order_sensitivity/{year}.json      copied from data/order_sensitivity/ (see
                                        Prerequisites).
+    projections/{year}.json            copied from data/projections/ (see
+                                       Prerequisites); one per normalization,
+                                       shared by MVSA and NMF (not under nmf/).
     nmf/...                            the same per-year tree (values/, loadings/,
                                        sweep/, lineage/, distinctness/,
                                        order_sensitivity/) for NMF endmembers —
@@ -50,8 +53,8 @@ Aggregation, matching and geo-join all go through the shared library
 numbers match the pipeline; ``--verify`` spot-checks a few cells against a fresh
 in-process aggregation.
 
-Prerequisites — two small committed JSON sets this script copies through but
-does not compute (it warns if either folder is empty). Both are notebooks
+Prerequisites — small committed JSON sets this script copies through but
+does not compute (it warns about missing years). Both are notebooks
 ported to scripts that rerun the experiment for every year from
 configs/config_{year}.ini; rerun them after changing a year's data or its
 [preprocessing]/[unmixing] config, then rerun this script:
@@ -63,6 +66,10 @@ configs/config_{year}.ini; rerun them after changing a year's data or its
                                        reference under shuffled precinct order
                                        vs varying seed
                                        -> data/order_sensitivity/.
+    scripts/bake_projections.py        notebook 16: precinct density and
+                                       VCA/MVSA/NMF endmembers in PCA and UMAP
+                                       -> data/projections/ (needs umap-learn;
+                                       reuses bake_distinctness.py's endmembers).
 
 NMF counterparts come from the same scripts with ``--method nmf`` (outputs
 under data/processed/<year>/nmf/, data/distinctness/nmf/,
@@ -77,6 +84,8 @@ Run from the repo root:
     python scripts/bake_order_sensitivity.py   # prerequisite (~5 min/year)
     python scripts/bake_distinctness.py --method nmf       # NMF prerequisites
     python scripts/bake_order_sensitivity.py --method nmf
+    python scripts/bake_projections.py         # after both distinctness bakes
+    python scripts/bake_projections.py --normalization vote_sum
     python scripts/run_nndsvd.py --config configs/config_{year}.ini  # optional
     python scripts/build_static.py --out site/data
 """
@@ -182,6 +191,12 @@ NO_ALLIANCE = "Independent / none"
 PREBAKED = {
     "distinctness": "scripts/bake_distinctness.py",
     "order_sensitivity": "scripts/bake_order_sensitivity.py",
+}
+# Pre-baked like PREBAKED but method-independent (every method's endmembers in
+# one file): copied once per normalization into the MVSA run's folder
+# (data/<subdir>/[vote_sum/]{year}.json -> site/data/[vote_sum/]<subdir>/).
+PREBAKED_SHARED = {
+    "projections": "scripts/bake_projections.py",
 }
 
 
@@ -1033,6 +1048,27 @@ def build(out: Path, verify: bool, methods: list[str] | None = None) -> None:
                         f"WARNING: {src.relative_to(REPO_ROOT)}/ lacks {missing} — "
                         f"run {script}{flags} first"
                     )
+    for sub, script in PREBAKED_SHARED.items():
+        for norm in NORMS:
+            years = sorted({y for mm in methods_meta.values()
+                            for y in mm["norms"].get(norm, {}).get("years", [])})
+            src = run_dir(REPO_ROOT / "data" / sub, norm, "mvsa")
+            dest = run_dir(out, norm, "mvsa") / sub
+            missing = []
+            for year in years:
+                f = src / f"{year}.json"
+                if not f.exists():
+                    missing.append(year)
+                    continue
+                dest.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(f, dest / f.name)
+                sizes[str((dest / f.name).relative_to(out))] = f.stat().st_size
+            if missing:
+                flags = "" if norm == "ballot" else f" --normalization {norm}"
+                print(
+                    f"WARNING: {src.relative_to(REPO_ROOT)}/ lacks {missing} — "
+                    f"run {script}{flags} first"
+                )
 
     total = sum(sizes.values())
     print(f"Wrote {len(sizes)} files to {out} ({total / 1e6:.2f} MB total)")

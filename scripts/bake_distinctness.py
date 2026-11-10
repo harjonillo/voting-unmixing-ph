@@ -73,12 +73,13 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.config import load_config, run_subdir, set_normalization
 from src.data import load_complete
 from src.data.preprocessing import NORMALIZATIONS, preprocess_from_config
+from src.projection import DISTINCTNESS_CACHE, endmember_cache_path
 from src.unmixing import METHODS, extract_endmembers, method_params, sunsal_mod
 from src.unmixing.methods import params_tag
 from src.unmixing.matching import similarity_matrix
 
 YEARS = ["2025", "2022", "2019", "2016", "2013"]
-CACHE_DIR = REPO_ROOT / "data" / "notebook_experiments" / "08_distinctness"
+CACHE_DIR = DISTINCTNESS_CACHE  # shared with src.projection (bake_projections.py)
 
 # site short name -> (src.unmixing.matching registered name, signed?)
 METRICS = {
@@ -145,7 +146,7 @@ def bake_year(
     cache = CACHE_DIR / config["preprocessing"]["normalization"] / year
     cache.mkdir(parents=True, exist_ok=True)
     tag = params_tag(method, params)
-    path = {p: cache / f"endm_p{p}_seed{seed}_{tag}.npy" for p in ps}
+    path = {p: endmember_cache_path(config, year, p, method) for p in ps}
     todo = [p for p in ps if recompute or not path[p].exists()]
     al_iters = config["unmixing"].getint("sunsal_al_iters")
     tol = config["unmixing"].getfloat("sunsal_tol")

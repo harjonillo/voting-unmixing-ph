@@ -53,7 +53,8 @@ const state = {
   // Loadings x-axis on the map tab: "shared" across archetypes | "own" per chart.
   loadingsAxis: "shared",
   // Compare tab: the lineage network and the p-choice diagnostics.
-  cmp: { lineageTopN: 3, lineageMetric: "cos", lineageStat: "min" },
+  // proj: the precinct-cloud card's projection, "pca" | "umap".
+  cmp: { lineageTopN: 3, lineageMetric: "cos", lineageStat: "min", proj: "pca" },
   // Distributions tab: histogram x "fixed" (0 to 1) | "own"; y "count" | "share";
   // loadings x-axis "shared" | "own" (as loadingsAxis on the map tab).
   dist: { x: "fixed", y: "count", bins: 20, axis: "shared" },
@@ -1155,6 +1156,168 @@ async function renderDiagnostics() {
   }, PLOTLY_CFG);
 }
 
+// ------------------------------------- compare tab: archetypes in the precinct cloud
+// Notebook 16 (Li & Bioucas-Dias 2008, Fig. 1): the precincts in two dimensions
+// (PCA or UMAP, the card's own toggle) with the VCA, MVSA and NMF endmembers at
+// each p overlaid, for the sidebar's year and normalization
+// (projections/{year}.json, baked by scripts/bake_projections.py; one file per
+// normalization, so it lives in the MVSA tree whichever method is selected).
+// Precincts are a sparse log-count density; methods differ by marker shape, the
+// sidebar's method in ink, the others smaller in gray (hue means archetype).
+const projURL = (year) => {
+  const base = MANIFEST.methods.mvsa.norms[activeNorm()]?.base;
+  return `${base ? `${DATA}/${base}` : DATA}/projections/${year}.json`;
+};
+const PROJ_METHODS = {
+  VCA: { symbol: "x-thin-open", key: null, label: "VCA" },
+  MVSA: { symbol: "square-open", key: "mvsa", label: "MVSA" },
+  NMF: { symbol: "diamond-open", key: "nmf", label: "NMF" },
+};
+const CLOUD_RAMP = [[0, "#d4d3cc"], [1, "#7d7c76"]];
+
+// Sparse density -> bins x bins z of log10 counts (empty cells null, so they stay
+// transparent). Memoized: the same grid is shared by every p panel.
+const _densityZ = new Map();
+function densityZ(url, proj, d, bins) {
+  const key = `${url}#${proj}`;
+  if (!_densityZ.has(key)) {
+    const z = Array.from({ length: bins }, () => new Array(bins).fill(null));
+    let i = 0, zmax = 0;
+    d.idx.forEach((gap, k) => {
+      i += gap;
+      const v = Math.log10(d.count[k]);
+      z[Math.floor(i / bins)][i % bins] = v;
+      if (v > zmax) zmax = v;
+    });
+    _densityZ.set(key, { z, zmax });
+  }
+  return _densityZ.get(key);
+}
+
+function markerSwatch(symbol, color, size) {
+  const s = 14, c = s / 2, r = size / 2;
+  const shapes = {
+    "square-open": `<rect x="${c - r}" y="${c - r}" width="${2 * r}" height="${2 * r}"/>`,
+    "diamond-open": `<path d="M${c} ${c - r * 1.25}L${c + r * 1.25} ${c}L${c} ${c + r * 1.25}L${c - r * 1.25} ${c}Z"/>`,
+    "x-thin-open": `<path d="M${c - r} ${c - r}L${c + r} ${c + r}M${c - r} ${c + r}L${c + r} ${c - r}"/>`,
+  };
+  const span = el("span", "marker-swatch");
+  span.innerHTML = `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" aria-hidden="true" ` +
+    `fill="none" stroke="${color}" stroke-width="1.5">${shapes[symbol]}</svg>`;
+  return span;
+}
+
+async function renderProjections() {
+  const host = document.getElementById("cmp-proj");
+  const sub = document.getElementById("cmp-proj-sub");
+  const legend = document.getElementById("cmp-proj-legend");
+  const url = projURL(state.year);
+  const data = await getJSON(url).catch(() => null);
+  for (const d of host.querySelectorAll(".plot")) Plotly.purge(d);
+  host.innerHTML = "";
+  legend.innerHTML = "";
+  if (!data) {
+    sub.textContent = "";
+    host.appendChild(el("p", "muted",
+      "No projection data for this year — run scripts/bake_projections.py."));
+    return;
+  }
+  const proj = state.cmp.proj, P = data[proj];
+  const hysime = yearMeta(state.year).hysime_kf;
+  const n = data.n_precincts.toLocaleString();
+  const corner = `Under each panel: MVSA's most negative loading (${units().loading}); ` +
+    "below zero, the archetype lies outside the vote patterns a precinct can have.";
+  sub.textContent = proj === "pca"
+    ? `The ${n} precincts on their first two principal components ` +
+      `(${(100 * P.explained[0]).toFixed(0)}% and ${(100 * P.explained[1]).toFixed(0)}% of ` +
+      "the variance), with each method's archetypes, one panel per p. PCA is linear, so " +
+      `an archetype outside the cloud stays outside. ${corner}`
+    : `The ${n} precincts in a UMAP map, with each method's archetypes placed by the same ` +
+      "map. UMAP keeps neighborhoods, not distances: archetypes beyond the cloud are " +
+      "pulled back onto it, so read it for which part of the cloud an archetype points " +
+      `at, not how far out it is. ${corner}`;
+
+  const { z, zmax } = densityZ(url, proj, P.density, data.bins);
+  const ext = P.density.extent;
+  const dx = (ext.x[1] - ext.x[0]) / data.bins, dy = (ext.y[1] - ext.y[0]) / data.bins;
+  const on = (m) => PROJ_METHODS[m].key === state.method;
+  const order = [...data.methods].sort((a, b) => on(a) - on(b));   // emphasized last (on top)
+
+  for (const p of data.ps) {
+    const ends = P.ends[p];
+    const panel = el("div", "proj-panel");
+    const div = el("div", "plot");
+    const note = el("div", "proj-note", `MVSA min ${data.min_loading[p].MVSA.toFixed(2)}`);
+    note.title = `MVSA's most negative loading at p = ${p} (${units().loading})`;
+    panel.append(div, note);
+    host.appendChild(panel);
+    const traces = [{
+      type: "heatmap", z, x0: ext.x[0] + dx / 2, dx, y0: ext.y[0] + dy / 2, dy,
+      zmin: 0, zmax: Math.max(zmax, 1e-6), colorscale: CLOUD_RAMP, showscale: false,
+      zsmooth: false, hoverinfo: "skip",
+    }];
+    if (proj === "pca" && p <= 3) {
+      const v = ends.MVSA;
+      traces.push({
+        type: "scatter", mode: "lines", x: [...v.map((q) => q[0]), v[0][0]],
+        y: [...v.map((q) => q[1]), v[0][1]], line: { color: INK_2, width: 1 },
+        opacity: 0.6, hoverinfo: "skip",
+      });
+    }
+    for (const m of order) {
+      const em = on(m);
+      traces.push({
+        type: "scatter", mode: "markers", name: m,
+        x: ends[m].map((q) => q[0]), y: ends[m].map((q) => q[1]),
+        customdata: ends[m].map((_, i) => i),
+        marker: {
+          symbol: PROJ_METHODS[m].symbol, size: em ? 11 : 8, color: em ? INK : INK_2,
+          line: { color: em ? INK : INK_2, width: em ? 2 : 1.25 },
+        },
+        opacity: em ? 1 : 0.7,
+        hovertemplate: `${m}, p = ${p}<br>archetype %{customdata}<extra></extra>`,
+      });
+    }
+    // Ranges cover the cloud and every archetype, so the cloud shrinks as the
+    // MVSA vertices move out with p.
+    const xs = [ext.x[0], ext.x[1], ...data.methods.flatMap((m) => ends[m].map((q) => q[0]))];
+    const ys = [ext.y[0], ext.y[1], ...data.methods.flatMap((m) => ends[m].map((q) => q[1]))];
+    const pad = (a) => {
+      const lo = Math.min(...a), hi = Math.max(...a), w = (hi - lo) * 0.07 || 1;
+      return [lo - w, hi + w];
+    };
+    const isK = p === hysime, sel = p === state.p;   // the sidebar's p: black frame
+    const axis = { range: null, showticklabels: false, ticks: "", showgrid: false,
+      zeroline: false, showline: true, linecolor: sel ? INK : AXIS_LINE,
+      linewidth: sel ? 1.5 : 1, mirror: true, fixedrange: true };
+    Plotly.react(div, traces, {
+      autosize: true, margin: { l: 4, r: 4, t: 26, b: 4 }, showlegend: false,
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "#ffffff", font: FONT,
+      hoverlabel: HOVERLABEL,
+      title: { text: isK ? `<b>p = ${p} = HySime k</b>` : `p = ${p}`,
+        font: { size: 12, color: INK }, x: 0.5, xanchor: "center", y: 0.985, yanchor: "top" },
+      xaxis: { ...axis, range: pad(xs) }, yaxis: { ...axis, range: pad(ys) },
+    }, PLOTLY_CFG);
+  }
+
+  for (const m of data.methods) {
+    const em = on(m);
+    const item = el("span", em ? "legend-item on" : "legend-item");
+    item.append(markerSwatch(PROJ_METHODS[m].symbol, em ? INK : INK_2, 9),
+      PROJ_METHODS[m].label + (em ? " (sidebar method)" : ""));
+    legend.appendChild(item);
+  }
+  const ramp = el("span", "legend-item");
+  ramp.append(el("span", "ramp-swatch"), "precincts per cell, log scale");
+  legend.appendChild(ramp);
+  const ring = el("span", "legend-item");
+  const box = el("span", "box-swatch");
+  box.style.background = "transparent";
+  box.style.borderColor = INK;
+  ring.append(box, `black frame: the sidebar's p (${state.p})`);
+  legend.appendChild(ring);
+}
+
 // ----------------------------------------------------------------- tab: compare
 
 // The compare tab is about choosing p: the sweep-wide lineage and diagnostics
@@ -1162,6 +1325,7 @@ async function renderDiagnostics() {
 async function renderCompare() {
   await renderLineage("cmp-lineage");
   await renderDiagnostics();
+  await renderProjections();
 }
 
 // ------------------------------------------------------------- tab: distributions
@@ -1522,6 +1686,7 @@ async function init() {
   markSeg("map-axis", state.loadingsAxis);
   markSeg("map-groupby", state.map.groupBy);
   markSeg("cmp-lineage-stat", state.cmp.lineageStat);
+  markSeg("cmp-projection", state.cmp.proj);
   markSeg("dist-x", state.dist.x);
   markSeg("dist-y", state.dist.y);
   markSeg("dist-axis", state.dist.axis);
@@ -1578,6 +1743,10 @@ async function init() {
     if (state.tab === "compare") {
       holdHeight(() => Promise.all([renderLineage("cmp-lineage"), renderDiagnostics()]));
     }
+  });
+  wireSeg("cmp-projection", (v) => {
+    state.cmp.proj = v;
+    if (state.tab === "compare") holdHeight(renderProjections);
   });
   wireSeg("dist-x", (v) => { state.dist.x = v; renderActive(); });
   wireSeg("dist-y", (v) => { state.dist.y = v; renderActive(); });

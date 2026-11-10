@@ -388,6 +388,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 }
 .scroll-x { overflow-x: auto; }
 
+/* Precinct cloud (PCA / UMAP): one square panel per p (p = 2..7: six across,
+   fewer when narrow); the sidebar's p gets a black plot frame (app.js). */
+.proj-grid { display: grid; gap: 10px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1180px) { .proj-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .proj-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.proj-panel {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.proj-panel .plot { aspect-ratio: 1 / 1; width: 100%; }
+.proj-note {
+  text-align: center; font-family: var(--font-mono); font-size: var(--fs--2);
+  color: var(--ink-2);
+}
+.marker-swatch { display: inline-flex; flex: none; }
+.ramp-swatch {   /* matches CLOUD_RAMP in app.js */
+  display: inline-block; width: 40px; height: 10px; flex: none; border-radius: 2px;
+  background: linear-gradient(90deg, #d4d3cc, #7d7c76);
+}
+
 /* Legend rows under a figure (line / box samples + text). */
 .legend-rule, .legend-plain {
   display: flex; flex-wrap: wrap; gap: 6px 24px; font-size: var(--fs--2); color: var(--ink-2);

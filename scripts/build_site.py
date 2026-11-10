@@ -438,6 +438,23 @@ def tab_compare() -> Section:
                 ),
                 cls="grid-fit",
             ),
+            # Notebook 16 (Li & Bioucas-Dias 2008, Fig. 1): the precinct cloud in
+            # 2-D with every method's endmembers at p = 2..7, for the sidebar's
+            # year and normalization (data/projections/, bake_projections.py).
+            card(
+                card_head(
+                    "Archetypes in the precinct cloud",
+                    None,
+                    Div(
+                        Span("Projection", cls="note"),
+                        seg_group("cmp-projection", "Projection", [("pca", "PCA"), ("umap", "UMAP")]),
+                        cls="head-control",
+                    ),
+                    sub_id="cmp-proj-sub",
+                ),
+                Div(id="cmp-proj", cls="proj-grid"),
+                Div(id="cmp-proj-legend", cls="legend-plain"),
+            ),
             cls="tab-section",
         ),
         # The archetypes at the selected p (map, loadings, mixing) are on the
