@@ -1,8 +1,8 @@
 """Notebook 09 (randomizing precinct order) as a script, run across election years.
 
 For each year (``configs/config_{year}.ini``) and each archetype count p in
-``--ps`` (notebook 09's 2..6 by default), rerun notebook 09's design against a
-**reference run** (canonical precinct order, the config's pipeline seed):
+``--ps`` (2..10 by default; notebook 09 used 2..6), rerun notebook 09's design
+against a **reference run** (canonical precinct order, the config's pipeline seed):
 
 - **Arm A — determinism check:** canonical order, same seed, rerun
   ``--arm-a-trials`` times; every rerun should be bitwise identical to the
@@ -225,7 +225,7 @@ def bake_year(
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--years", nargs="+", default=YEARS)
-    ap.add_argument("--ps", nargs="+", type=int, default=[2, 3, 4, 5, 6])
+    ap.add_argument("--ps", nargs="+", type=int, default=list(range(2, 11)))
     ap.add_argument(
         "--method",
         choices=list(METHODS),

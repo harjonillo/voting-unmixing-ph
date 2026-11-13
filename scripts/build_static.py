@@ -81,7 +81,7 @@ written it next to the NMF sweep (optional; skipped silently otherwise).
 
 Run from the repo root:
     python scripts/bake_distinctness.py        # prerequisite (~1 min/year)
-    python scripts/bake_order_sensitivity.py   # prerequisite (~5 min/year)
+    python scripts/bake_order_sensitivity.py   # prerequisite (~20-30 min/year)
     python scripts/bake_distinctness.py --method nmf       # NMF prerequisites
     python scripts/bake_order_sensitivity.py --method nmf
     python scripts/bake_projections.py         # after both distinctness bakes

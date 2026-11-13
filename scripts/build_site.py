@@ -123,12 +123,13 @@ def seg_group(group_id: str, label: str, options=(), fill: bool = False) -> Div:
     )
 
 
-def field(label_text: str, control, note: str | None = None) -> Div:
+def field(label_text: str, control, note: str | None = None, id=None) -> Div:
     """A sidebar block: label above control, optional caption below."""
     return Div(
         Span(label_text, cls="field-label"),
         control,
         Span(note, cls="note") if note else None,
+        id=id,
         cls="field",
     )
 
@@ -198,6 +199,7 @@ def sidebar() -> Aside:
                 "Archetypes p",
                 seg_group("p", "Number of archetypes p", fill=True),
                 note="Sweep trial mean; names and colors follow the lineage",
+                id="p-field",
             ),
             Div(
                 Label("Top N candidates", fr="topN", cls="field-label"),
@@ -392,16 +394,18 @@ def tab_compare() -> Section:
                 # The network is drawn at a fixed pixel width; scroll when narrow.
                 Div(Div(id="cmp-lineage"), cls="scroll-x scroll"),
                 Div(
+                    # Texts carry each line style's similarity bounds for the
+                    # selected year + metric (filled by app.js renderLineage).
                     legend_item(
                         line_swatch("rgba(58,57,54,0.5)", 4),
-                        "Matched p → p+1 (Hungarian); width and label = similarity",
+                        Span(id="cmp-lineage-leg-matched"),
                     ),
                     legend_item(
                         line_swatch("#3a3936", 1.5, "5 4"),
-                        "New archetype's closest parent (split)",
+                        Span(id="cmp-lineage-leg-split"),
                     ),
                     legend_item(
-                        line_swatch("#b5b4ad", 1, "2 4"), "Other pairs with similarity ≥ 0.35"
+                        line_swatch("#b5b4ad", 1, "2 4"), Span(id="cmp-lineage-leg-other")
                     ),
                     legend_item(Span("new", cls="tag-sample"), Span(id="cmp-lineage-new-label")),
                     cls="legend-rule",
@@ -512,8 +516,8 @@ def tab_dist() -> Section:
 def header() -> Header:
     tabs = [
         ("map", "Map / overview"),
-        ("compare", "Model comparison"),
         ("dist", "Abundance distributions"),
+        ("compare", "Model comparison"),
     ]
     return Header(
         Div(
@@ -592,8 +596,8 @@ def page() -> Html:
                     sidebar(),
                     Main(
                         tab_map(),
-                        tab_compare(),
                         tab_dist(),
+                        tab_compare(),
                         Footer(
                             logo_mark(18, edges=False, r=3),
                             Span(FOOTER_TEXT),
