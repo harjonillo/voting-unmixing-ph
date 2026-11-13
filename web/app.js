@@ -806,6 +806,28 @@ function nodeLines(names) {
 }
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+// Legend texts: each line style's lower and upper similarity over the links
+// drawn for this year + metric. Matched and split links are always drawn, so
+// their bounds are just the observed range; other pairs start at the floor.
+function lineageLegend(links, simOf) {
+  const f = (v) => v.toFixed(2);
+  const bounds = (pred) => {
+    const v = links.filter(pred).map(simOf);
+    return v.length ? [Math.min(...v), Math.max(...v)] : null;
+  };
+  const range = (b, lo) => b
+    ? `${lo ?? f(b[0])} ≤ similarity ≤ ${f(b[1])}`
+    : "none drawn for this metric";
+  const m = bounds((l) => l.matched), sp = bounds((l) => l.split);
+  const o = bounds((l) => !l.matched && !l.split);
+  document.getElementById("cmp-lineage-leg-matched").textContent =
+    `Matched p → p+1 (Hungarian): ${range(m)}; width and label = similarity`;
+  document.getElementById("cmp-lineage-leg-split").textContent =
+    `New archetype's closest parent (split): ${range(sp)}`;
+  document.getElementById("cmp-lineage-leg-other").textContent =
+    `Other pairs: ${range(o, f(LINEAGE_SIM_FLOOR))} (below ${f(LINEAGE_SIM_FLOOR)} hidden)`;
+}
+
 async function renderLineage(divId) {
   const host = document.getElementById(divId);
   const [lin, dist] = await Promise.all([
@@ -832,6 +854,7 @@ async function renderLineage(divId) {
 
   const links = lin.links.filter((l) =>
     l.matched || l.split || simOf(l) >= LINEAGE_SIM_FLOOR);
+  lineageLegend(links, simOf);
 
   // Vertical layout: first column in k order, then each column ordered by the
   // similarity-weighted mean y of its predecessors (barycenter) to limit
@@ -982,6 +1005,9 @@ const ORDER_ARMS = {
 // so a metric reads the same whichever is selected.
 const metricColor = (m) => archColor(`arch_${Object.keys(LINEAGE_METRICS).indexOf(m)}`);
 
+// Both p-choice diagnostics stop at this p (the bakes may go further).
+const DIAG_P_MAX = 10;
+
 function diagnosticsNote(divId, msg) {
   const host = document.getElementById(divId);
   Plotly.purge(host);
@@ -1007,7 +1033,7 @@ async function renderDiagnostics() {
   const legend = document.getElementById("cmp-distinct-legend");
   legend.innerHTML = "";
   if (dist) {
-    const ps = dist.ps;
+    const ps = dist.ps.filter((p) => p <= DIAG_P_MAX);
     const yOf = (m) => ps.map((p) => (dist.distinct[p] && dist.distinct[p][m])
       ? dist.distinct[p][m][stat] : null);
     // Every metric in its own color; the selected one drawn thick, with markers
@@ -1113,13 +1139,14 @@ async function renderDiagnostics() {
   // style like notebook 09's seaborn boxplot: quartile box, whiskers to the
   // furthest sample within 1.5 × IQR, points beyond drawn as outliers. On a
   // numeric x (p index ± offset) so the median and mean can be overlaid.
+  const ordPs = ord.ps.filter((p) => p <= DIAG_P_MAX);
   const BOX_W = 0.24;
   const traces = [], shapes = [];
   for (const [arm, a] of Object.entries(ORDER_ARMS)) {
-    const perP = ord.sims[arm][metric];
+    const perP = ord.sims[arm][metric].filter((_, i) => ord.ps[i] <= DIAG_P_MAX);
     traces.push({
       type: "box", name: a.label,
-      x: ord.ps.flatMap((p, i) => perP[i].map(() => i + a.dx)),
+      x: ordPs.flatMap((p, i) => perP[i].map(() => i + a.dx)),
       y: perP.flat(), width: BOX_W,
       boxpoints: "outliers", fillcolor: a.fill,
       line: { color: WHISKER, width: 1 },
@@ -1136,9 +1163,9 @@ async function renderDiagnostics() {
     });
     traces.push({
       type: "scatter", mode: "markers", name: `${a.label} mean`,
-      x: ord.ps.map((_, i) => i + a.dx), y: means,
+      x: ordPs.map((_, i) => i + a.dx), y: means,
       marker: { symbol: "diamond", size: 7, color: "#ffffff", line: { color: INK, width: 1 } },
-      customdata: ord.ps.map((p) => `p = ${p} · ${a.label}`),
+      customdata: ordPs.map((p) => `p = ${p} · ${a.label}`),
       hovertemplate: "%{customdata}<br>mean %{y:.3f}<extra></extra>",
     });
   }
@@ -1147,8 +1174,9 @@ async function renderDiagnostics() {
     height: 272, margin: { l: 44, r: 8, t: 8, b: 40 },
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
     hoverlabel: HOVERLABEL,
-    xaxis: { ...AXIS, tickvals: ord.ps.map((_, i) => i),
-      ticktext: ord.ps.map((p) => `p = ${p}`), range: [-0.6, ord.ps.length - 0.4],
+    xaxis: { ...AXIS, title: axisTitle("number of archetypes p"),
+      tickvals: ordPs.map((_, i) => i), ticktext: ordPs.map(String),
+      range: [-0.6, ordPs.length - 0.4],
       showgrid: false, zeroline: false, fixedrange: true },
     yaxis: { ...AXIS, range: [-0.1, 1.0], tickvals: [0, 0.25, 0.5, 0.75, 1],
       tickformat: ".2f", zeroline: false, fixedrange: true,
@@ -1607,16 +1635,23 @@ function fillArchChips(id, cols, value) {
   }
 }
 
+const TABS = ["map", "dist", "compare"];
+
 function switchTab(tab) {
   state.tab = tab;
-  for (const t of ["map", "compare", "dist"]) {
+  for (const t of TABS) {
     const btn = document.getElementById(`tabbtn-${t}`);
     document.getElementById(`tab-${t}`).hidden = t !== tab;
     btn.classList.toggle("on", t === tab);
     btn.setAttribute("aria-selected", String(t === tab));
   }
-  // Top N drives the loadings on the overview and distributions tabs.
-  document.getElementById("topN-field").hidden = tab === "compare";
+  // p and Top N drive the overview and distributions tabs; the compare tab is
+  // sweep-wide, so grey them out (inert: no clicks or focus) there.
+  for (const id of ["p-field", "topN-field"]) {
+    const f = document.getElementById(id);
+    f.classList.toggle("is-off", tab === "compare");
+    f.inert = tab === "compare";
+  }
   renderSummary();
   renderActive().then(resizeActivePlots);
 }
@@ -1759,7 +1794,7 @@ async function init() {
     e.target.value = state.dist.bins;
     renderActive();
   });
-  for (const t of ["map", "compare", "dist"]) {
+  for (const t of TABS) {
     document.getElementById(`tabbtn-${t}`).addEventListener("click", () => switchTab(t));
   }
 
