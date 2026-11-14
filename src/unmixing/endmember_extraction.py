@@ -376,10 +376,36 @@ def vca(
     return Ae, indice, Rp, SNR, Ud, x
 
 
-def _compute_AtransYinvLA(Y: np.ndarray, sinvl: np.ndarray) -> np.ndarray:
+def _pair_products(Y: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Row products Y[i] * Y[j] for every pair i <= j, for _compute_AtransYinvLA.
+
+    Y is fixed over a QP solve, so these are computed once per solve instead of
+    once per interior-point iteration.
+
+    Returns
+    -------
+    P : ndarray, shape (p*(p+1)/2, N)
+        Pair products, one pair per row.
+    iu, ju : ndarray, shape (p*(p+1)/2,)
+        The row indices (i, j) of each pair (``np.triu_indices(p)``).
+    """
+    iu, ju = np.triu_indices(Y.shape[0])
+    return np.ascontiguousarray(Y[iu] * Y[ju]), iu, ju
+
+
+def _compute_AtransYinvLA(
+    Y: np.ndarray, sinvl: np.ndarray, pairs: Optional[tuple] = None
+) -> np.ndarray:
     """
     Compute A^T @ diag(sinvl) @ A where A = kron(Y.T, I_p), using column-major
-    (Fortran-order) vectorization — faithful translation of computeAtransYinvLA.m.
+    (Fortran-order) vectorization (computeAtransYinvLA.m).
+
+    Entry [i*p + k, k + j*p] is sum_n Y[i, n] * SinvL[k, n] * Y[j, n], which is
+    symmetric in (i, j): it is assembled from the pair products Y[i] * Y[j]
+    (i <= j) with one matrix product, instead of the MATLAB code's tiled
+    (p^2, N) temporaries. Equal to that form up to floating-point rounding
+    (the multiplications associate differently).
 
     Parameters
     ----------
@@ -388,6 +414,8 @@ def _compute_AtransYinvLA(Y: np.ndarray, sinvl: np.ndarray) -> np.ndarray:
         (columns).
     sinvl : ndarray, shape (p*N,)
         Column-major flattened dual/slack product.
+    pairs : tuple, optional
+        ``_pair_products(Y)``, to reuse across calls with the same Y.
 
     Returns
     -------
@@ -395,24 +423,36 @@ def _compute_AtransYinvLA(Y: np.ndarray, sinvl: np.ndarray) -> np.ndarray:
         The assembled quadratic-form matrix.
     """
     p, N = Y.shape
+    P, iu, ju = _pair_products(Y) if pairs is None else pairs
 
-    Yaug = np.zeros((p * p, N))
-    SinvL = sinvl.reshape((p, N), order="F")  # (p, N)
-    SinvLaug = np.tile(SinvL, (p, 1))  # (p^2, N)
+    SinvL = np.ascontiguousarray(sinvl.reshape((p, N), order="F"))  # (p, N)
+    half = P @ SinvL.T  # (p*(p+1)/2, p): [pair (i, j), k]
 
-    for i in range(p):
-        Yaug[i * p : (i + 1) * p, :] = np.tile(Y[i : i + 1, :], (p, 1))
+    T = np.empty((p, p, p))  # T[i, k, j]
+    T[iu, :, ju] = half
+    T[ju, :, iu] = half
 
-    AtransYinvLcompact = Yaug * SinvLaug  # (p^2, N)
-    AtransYinvLAcompact = AtransYinvLcompact @ Y.T  # (p^2, p)
-
+    i, k, j = np.meshgrid(np.arange(p), np.arange(p), np.arange(p), indexing="ij")
     AtransYinvLA = np.zeros((p * p, p * p))
-    for i in range(p):
-        for k in range(p):
-            for j in range(p):
-                AtransYinvLA[i * p + k, k + j * p] = AtransYinvLAcompact[i * p + k, j]
+    AtransYinvLA[i * p + k, k + j * p] = T
 
     return AtransYinvLA
+
+
+def _min_step(num: np.ndarray, den: np.ndarray, scale: float = 1.0) -> float:
+    """
+    Step-length ratio test: min over den < 0 of (-scale * num) / den, capped at
+    1 (1 when no entry of den is negative).
+
+    Computed over the whole vector in place instead of through boolean-index
+    gathers; the ratios are the same values and min is exact, so the result is
+    identical to the masked form.
+    """
+    r = np.multiply(num, -scale)
+    np.divide(r, den, out=r)
+    r[den >= 0] = np.inf
+    v = float(r.min())
+    return 1.0 if v == np.inf else min(v, 1.0)
 
 
 def _quad_prog1(
@@ -478,6 +518,7 @@ def _quad_prog1(
     below_threshold = False
 
     nniter = 300 if throtle else 150
+    pairs = _pair_products(Y)  # Y is fixed over the solve
 
     for k in range(1, nniter + 1):
         yinvl = l / y_sl  # element-wise l/y
@@ -491,7 +532,7 @@ def _quad_prog1(
         rbeq = Aeq @ x - beq
 
         # ---- Build augmented system ----
-        AtYiLA = _compute_AtransYinvLA(Y, yinvl)
+        AtYiLA = _compute_AtransYinvLA(Y, yinvl, pairs)
         K = G + AtYiLA
         Aug = np.block([[K, Aeq.T], [Aeq, np.zeros((neq, neq))]])
 
@@ -511,13 +552,7 @@ def _quad_prog1(
 
         mi = float(y_sl @ l) / n
 
-        neg_dy = DyAff < 0
-        aDymin = float(np.min(-y_sl[neg_dy] / DyAff[neg_dy])) if np.any(neg_dy) else 1.0
-        aDymin = min(aDymin, 1.0)
-        neg_dl = DlAff < 0
-        aDlmin = float(np.min(-l[neg_dl] / DlAff[neg_dl])) if np.any(neg_dl) else 1.0
-        aDlmin = min(aDlmin, 1.0)
-        aAff = min(aDymin, aDlmin)
+        aAff = min(_min_step(y_sl, DyAff), _min_step(l, DlAff))
 
         miAff = float((y_sl + aAff * DyAff) @ (l + aAff * DlAff)) / n
         mi_safe = max(mi, 1e-16)
@@ -541,18 +576,7 @@ def _quad_prog1(
 
         tk = 1.0 - 1.0 / (k + 1)
 
-        neg_dy2 = Dy < 0
-        apri = (
-            float(np.min(-tk * y_sl[neg_dy2] / Dy[neg_dy2])) if np.any(neg_dy2) else 1.0
-        )
-        apri = min(apri, 1.0)
-        neg_dl2 = Dl < 0
-        adual = (
-            float(np.min(-tk * l[neg_dl2] / Dl[neg_dl2])) if np.any(neg_dl2) else 1.0
-        )
-        adual = min(adual, 1.0)
-
-        a = min(apri, adual)
+        a = min(_min_step(y_sl, Dy, tk), _min_step(l, Dl, tk))
         if throtle:
             a /= 10.0
 

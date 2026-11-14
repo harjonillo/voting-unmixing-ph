@@ -54,7 +54,7 @@ const state = {
   loadingsAxis: "shared",
   // Compare tab: the lineage network and the p-choice diagnostics.
   // proj: the precinct-cloud card's projection, "pca" | "umap".
-  cmp: { lineageTopN: 3, lineageMetric: "cos", lineageStat: "min", proj: "pca" },
+  cmp: { lineageTopN: 3, lineageMetric: "cos", lineageStat: "min", lineageRange: "adjusted", proj: "pca" },
   // Distributions tab: histogram x "fixed" (0 to 1) | "own"; y "count" | "share";
   // loadings x-axis "shared" | "own" (as loadingsAxis on the map tab).
   dist: { x: "fixed", y: "count", bins: 20, axis: "shared" },
@@ -772,11 +772,28 @@ async function renderMap() {
 // narrow). One column per p; each node is a fixed-width box listing its top
 // candidates, bordered in its lineage color (build_static.py's color_slot:
 // matched to the Overview run at its p, then carried along matched links).
-// Links are Béziers from box to box: matched p -> p+1 solid (width = selected
-// similarity), the extra archetype's closest parent dashed, and other pairs at
-// or above a floor dotted. Above each column: that p's min/mean pairwise
-// distance (0 = identical … 1 = distinct). Independent of p/level/weighting.
-const LINEAGE_SIM_FLOOR = 0.35; // hide near-orthogonal unmatched pairs
+// Links are Béziers from box to box. Shade = the selected similarity in four
+// equal bins (LINEAGE_SHADES, light gray → black), spanning either 0..1
+// ("fixed") or that metric's min..max over the links drawn for the year
+// ("adjusted"; the "Shade range" toggle); line style = solid
+// when the pair is the Hungarian p -> p+1 match, dashed otherwise. Unmatched
+// pairs below LINEAGE_SIM_FLOOR are hidden. Above each column: that p's min/mean
+// pairwise distance (0 = identical … 1 = distinct). Independent of
+// p/level/weighting. Keep the shades in sync with the legend in build_site.py.
+const LINEAGE_SHADES = ["#cfcec8", "#9b9a94", "#5f5e5a", "#0b0b0b"];
+const LINEAGE_SIM_FLOOR = 0.25; // hide unmatched pairs below this similarity
+// Bin edges [vmin, …, vmax] (5 edges, 4 bins): 0..1 when `fixed`, else the
+// min..max of `values`. Values outside the edges take the nearest bin.
+function lineageEdges(values, fixed) {
+  const lo = fixed ? 0 : Math.min(...values), hi = fixed ? 1 : Math.max(...values);
+  const n = LINEAGE_SHADES.length;
+  return Array.from({ length: n + 1 }, (_, i) => lo + (i * (hi - lo)) / n);
+}
+function lineageBin(v, edges) {
+  const n = LINEAGE_SHADES.length, span = edges[n] - edges[0];
+  if (!(span > 0)) return n - 1;
+  return Math.min(n - 1, Math.max(0, Math.floor(((v - edges[0]) / span) * n)));
+}
 const LINEAGE_METRICS = {
   cos12: "cosine (top 12)", cos: "cosine (full)",
   spearman: "Spearman r", wtau: "weighted tau",
@@ -806,28 +823,6 @@ function nodeLines(names) {
 }
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-// Legend texts: each line style's lower and upper similarity over the links
-// drawn for this year + metric. Matched and split links are always drawn, so
-// their bounds are just the observed range; other pairs start at the floor.
-function lineageLegend(links, simOf) {
-  const f = (v) => v.toFixed(2);
-  const bounds = (pred) => {
-    const v = links.filter(pred).map(simOf);
-    return v.length ? [Math.min(...v), Math.max(...v)] : null;
-  };
-  const range = (b, lo) => b
-    ? `${lo ?? f(b[0])} ≤ similarity ≤ ${f(b[1])}`
-    : "none drawn for this metric";
-  const m = bounds((l) => l.matched), sp = bounds((l) => l.split);
-  const o = bounds((l) => !l.matched && !l.split);
-  document.getElementById("cmp-lineage-leg-matched").textContent =
-    `Matched p → p+1 (Hungarian): ${range(m)}; width and label = similarity`;
-  document.getElementById("cmp-lineage-leg-split").textContent =
-    `New archetype's closest parent (split): ${range(sp)}`;
-  document.getElementById("cmp-lineage-leg-other").textContent =
-    `Other pairs: ${range(o, f(LINEAGE_SIM_FLOOR))} (below ${f(LINEAGE_SIM_FLOOR)} hidden)`;
-}
-
 async function renderLineage(divId) {
   const host = document.getElementById(divId);
   const [lin, dist] = await Promise.all([
@@ -852,9 +847,18 @@ async function renderLineage(divId) {
   document.getElementById("cmp-lineage-new-label").textContent =
     `No counterpart at p = ${anchorP} (takes the next free color)`;
 
-  const links = lin.links.filter((l) =>
-    l.matched || l.split || simOf(l) >= LINEAGE_SIM_FLOOR);
-  lineageLegend(links, simOf);
+  // Adjusted shade bins span the drawn links only: the hidden pairs reach far
+  // below zero on the signed metrics and would squeeze every drawn link into
+  // the top shades. The legend shows the bin edges in use.
+  const links = lin.links.filter((l) => l.matched || simOf(l) >= LINEAGE_SIM_FLOOR);
+  const edges = lineageEdges(links.map(simOf), state.cmp.lineageRange === "fixed");
+  const binOf = (l) => lineageBin(simOf(l), edges);
+  LINEAGE_SHADES.forEach((_, i) => {
+    document.getElementById(`cmp-lineage-leg-bin${i}`).textContent =
+      `${edges[i].toFixed(2)} to ${edges[i + 1].toFixed(2)}`;
+  });
+  document.getElementById("cmp-lineage-leg-dashed").textContent =
+    `Not matched (hidden below ${LINEAGE_SIM_FLOOR.toFixed(2)})`;
 
   // Vertical layout: first column in k order, then each column ordered by the
   // similarity-weighted mean y of its predecessors (barycenter) to limit
@@ -931,13 +935,14 @@ async function renderLineage(divId) {
     fig.appendChild(col);
   }
 
-  // Links (faint first, so the lineage draws on top), then labels on the
-  // matched and split links only.
+  // Links, dashed then solid and light to dark within each, so the lineage
+  // and the strongest pairs draw on top. Labels on the matched links and on
+  // each new archetype's closest parent (split) only.
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("width", width); svg.setAttribute("height", height);
   svg.setAttribute("aria-hidden", "true");
-  const kindOf = (l) => (l.split ? 2 : l.matched ? 1 : 0);
-  for (const l of [...links].sort((a, b) => kindOf(a) - kindOf(b))) {
+  const order = (l) => (l.matched ? 10 : 0) + binOf(l);
+  for (const l of [...links].sort((a, b) => order(a) - order(b))) {
     const s = lin.nodes[l.source], t = lin.nodes[l.target];
     const x0 = cx(s.p) + nodeW / 2, y0 = cy(l.source);
     const x1 = cx(t.p) - nodeW / 2, y1 = cy(l.target), xm = (x0 + x1) / 2;
@@ -945,21 +950,14 @@ async function renderLineage(divId) {
     path.setAttribute("d", `M${x0} ${y0} C${xm} ${y0} ${xm} ${y1} ${x1} ${y1}`);
     path.setAttribute("fill", "none");
     path.setAttribute("stroke-linecap", "round");
-    if (l.split) {
-      path.setAttribute("stroke", WHISKER); path.setAttribute("stroke-width", "1.5");
-      path.setAttribute("stroke-dasharray", "5 4");
-    } else if (l.matched) {
-      path.setAttribute("stroke", "rgba(58,57,54,0.42)");
-      path.setAttribute("stroke-width", (1 + 5 * Math.max(simOf(l), 0)).toFixed(2));
-    } else {
-      path.setAttribute("stroke", "#b5b4ad"); path.setAttribute("stroke-width", "1");
-      path.setAttribute("stroke-dasharray", "2 4");
-    }
+    path.setAttribute("stroke", LINEAGE_SHADES[binOf(l)]);
+    path.setAttribute("stroke-width", "1.5");
+    if (!l.matched) path.setAttribute("stroke-dasharray", "5 4");
     svg.appendChild(path);
     if (l.matched || l.split) {
       const lab = el("span", "lin-label", simOf(l).toFixed(2));
       lab.style.left = `${xm}px`; lab.style.top = `${(y0 + y1) / 2}px`;
-      lab.title = `p${s.p}·${s.label} → p${t.p}·${t.label}${l.split ? " · split" : " · matched"}\n` +
+      lab.title = `p${s.p}·${s.label} → p${t.p}·${t.label}${l.split ? " · not matched (new archetype's closest parent)" : " · matched"}\n` +
         Object.entries(LINEAGE_METRICS).map(([m, name]) => `${name} ${l.sims[m]}`).join(" · ");
       fig.appendChild(lab);
     }
@@ -1721,6 +1719,7 @@ async function init() {
   markSeg("map-axis", state.loadingsAxis);
   markSeg("map-groupby", state.map.groupBy);
   markSeg("cmp-lineage-stat", state.cmp.lineageStat);
+  markSeg("cmp-lineage-range", state.cmp.lineageRange);
   markSeg("cmp-projection", state.cmp.proj);
   markSeg("dist-x", state.dist.x);
   markSeg("dist-y", state.dist.y);
@@ -1778,6 +1777,10 @@ async function init() {
     if (state.tab === "compare") {
       holdHeight(() => Promise.all([renderLineage("cmp-lineage"), renderDiagnostics()]));
     }
+  });
+  wireSeg("cmp-lineage-range", (v) => {
+    state.cmp.lineageRange = v;
+    if (state.tab === "compare") holdHeight(() => renderLineage("cmp-lineage"));
   });
   wireSeg("cmp-projection", (v) => {
     state.cmp.proj = v;

@@ -185,19 +185,19 @@ Data in the mockup: the distinctness values and order-sensitivity box stats are 
 
 ### Controls (top of tab)
 
-Similarity metric (select), Column distance (Min / Mean segmented), Candidates per node (number). These drive the lineage and both diagnostics, as now.
+Similarity metric (select), Column distance (Min / Mean segmented). These drive the lineage and both diagnostics. Candidates per node (number) and Shade range (Fixed / Adjusted segmented) only affect the lineage and sit inside its card, at the upper right beside the caption.
 
 ### Archetype lineage
 
 - One column per p. Above each column: `p = N` and `min d 0.xx` (mono). The column for the HySime k is in primary ink, the rest muted.
 - Nodes are fixed-width boxes (132px) with a 1.5px border in the archetype color, white fill, 6px radius. Line 1: top candidate in semibold plus a mono tag (`A1`, or `new`). Line 2: the next candidates joined with ` · `, muted.
 - Links are cubic Béziers from the right middle of the source box to the left middle of the target box:
-  - matched: solid, `rgba(58,57,54,0.42)`, width `1 + 5 × sim`
-  - split (new archetype's closest parent): 1.5px dashed `5 4`, `#3a3936`
-  - other pairs ≥ 0.35: 1px dotted `2 4`, `#b5b4ad`, no label
+  - all links 1.5px; shade = similarity in four equal bins (light to dark): `#cfcec8`, `#9b9a94`, `#5f5e5a`, `#0b0b0b`. A "Shade range" toggle picks the span: fixed 0 to 1, or adjusted to the metric's min and max over the drawn links of the year (default)
+  - matched (Hungarian p → p+1): solid
+  - not matched: dashed `5 4`; hidden below 0.25
 - Similarity labels on matched and split links only: mono, small, white background.
 - **Color by lineage, anchored to the Overview run.** Match the sweep's archetypes at p = k (HySime k) to the main run's archetypes, give them the main run's colors, then propagate along matched links backwards to p = 2 and forwards to p_max. A node with no counterpart at p = k takes the next free slot (7th slot `#993955`). Past 8 slots, fold extra nodes into a neutral gray. This needs a small addition to the bake: a `color_slot` per lineage node.
-- A legend row under the figure explains the three link styles and the "no counterpart" color.
+- A three-row legend under the figure: link shades with their similarity ranges, the two line styles, and the `new` node tag.
 - The figure is wider than a narrow screen: wrap it in an `overflow-x: auto` box.
 
 ### Archetype distinctness vs p

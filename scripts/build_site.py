@@ -379,36 +379,69 @@ def tab_compare() -> Section:
                         [("min", "Min pairwise"), ("mean", "Mean pairwise")],
                     ),
                 ),
-                labeled(
-                    "Candidates per node",
-                    Input(type="number", id="cmp-lineage-topn", min=2, max=12, value=3, step=1),
-                ),
                 cls="toolbar",
             ),
             Figure(
-                Figcaption(
-                    Span("Archetype lineage", cls="card-title"),
-                    Span(id="cmp-lineage-sub", cls="card-sub"),
-                    cls="card-head-text wide",
+                Div(
+                    Figcaption(
+                        Span("Archetype lineage", cls="card-title"),
+                        Span(id="cmp-lineage-sub", cls="card-sub"),
+                        cls="card-head-text wide",
+                    ),
+                    # Controls for this figure only, at the card's upper right (the
+                    # strip above the card also drives the diagnostics below).
+                    Div(
+                        labeled(
+                            "Candidates per node",
+                            Input(type="number", id="cmp-lineage-topn", min=2, max=12, value=3, step=1),
+                        ),
+                        # Lineage link shades only: 0..1, or the drawn links' min..max.
+                        labeled(
+                            "Shade range",
+                            seg_group(
+                                "cmp-lineage-range",
+                                "Shade range",
+                                [("fixed", "Fixed 0 to 1"), ("adjusted", "Adjusted to data")],
+                            ),
+                        ),
+                        cls="toolbar",
+                    ),
+                    cls="card-head split",
                 ),
                 # The network is drawn at a fixed pixel width; scroll when narrow.
                 Div(Div(id="cmp-lineage"), cls="scroll-x scroll"),
                 Div(
-                    # Texts carry each line style's similarity bounds for the
-                    # selected year + metric (filled by app.js renderLineage).
-                    legend_item(
-                        line_swatch("rgba(58,57,54,0.5)", 4),
-                        Span(id="cmp-lineage-leg-matched"),
+                    # Three rows: link shade (similarity bin), line style
+                    # (matched or not), node tag. Shades are LINEAGE_SHADES in
+                    # app.js, which fills in the bin edges for the "Shade
+                    # range" toggle.
+                    Div(
+                        Span("Link shade: similarity", cls="legend-lead"),
+                        legend_item(line_swatch("#cfcec8", 2), Span(id="cmp-lineage-leg-bin0")),
+                        legend_item(line_swatch("#9b9a94", 2), Span(id="cmp-lineage-leg-bin1")),
+                        legend_item(line_swatch("#5f5e5a", 2), Span(id="cmp-lineage-leg-bin2")),
+                        legend_item(line_swatch("#0b0b0b", 2), Span(id="cmp-lineage-leg-bin3")),
+                        cls="legend-plain",
                     ),
-                    legend_item(
-                        line_swatch("#3a3936", 1.5, "5 4"),
-                        Span(id="cmp-lineage-leg-split"),
+                    Div(
+                        Span("Link style", cls="legend-lead"),
+                        legend_item(
+                            line_swatch("#3a3936", 1.5), "Matched p → p+1 (Hungarian)"
+                        ),
+                        legend_item(
+                            line_swatch("#3a3936", 1.5, "5 4"),
+                            Span(id="cmp-lineage-leg-dashed"),
+                        ),
+                        cls="legend-plain",
                     ),
-                    legend_item(
-                        line_swatch("#b5b4ad", 1, "2 4"), Span(id="cmp-lineage-leg-other")
+                    Div(
+                        Span("Node tag", cls="legend-lead"),
+                        legend_item(
+                            Span("new", cls="tag-sample"), Span(id="cmp-lineage-new-label")
+                        ),
+                        cls="legend-plain",
                     ),
-                    legend_item(Span("new", cls="tag-sample"), Span(id="cmp-lineage-new-label")),
-                    cls="legend-rule",
+                    cls="legend-rule legend-rows",
                 ),
                 cls="card",
             ),
