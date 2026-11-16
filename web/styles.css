@@ -396,7 +396,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .scroll-x { overflow-x: auto; }
 
 /* Precinct cloud (PCA / UMAP): one square panel per p (p = 2..7: six across,
-   fewer when narrow); the sidebar's p gets a black plot frame (app.js). */
+   fewer when narrow); the panel open in the enlarged view gets a black plot
+   frame (app.js: markOpenPanel). */
 .proj-grid { display: grid; gap: 10px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 @media (max-width: 1180px) { .proj-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .proj-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -404,9 +405,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
 }
 .proj-panel .plot { aspect-ratio: 1 / 1; width: 100%; }
-.proj-panel { cursor: var(--hand); border-radius: 4px; outline-offset: 3px; }
-.proj-panel:hover { outline: 2px solid #a8a7a0; }
-.proj-panel.open, .proj-panel.open:hover { outline: 2px solid var(--ink); }
+.proj-panel { cursor: var(--hand); }
+/* Hover: a dashed black frame over the plot frame. The insets are the panel
+   plots' Plotly margins (app.js: t 26, others 4), less the frame's width. */
+.proj-panel .plot { position: relative; }
+.proj-panel:hover .plot::after {
+  content: ""; position: absolute; inset: 25px 3px 3px 3px;
+  border: 1.5px dashed var(--ink); pointer-events: none;
+}
 /* The clicked panel, enlarged, with its own PC pickers (zoom and pan on). */
 .proj-detail {
   display: flex; flex-direction: column; gap: 8px;

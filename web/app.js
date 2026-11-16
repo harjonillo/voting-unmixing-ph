@@ -1282,12 +1282,9 @@ async function renderProjections() {
     note.title = `MVSA's most negative loading at p = ${p} (${units().loading})`;
     panel.append(div, note);
     panel.dataset.p = p;
-    panel.classList.toggle("open", p === state.cmp.projP);
     panel.addEventListener("click", () => {
       state.cmp.projP = state.cmp.projP === p ? null : p;
-      for (const q of host.querySelectorAll(".proj-panel")) {
-        q.classList.toggle("open", +q.dataset.p === state.cmp.projP);
-      }
+      markOpenPanel();
       renderProjDetail(data, url);
     });
     host.appendChild(panel);
@@ -1326,7 +1323,7 @@ async function renderProjections() {
       const lo = Math.min(...a), hi = Math.max(...a), w = (hi - lo) * 0.07 || 1;
       return [lo - w, hi + w];
     };
-    const isK = p === hysime, sel = p === state.p;   // the sidebar's p: black frame
+    const isK = p === hysime, sel = p === state.cmp.projP;   // the enlarged panel: black frame
     const axis = { range: null, showticklabels: false, ticks: "", showgrid: false,
       zeroline: false, showline: true, linecolor: sel ? INK : AXIS_LINE,
       linewidth: sel ? 1.5 : 1, mirror: true, fixedrange: true };
@@ -1354,9 +1351,22 @@ async function renderProjections() {
   const box = el("span", "box-swatch");
   box.style.background = "transparent";
   box.style.borderColor = INK;
-  ring.append(box, `black frame: the sidebar's p (${state.p})`);
+  ring.append(box, "black frame: the panel shown enlarged below");
   legend.appendChild(ring);
   renderProjDetail(data, url);
+}
+
+// Black plot frame on the panel that is open in the enlarged view (the others
+// get the default axis line back).
+function markOpenPanel() {
+  for (const q of document.querySelectorAll("#cmp-proj .proj-panel")) {
+    const open = +q.dataset.p === state.cmp.projP;
+    const line = { linecolor: open ? INK : AXIS_LINE, linewidth: open ? 1.5 : 1 };
+    Plotly.relayout(q.querySelector(".plot"), {
+      "xaxis.linecolor": line.linecolor, "xaxis.linewidth": line.linewidth,
+      "yaxis.linecolor": line.linecolor, "yaxis.linewidth": line.linewidth,
+    });
+  }
 }
 
 // The clicked panel, enlarged: the same cloud and archetypes with axes, zoom
@@ -1410,7 +1420,7 @@ function renderProjDetail(data, url) {
   close.type = "button";
   close.addEventListener("click", () => {
     state.cmp.projP = null;
-    for (const q of document.querySelectorAll("#cmp-proj .proj-panel")) q.classList.remove("open");
+    markOpenPanel();
     renderProjDetail(data, url);
   });
   head.appendChild(close);
