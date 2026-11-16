@@ -187,12 +187,12 @@ def sidebar() -> Aside:
         ),
         Section(
             H2("Model", cls="overline"),
-            # Options come from the manifest's "methods" (MVSA / NMF); every tab
-            # reads that method's baked tree. Abundances are SUNSAL either way.
+            # Options come from the manifest's "methods" (MVSA / NMF / VCA); every
+            # tab reads that method's baked tree. Abundances are always SUNSAL.
             field(
                 "Endmember extraction",
                 seg_group("method", "Endmember extraction", fill=True),
-                note="Abundances are SUNSAL for both",
+                note="Abundances are SUNSAL for all",
             ),
             # Every tab shows the sweep's trial mean at this p (app.js fills it).
             field(
@@ -490,7 +490,43 @@ def tab_compare() -> Section:
                     sub_id="cmp-proj-sub",
                 ),
                 Div(id="cmp-proj", cls="proj-grid"),
+                # the clicked panel, enlarged (app.js: renderProjDetail)
+                Div(id="cmp-proj-detail", cls="proj-detail", hidden=True),
                 Div(id="cmp-proj-legend", cls="legend-plain"),
+            ),
+            # Notebook 11 (Li et al. 2015, Sec. V and IV-B): pixel purity checks
+            # for the sidebar's method across the sweep (purity/{year}.json).
+            Div(
+                Figure(
+                    Figcaption(
+                        Span("Precincts outside the simplex", cls="card-title"),
+                        Span(id="cmp-outside-sub", cls="card-sub"),
+                        cls="card-head-text",
+                    ),
+                    Div(id="cmp-outside"),
+                    Div(id="cmp-outside-legend", cls="legend-plain"),
+                    cls="card",
+                ),
+                Figure(
+                    Figcaption(
+                        Span("Smallest per-archetype maximum purity", cls="card-title"),
+                        Span(id="cmp-minpurity-sub", cls="card-sub"),
+                        cls="card-head-text",
+                    ),
+                    Div(id="cmp-minpurity"),
+                    Div(id="cmp-minpurity-legend", cls="legend-plain"),
+                    cls="card",
+                ),
+                cls="grid-fit",
+            ),
+            card(
+                card_head(
+                    "Precincts at or above a purity threshold",
+                    None,
+                    sub_id="cmp-purity-sub",
+                ),
+                Div(id="cmp-purity"),
+                Div(id="cmp-purity-legend", cls="legend-plain"),
             ),
             cls="tab-section",
         ),

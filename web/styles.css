@@ -404,6 +404,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
 }
 .proj-panel .plot { aspect-ratio: 1 / 1; width: 100%; }
+.proj-panel { cursor: var(--hand); border-radius: 4px; outline-offset: 3px; }
+.proj-panel:hover { outline: 2px solid #a8a7a0; }
+.proj-panel.open, .proj-panel.open:hover { outline: 2px solid var(--ink); }
+/* The clicked panel, enlarged, with its own PC pickers (zoom and pan on). */
+.proj-detail {
+  display: flex; flex-direction: column; gap: 8px;
+  border-top: 1px solid var(--hairline-2); padding-top: 16px;
+}
+.proj-detail[hidden] { display: none; }
+.proj-detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.proj-detail-title { font-weight: 600; margin-right: auto; }
+.proj-detail-plot { width: 100%; max-width: 760px; height: 600px; }
 .proj-note {
   text-align: center; font-family: var(--font-mono); font-size: var(--fs--2);
   color: var(--ink-2);
@@ -411,7 +423,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .marker-swatch { display: inline-flex; flex: none; }
 .ramp-swatch {   /* matches CLOUD_RAMP in app.js */
   display: inline-block; width: 40px; height: 10px; flex: none; border-radius: 2px;
-  background: linear-gradient(90deg, #d4d3cc, #7d7c76);
+  background: linear-gradient(90deg, #d4d3cc, #33322f);
 }
 
 /* Legend rows under a figure (line / box samples + text). */

@@ -22,10 +22,11 @@ src/
   figures/              archetype/abundance plots + choropleth helpers
 scripts/
   run_pipeline.py       CSV -> HySime -> MVSA -> SUNSAL -> data/processed/
-                        (--method nmf: NMF endmembers -> data/processed/<year>/nmf/)
+                        (--method nmf / vca: NMF / VCA endmembers ->
+                        data/processed/<year>/{nmf,vca}/)
   run_sweep.py          multi-trial sweep over p = p_min..p_max (error bars,
                         stability, lineage) -> data/processed/sweep/p{p}/
-                        (--method nmf as above)
+                        (--method nmf / vca as above)
   run_nndsvd.py         deterministic NNDSVD-init NMF run per p, aligned to the
                         NMF sweep (overlaid on the NMF loadings bars)
   fetch_boundaries.py   downloads municipal boundaries (GADM, optional)
@@ -55,8 +56,9 @@ python scripts/run_sweep.py          # ~5 min: powers the Model-comparison tab
 
 Each of `run_pipeline.py`, `run_sweep.py`, `bake_distinctness.py` and
 `bake_order_sensitivity.py` takes `--method nmf` to use NMF endmembers
-(notebook 10; non-negative loadings) instead of MVSA — abundances are SUNSAL
-either way. The site's sidebar switches between the two.
+(notebook 10; non-negative loadings) or `--method vca` to use VCA endmembers
+(the picked precincts themselves; no parameters) instead of MVSA — abundances
+are SUNSAL whichever the method. The site's sidebar switches between the three.
 `run_nndsvd.py --config ...` (after the NMF sweep) adds the deterministic
 NNDSVD-initialized NMF result, drawn as dotted-line dots over the random-init
 trials' loadings bars.
@@ -109,7 +111,7 @@ change. `site/` is generated (gitignored) and rebuilt in CI from the committed
 | `06_candidate_sensitivity` | how archetypes shift when each top candidate's row is dropped and the pipeline re-run |
 | `07_cross_year_sanity_checks` | side-by-side per-year summary stats (counts, turnout, top vote-getters) to sanity-check the inputs |
 | `10_nmf_nndsvd_init` | deterministic NNDSVD-init NMF vs the random-init sweep: frozen zeros under `mu`, fit and archetype agreement, `nndsvda`/`nndsvdar`/`cd` alternatives |
-| `11_pure_precincts` | "pure pixel" precincts: top-12/15/18 vote concentration vs chance, identical-ballot bound, where they are, which slates, and where they sit in the MVSA/NMF simplex |
+| `11_pure_precincts` | pixel purity as the unmixing papers assess it: each method's assumption (VCA, MVSA, NMF), precincts outside the estimated simplex (Li et al. 2015), and maximum-abundance purity, per year, normalization and p |
 
 ## Notes
 

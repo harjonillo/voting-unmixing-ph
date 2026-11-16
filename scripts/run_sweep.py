@@ -1,7 +1,7 @@
 """Multi-trial endmember-count sweep.
 
 For each p in [sweep] p_min..p_max, run n_trials MVSA+SUNSAL (or, with
---method nmf, NMF+SUNSAL) trials, trial t seeded base_seed + t, align archetypes across trials by linear sum assignment (cosine
+--method nmf / --method vca, NMF+SUNSAL / VCA+SUNSAL) trials, trial t seeded base_seed + t, align archetypes across trials by linear sum assignment (cosine
 similarity, reference = lowest-RMSE trial), and write per-p artifacts under
 <processed_path>/sweep/p{p}/:
 
@@ -16,8 +16,18 @@ similarity, reference = lowest-RMSE trial), and write per-p artifacts under
     abundances_ref.parquet                 reference trial, full precinct
                                            resolution (geography + arch cols)
     meta.json                              seeds, rmse_trials, stability, ...
+    purity_trials.parquet                  per-trial pixel purity checks from
+                                           the literature (src.unmixing.purity;
+                                           notebook 11), long format: trial,
+                                           measure, archetype (-1 = whole
+                                           data set), value
+    purity_stats.parquet                   their trial mean/std
+    purity_ref.parquet                     reference trial: precincts at or
+                                           above each purity threshold (the
+                                           site build reads this, since
+                                           abundances_ref is not committed)
 
-NMF sweeps are written to <processed_path>/nmf/sweep/p{p}/ instead (same files),
+NMF and VCA sweeps are written to <processed_path>/{nmf,vca}/sweep/p{p}/ instead (same files),
 and --normalization vote_sum runs to <processed_path>/vote_sum/[nmf/]sweep/p{p}/
 (src.config.run_subdir).
 
@@ -59,6 +69,10 @@ from src.unmixing import (
     extract_endmembers,
     match_to_reference,
     method_params,
+    outside_simplex,
+    purity,
+    purity_counts,
+    PURITY_THRESHOLDS,
     sunsal_mod,
 )
 
@@ -140,7 +154,24 @@ def run_one_trial(Y, p, seed, method, params, sunsal_al_iters, sunsal_tol):
         verbose="no",
     )
     rmse = float(np.sqrt(np.mean((Y - M @ A) ** 2)))
-    return M, A, rmse
+    return M, A, rmse, {**outside_simplex(M, Y), **purity(A)}
+
+
+def purity_frame(measures: list[dict], perms: list[np.ndarray]) -> pd.DataFrame:
+    """Long-format per-trial purity measures (trial, measure, archetype, value).
+
+    Per-archetype measures are reordered by each trial's alignment permutation,
+    so archetype j means the same archetype in every trial; whole-data-set
+    measures get archetype -1.
+    """
+    rows = []
+    for t, (m, perm) in enumerate(zip(measures, perms)):
+        for name, v in m.items():
+            if np.ndim(v) == 0:
+                rows.append((t, name, -1, float(v)))
+            else:
+                rows += [(t, name, j, float(x)) for j, x in enumerate(np.asarray(v)[perm])]
+    return pd.DataFrame(rows, columns=["trial", "measure", "archetype", "value"])
 
 
 def aggregate_to_municipality(A, codes, w, n_units):
@@ -230,8 +261,10 @@ def main():
         M_aligned = np.empty((n_trials, Y.shape[0], p))
         A_aligned = [None] * n_trials
         sims = np.empty((n_trials, p))
-        for t, (M, A, _) in enumerate(results):
+        perms = [None] * n_trials
+        for t, (M, A, _, _) in enumerate(results):
             perm, sim = match_to_reference(M_ref, M)
+            perms[t] = np.asarray(perm)
             M_aligned[t] = M[:, perm]
             A_aligned[t] = A[perm, :]
             sims[t] = sim
@@ -272,6 +305,16 @@ def main():
             out / "level_stats.parquet", index=False, compression=PARQUET_COMPRESSION
         )
         df_ref.to_parquet(out / "abundances_ref.parquet", index=False)
+        purity_trials = purity_frame([r[3] for r in results], perms)
+        purity_trials.to_parquet(out / "purity_trials.parquet", index=False)
+        purity_trials.groupby(["measure", "archetype"])["value"].agg(
+            mean="mean", std=lambda v: v.std(ddof=1)
+        ).reset_index().to_parquet(out / "purity_stats.parquet", index=False)
+        pd.DataFrame({
+            "threshold": PURITY_THRESHOLDS,
+            "n_at_least": purity_counts(A_aligned[ref]),
+            "n_precincts": A_aligned[ref].shape[1],
+        }).to_parquet(out / "purity_ref.parquet", index=False)
         with open(out / "meta.json", "w") as f:
             json.dump(
                 {

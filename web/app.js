@@ -54,7 +54,8 @@ const state = {
   loadingsAxis: "shared",
   // Compare tab: the lineage network and the p-choice diagnostics.
   // proj: the precinct-cloud card's projection, "pca" | "umap".
-  cmp: { lineageTopN: 3, lineageMetric: "cos", lineageStat: "min", lineageRange: "adjusted", proj: "pca" },
+  cmp: { lineageTopN: 3, lineageMetric: "cos", lineageStat: "min", lineageRange: "adjusted", proj: "pca",
+    projP: null, projX: 1, projY: 2 },   // enlarged cloud panel: its p and PC pair
   // Distributions tab: histogram x "fixed" (0 to 1) | "own"; y "count" | "share";
   // loadings x-axis "shared" | "own" (as loadingsAxis on the map tab).
   dist: { x: "fixed", y: "count", bins: 20, axis: "shared" },
@@ -1195,24 +1196,27 @@ const projURL = (year) => {
   return `${base ? `${DATA}/${base}` : DATA}/projections/${year}.json`;
 };
 const PROJ_METHODS = {
-  VCA: { symbol: "x-thin-open", key: null, label: "VCA" },
+  VCA: { symbol: "x-thin-open", key: "vca", label: "VCA" },
   MVSA: { symbol: "square-open", key: "mvsa", label: "MVSA" },
   NMF: { symbol: "diamond-open", key: "nmf", label: "NMF" },
 };
-const CLOUD_RAMP = [[0, "#d4d3cc"], [1, "#7d7c76"]];
+const CLOUD_RAMP = [[0, "#d4d3cc"], [1, "#33322f"]];
 
 // Sparse density -> bins x bins z of log10 counts (empty cells null, so they stay
 // transparent). Memoized: the same grid is shared by every p panel.
+// `flip` swaps the axes (the baked x becomes y), for a PC pair drawn the other
+// way round.
 const _densityZ = new Map();
-function densityZ(url, proj, d, bins) {
-  const key = `${url}#${proj}`;
+function densityZ(url, proj, d, bins, flip = false) {
+  const key = `${url}#${proj}#${flip}`;
   if (!_densityZ.has(key)) {
     const z = Array.from({ length: bins }, () => new Array(bins).fill(null));
     let i = 0, zmax = 0;
     d.idx.forEach((gap, k) => {
       i += gap;
       const v = Math.log10(d.count[k]);
-      z[Math.floor(i / bins)][i % bins] = v;
+      const row = Math.floor(i / bins), col = i % bins;
+      if (flip) z[col][row] = v; else z[row][col] = v;
       if (v > zmax) zmax = v;
     });
     _densityZ.set(key, { z, zmax });
@@ -1257,11 +1261,12 @@ async function renderProjections() {
     ? `The ${n} precincts on their first two principal components ` +
       `(${(100 * P.explained[0]).toFixed(0)}% and ${(100 * P.explained[1]).toFixed(0)}% of ` +
       "the variance), with each method's archetypes, one panel per p. PCA is linear, so " +
-      `an archetype outside the cloud stays outside. ${corner}`
+      `an archetype outside the cloud stays outside. ${corner} Click a panel to enlarge ` +
+      "it and see the other principal components."
     : `The ${n} precincts in a UMAP map, with each method's archetypes placed by the same ` +
       "map. UMAP keeps neighborhoods, not distances: archetypes beyond the cloud are " +
       "pulled back onto it, so read it for which part of the cloud an archetype points " +
-      `at, not how far out it is. ${corner}`;
+      `at, not how far out it is. ${corner} Click a panel to enlarge it.`;
 
   const { z, zmax } = densityZ(url, proj, P.density, data.bins);
   const ext = P.density.extent;
@@ -1276,6 +1281,15 @@ async function renderProjections() {
     const note = el("div", "proj-note", `MVSA min ${data.min_loading[p].MVSA.toFixed(2)}`);
     note.title = `MVSA's most negative loading at p = ${p} (${units().loading})`;
     panel.append(div, note);
+    panel.dataset.p = p;
+    panel.classList.toggle("open", p === state.cmp.projP);
+    panel.addEventListener("click", () => {
+      state.cmp.projP = state.cmp.projP === p ? null : p;
+      for (const q of host.querySelectorAll(".proj-panel")) {
+        q.classList.toggle("open", +q.dataset.p === state.cmp.projP);
+      }
+      renderProjDetail(data, url);
+    });
     host.appendChild(panel);
     const traces = [{
       type: "heatmap", z, x0: ext.x[0] + dx / 2, dx, y0: ext.y[0] + dy / 2, dy,
@@ -1283,7 +1297,7 @@ async function renderProjections() {
       zsmooth: false, hoverinfo: "skip",
     }];
     if (proj === "pca" && p <= 3) {
-      const v = ends.MVSA;
+      const v = ends[data.methods.find(on) || "MVSA"];   // the sidebar method's simplex
       traces.push({
         type: "scatter", mode: "lines", x: [...v.map((q) => q[0]), v[0][0]],
         y: [...v.map((q) => q[1]), v[0][1]], line: { color: INK_2, width: 1 },
@@ -1342,16 +1356,281 @@ async function renderProjections() {
   box.style.borderColor = INK;
   ring.append(box, `black frame: the sidebar's p (${state.p})`);
   legend.appendChild(ring);
+  renderProjDetail(data, url);
+}
+
+// The clicked panel, enlarged: the same cloud and archetypes with axes, zoom
+// (scroll) and pan (drag). For PCA at p >= 4 the panel also offers the other
+// principal components, PC1 to PC(p - 1): a simplex with p vertices spans
+// p - 1 dimensions, so those are the components its vertices can differ on.
+// PC1 × PC2 uses the grid's density; the other pairs are baked per pair
+// (pca.pairs["i-j"], i < j) and flipped here when drawn as j × i.
+function renderProjDetail(data, url) {
+  const host = document.getElementById("cmp-proj-detail");
+  const old = host.querySelector(".plot");
+  if (old) Plotly.purge(old);
+  host.innerHTML = "";
+  const p = state.cmp.projP;
+  if (!data || p == null || !data.ps.includes(p)) { host.hidden = true; return; }
+  host.hidden = false;
+  const proj = state.cmp.proj, P = data[proj];
+  const isPca = proj === "pca";
+  // PCs on offer: up to p - 1, at least two, and no more than were baked
+  const nPc = isPca ? Math.max(2, Math.min(p - 1, P.pairs ? P.explained.length : 2)) : 2;
+  let { projX: ix, projY: iy } = state.cmp;
+  if (!isPca || ix > nPc || iy > nPc || ix === iy) { ix = 1; iy = 2; }
+  if (isPca) { state.cmp.projX = ix; state.cmp.projY = iy; }
+
+  const head = el("div", "proj-detail-head");
+  head.appendChild(el("span", "proj-detail-title",
+    `p = ${p}` + (isPca ? ` · PC${ix} × PC${iy}` : " · UMAP")));
+  const picker = (label, value, other, set) => {
+    const wrap = el("div", "head-control");
+    wrap.appendChild(el("span", "note", label));
+    const group = el("div", "seg-group");
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", label);
+    for (let k = 1; k <= nPc; k++) {
+      const b = el("button", k === value ? "seg on" : "seg", `PC${k}`);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(k === value));
+      b.disabled = k === other;   // the other axis already shows this PC
+      b.addEventListener("click", () => { set(k); renderProjDetail(data, url); });
+      group.appendChild(b);
+    }
+    wrap.appendChild(group);
+    return wrap;
+  };
+  if (isPca && nPc > 2) {
+    head.append(
+      picker("Horizontal", ix, iy, (k) => { state.cmp.projX = k; }),
+      picker("Vertical", iy, ix, (k) => { state.cmp.projY = k; }));
+  }
+  const close = el("button", "seg", "Close");
+  close.type = "button";
+  close.addEventListener("click", () => {
+    state.cmp.projP = null;
+    for (const q of document.querySelectorAll("#cmp-proj .proj-panel")) q.classList.remove("open");
+    renderProjDetail(data, url);
+  });
+  head.appendChild(close);
+  const div = el("div", "plot proj-detail-plot");
+  host.append(head, div, el("p", "note",
+    "Scroll to zoom, drag to pan, double-click to reset." +
+    (isPca && p >= 3 && nPc < 3 ? " At p = 3 the simplex is a triangle, fully shown on PC1 × PC2." : "") +
+    (isPca && p === 2 ? " At p = 2 the two archetypes span a line." : "")));
+
+  // density of the chosen pair (flipped when asked for as j × i)
+  const first = !isPca || (Math.min(ix, iy) === 1 && Math.max(ix, iy) === 2);
+  const flip = ix > iy;
+  const lo = Math.min(ix, iy), hi = Math.max(ix, iy);
+  const d = first ? P.density : P.pairs[`${lo}-${hi}`];
+  const bins = first ? data.bins : P.pair_bins;
+  const { z, zmax } = densityZ(url, first ? proj : `pca${lo}-${hi}`, d, bins, flip);
+  const ex = flip ? d.extent.y : d.extent.x, ey = flip ? d.extent.x : d.extent.y;
+  const dx = (ex[1] - ex[0]) / bins, dy = (ey[1] - ey[0]) / bins;
+  const ends = P.ends[p];
+  const cx = ix - 1, cy = iy - 1;
+  const on = (m) => PROJ_METHODS[m].key === state.method;
+  const order = [...data.methods].sort((a, b) => on(a) - on(b));
+  const traces = [{
+    type: "heatmap", z, x0: ex[0] + dx / 2, dx, y0: ey[0] + dy / 2, dy,
+    zmin: 0, zmax: Math.max(zmax, 1e-6), colorscale: CLOUD_RAMP, showscale: false,
+    zsmooth: false, hoverinfo: "skip",
+  }];
+  if (isPca && p <= 3) {
+    const v = ends[data.methods.find(on) || "MVSA"];   // the sidebar method's simplex
+    traces.push({
+      type: "scatter", mode: "lines", x: [...v.map((q) => q[cx]), v[0][cx]],
+      y: [...v.map((q) => q[cy]), v[0][cy]], line: { color: INK_2, width: 1 },
+      opacity: 0.6, hoverinfo: "skip",
+    });
+  }
+  for (const m of order) {
+    const em = on(m);
+    traces.push({
+      type: "scatter", mode: "markers", name: m,
+      x: ends[m].map((q) => q[cx]), y: ends[m].map((q) => q[cy]),
+      customdata: ends[m].map((_, i) => i),
+      marker: {
+        symbol: PROJ_METHODS[m].symbol, size: em ? 14 : 10, color: em ? INK : INK_2,
+        line: { color: em ? INK : INK_2, width: em ? 2.25 : 1.5 },
+      },
+      opacity: em ? 1 : 0.7,
+      hovertemplate: `${m}, p = ${p}<br>archetype %{customdata}<br>` +
+        "(%{x:.2f}, %{y:.2f})<extra></extra>",
+    });
+  }
+  const xs = [ex[0], ex[1], ...data.methods.flatMap((m) => ends[m].map((q) => q[cx]))];
+  const ys = [ey[0], ey[1], ...data.methods.flatMap((m) => ends[m].map((q) => q[cy]))];
+  const pad = (a) => {
+    const mn = Math.min(...a), mx = Math.max(...a), w = (mx - mn) * 0.07 || 1;
+    return [mn - w, mx + w];
+  };
+  const pct = (k) => `${(100 * P.explained[k - 1]).toFixed(1)}% of the variance`;
+  // Steady zooming: fixed margins (automargin would resize the plot area as the
+  // tick labels change), and the y axis tied to the x axis at the opening
+  // view's pixels-per-unit ratio, so every zoom scales both axes together and
+  // the cloud keeps the shape it has in the small panel.
+  const margin = { l: 64, r: 12, t: 12, b: 48 };
+  const xr = pad(xs), yr = pad(ys);
+  const plotW = Math.max(1, div.clientWidth - margin.l - margin.r);
+  const plotH = Math.max(1, div.clientHeight - margin.t - margin.b);
+  const scaleratio = (plotH / (yr[1] - yr[0])) / (plotW / (xr[1] - xr[0]));
+  const axis = { ...AXIS, automargin: false, showgrid: false, zeroline: false,
+    showline: true, mirror: true };
+  Plotly.react(div, traces, {
+    autosize: true, margin, showlegend: false,
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "#ffffff", font: FONT,
+    hoverlabel: HOVERLABEL, dragmode: "pan",
+    xaxis: { ...axis, range: xr,
+      title: axisTitle(isPca ? `PC${ix} (${pct(ix)})` : "UMAP 1") },
+    yaxis: { ...axis, range: yr, scaleanchor: "x", scaleratio,
+      title: axisTitle(isPca ? `PC${iy} (${pct(iy)})` : "UMAP 2") },
+  }, { ...PLOTLY_CFG, scrollZoom: true });
 }
 
 // ----------------------------------------------------------------- tab: compare
 
 // The compare tab is about choosing p: the sweep-wide lineage and diagnostics
 // (the archetypes at the selected p are on the Overview).
+// ------------------------------------------- compare tab: pixel purity checks
+// Notebook 11, for the sidebar's year and normalization (purity/{year}.json per
+// method, baked by build_static.py from the sweep). Two charts against p (mean
+// ± 1 SD over the sweep's trials): the share of precincts outside the simplex
+// of the archetypes (Li et al. 2015, Sec. V), and the smallest per-archetype
+// maximum purity (purity = a precinct's largest abundance, Sec. IV-B). Like the
+// precinct cloud, both show every method, by marker shape: the sidebar's method
+// in ink, the others thinner in gray. Then, for the sidebar's method and from
+// each p's reference trial, the number of precincts at or above every purity
+// threshold, one line per p.
+const purityURL = (year, method) => {
+  const base = MANIFEST.methods[method].norms[activeNorm()]?.base;
+  return `${base ? `${DATA}/${base}` : DATA}/purity/${year}.json`;
+};
+const PURITY_GRAY = "#a8a7a0";
+// One color per p from the dark end of the sequential ramp (light = small p).
+function pColors(ps) {
+  const ramp = MANIFEST.theme.sequential.map((s) => s[1]);
+  const start = Math.max(0, ramp.length - ps.length);
+  return ps.map((_, i) => ramp[Math.min(ramp.length - 1, start + i)]);
+}
+
+async function renderPurity() {
+  const ids = ["cmp-outside", "cmp-minpurity", "cmp-purity"];
+  // every baked method's file for this year, in the cloud's order
+  const methods = Object.values(PROJ_METHODS).filter((m) => MANIFEST.methods[m.key]);
+  const loaded = await Promise.all(methods.map((m) =>
+    getJSON(purityURL(state.year, m.key)).catch(() => null)));
+  const byMethod = Object.fromEntries(methods.map((m, i) => [m.key, loaded[i]]));
+  const data = byMethod[state.method];
+  for (const id of ids) document.getElementById(`${id}-legend`).innerHTML = "";
+  if (!data) {
+    for (const id of ids) {
+      document.getElementById(`${id}-sub`).textContent = "";
+      diagnosticsNote(id, "No purity data for this run — rerun scripts/run_sweep.py.");
+    }
+    return;
+  }
+  const hysime = yearMeta(state.year).hysime_kf;
+  const over = `Mean ± 1 SD over ${data.n_trials} trials.`;
+  document.getElementById("cmp-outside-sub").textContent =
+    `Share of the ${data.n_precincts.toLocaleString()} precincts that fall outside the ` +
+    `simplex of each method's archetypes. ${over} ` +
+    "MVSA keeps every precinct inside, so it is 0 by construction.";
+  document.getElementById("cmp-minpurity-sub").textContent =
+    "Purity is a precinct's largest abundance. Per trial: the highest purity among the " +
+    `precincts each archetype dominates, then the lowest of these over archetypes. ${over} ` +
+    "VCA's archetypes are precincts, so it is 1 by construction.";
+  document.getElementById("cmp-purity-sub").textContent =
+    `Number of precincts whose purity (largest abundance) under ${methodLabel()} is at ` +
+    "least each threshold, in the sweep's reference trial (lowest RMSE). One line per p; " +
+    "log scale, so a line ends where no precinct is left.";
+
+  const vsP = (id, key, title, dp) => {
+    const shapes = [], annotations = [];
+    if (hysime && data.ps.includes(hysime)) {
+      shapes.push({
+        type: "line", x0: hysime, x1: hysime, yref: "paper", y0: 0, y1: 1,
+        line: { color: "#8a8984", width: 1, dash: "dash" },
+      });
+      annotations.push({
+        x: hysime, yref: "paper", y: 1, yanchor: "bottom", showarrow: false,
+        text: `HySime k = ${hysime}`, font: { size: 11, color: INK_2 },
+      });
+    }
+    // the sidebar's method last, so it is drawn on top
+    const order = [...methods].sort((a, b) =>
+      (a.key === state.method) - (b.key === state.method));
+    const traces = order.filter((m) => byMethod[m.key]).map((m) => {
+      const d = byMethod[m.key], stat = d[key], em = m.key === state.method;
+      const color = em ? INK : PURITY_GRAY;
+      return {
+        type: "scatter", mode: "lines+markers", name: m.label, x: d.ps, y: stat.mean,
+        error_y: { type: "data", array: stat.std, color: em ? WHISKER : PURITY_GRAY,
+          thickness: 1, width: em ? 3 : 2 },
+        line: { color, width: em ? 2 : 1.25 },
+        marker: { symbol: m.symbol, color, size: em ? 9 : 7,
+          line: { color, width: em ? 2 : 1.5 } },
+        customdata: stat.std,
+        hovertemplate:
+          `${m.label}<br>p = %{x}: %{y:.${dp}f} ± %{customdata:.${dp}f}<extra></extra>`,
+      };
+    });
+    Plotly.react(id, traces, {
+      height: 272, margin: { l: 44, r: 16, t: 20, b: 40 }, showlegend: false,
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+      hoverlabel: HOVERLABEL, shapes, annotations,
+      xaxis: { ...AXIS, title: axisTitle("number of archetypes p"), tickvals: data.ps,
+        showgrid: false, fixedrange: true },
+      yaxis: { ...AXIS, range: [-0.04, 1.06], tickvals: [0, 0.25, 0.5, 0.75, 1],
+        tickformat: ".2f", fixedrange: true, zeroline: false, showline: true,
+        title: axisTitle(title) },
+    }, PLOTLY_CFG);
+    const legend = document.getElementById(`${id}-legend`);
+    for (const m of methods.filter((mm) => byMethod[mm.key])) {
+      const em = m.key === state.method;
+      const item = el("span", em ? "legend-item on" : "legend-item");
+      item.append(markerSwatch(m.symbol, em ? INK : PURITY_GRAY, 9),
+        m.label + (em ? " (sidebar method)" : ""));
+      legend.appendChild(item);
+    }
+  };
+  vsP("cmp-outside", "share_outside", "share of precincts outside", 3);
+  vsP("cmp-minpurity", "min_arch_purity", "smallest per-archetype max purity", 2);
+
+  const legend = document.getElementById("cmp-purity-legend");
+  const colors = pColors(data.ps);
+  const traces = data.ps.map((p, i) => ({
+    type: "scatter", mode: "lines+markers", name: `p = ${p}`,
+    x: data.thresholds, y: data.n_at_least[p].map((n) => (n > 0 ? n : null)),
+    line: { color: colors[i], width: 2 }, marker: { color: colors[i], size: 5 },
+    hovertemplate: `p = ${p}<br>purity ≥ %{x:.2f}: %{y:,} precincts<extra></extra>`,
+  }));
+  Plotly.react("cmp-purity", traces, {
+    height: 340, margin: { l: 56, r: 16, t: 12, b: 44 }, showlegend: false,
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+    hoverlabel: HOVERLABEL,
+    xaxis: { ...AXIS, title: axisTitle("purity threshold"), range: [-0.02, 1.02],
+      dtick: 0.1, tickformat: ".1f", zeroline: false, fixedrange: true },
+    yaxis: { ...AXIS, type: "log", dtick: 1, tickformat: ",d", fixedrange: true,
+      showline: true, title: axisTitle("precincts at or above the threshold") },
+  }, PLOTLY_CFG);
+  data.ps.forEach((p, i) => {
+    const item = el("span", "legend-item");
+    const sw = el("span", "line-swatch");
+    sw.style.height = "2.5px";
+    sw.style.background = colors[i];
+    item.append(sw, `p = ${p}`);
+    legend.appendChild(item);
+  });
+}
+
 async function renderCompare() {
   await renderLineage("cmp-lineage");
   await renderDiagnostics();
   await renderProjections();
+  await renderPurity();
 }
 
 // ------------------------------------------------------------- tab: distributions

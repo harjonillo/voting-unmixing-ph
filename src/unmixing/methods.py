@@ -9,8 +9,11 @@ runs a method with the same config-driven parameters and seeding:
 - ``nmf``  — non-negative matrix factorization (notebook 10), W rescaled to the
   data scale (see ``endmember_extraction.nmf``). Seeded through
   ``random_state``.
+- ``vca``  — Vertex Component Analysis: the picked precincts themselves (as
+  projected onto VCA's subspace) are the endmembers. No parameters. Seeded
+  through the global NumPy RNG, like MVSA.
 
-Abundances are estimated from the endmembers with SUNSAL either way.
+Abundances are estimated from the endmembers with SUNSAL whichever the method.
 """
 
 from __future__ import annotations
@@ -21,10 +24,10 @@ import io
 
 import numpy as np
 
-from .endmember_extraction import mvsa, nmf
+from .endmember_extraction import mvsa, nmf, vca
 
 # method key (CLI / paths / site) -> display label
-METHODS = {"mvsa": "MVSA", "nmf": "NMF"}
+METHODS = {"mvsa": "MVSA", "nmf": "NMF", "vca": "VCA"}
 
 
 def method_params(unmix: configparser.SectionProxy, method: str) -> dict:
@@ -43,6 +46,8 @@ def method_params(unmix: configparser.SectionProxy, method: str) -> dict:
             "max_iter": unmix.getint("nmf_max_iter", 1000),
             "tol": unmix.getfloat("nmf_tol", 1e-4),
         }
+    if method == "vca":
+        return {}
     raise ValueError(f"unknown method {method!r}; expected one of {list(METHODS)}")
 
 
@@ -50,6 +55,8 @@ def params_tag(method: str, params: dict) -> str:
     """Short filename-safe tag pinning a method's parameters (for run caches)."""
     if method == "mvsa":
         return f"mm{params['MM_iters']}"
+    if method == "vca":
+        return "vca"
     return (
         f"nmf-{params['init']}-{params['beta_loss']}-{params['solver']}"
         f"-it{params['max_iter']}-tol{params['tol']:g}"
@@ -68,7 +75,7 @@ def extract_endmembers(
     p : int
         Number of endmembers.
     seed : int
-        Run seed (global RNG for MVSA, ``random_state`` for NMF).
+        Run seed (global RNG for MVSA and VCA, ``random_state`` for NMF).
     method : str
         A key of ``METHODS``.
     params : dict
@@ -81,5 +88,9 @@ def extract_endmembers(
         return M
     if method == "nmf":
         M, _ = nmf(Y, p, random_state=seed, **params)
+        return M
+    if method == "vca":
+        with contextlib.redirect_stdout(io.StringIO()):  # per-run SNR chatter
+            M, *_ = vca(Y, Endmembers=p, verbose="off")
         return M
     raise ValueError(f"unknown method {method!r}; expected one of {list(METHODS)}")

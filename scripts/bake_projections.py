@@ -27,13 +27,20 @@ normalization, shared by the MVSA and NMF views)::
       "year": "2025", "normalization": "actual_voters", "seed": 42,
       "ps": [2, ...], "n_precincts": 92486, "bins": 512,
       "methods": ["VCA", "MVSA", "NMF"],
-      "pca":  {"explained": [r1, r2], "density": D, "ends": {"<p>": {method: [[x, y], ...]}}},
-      "umap": {"density": D, "ends": {...}},
+      "pca":  {"explained": [r1, ..., rK], "density": D,
+               "ends": {"<p>": {method: [[pc1, ..., pcK], ...]}},
+               "pair_bins": 256, "pairs": {"1-3": D, "2-3": D, ...}},
+      "umap": {"density": D, "ends": {"<p>": {method: [[x, y], ...]}}},
       "min_loading": {"<p>": {method: m}}
     }
 
 with ``D = {"extent": {"x": [min, max], "y": [min, max]}, "idx": [...], "count": [...]}``
 (nonzero cells, row-major with the row from y, indices delta-encoded).
+
+PCA keeps K = p_max - 1 components (a simplex with p vertices spans p - 1
+dimensions), so the site can show the cloud on any pair of them: "density" is
+PC1 × PC2, and "pairs" holds every other pair "i-j" (i < j, x = PC i, y = PC j)
+on a coarser ``--pair-bins`` grid.
 
 Usage::
 
@@ -79,8 +86,8 @@ def rnd(a) -> list:
     return np.vectorize(lambda v: float(f"{v:.{SIG}g}"))(a).tolist()
 
 
-def bake_year(year: str, ps: list[int], bins: int, normalization: str | None,
-              recompute: bool) -> dict:
+def bake_year(year: str, ps: list[int], bins: int, pair_bins: int,
+              normalization: str | None, recompute: bool) -> dict:
     config = year_config(year, normalization)
     t0 = time.time()
     Y = preprocess_from_config(load_complete(config), config, verbose=False).Y
@@ -92,9 +99,11 @@ def bake_year(year: str, ps: list[int], bins: int, normalization: str | None,
         }
         for p in ps
     }
-    pca = PCA(2).fit(Y.T)
+    n_pcs = max(2, max(ps) - 1)
+    pca = PCA(n_pcs).fit(Y.T)
+    scores = pca.transform(Y.T)
     reducer = load_or_fit_umap(Y, config, year, recompute)
-    proj = {"pca": (pca.transform(Y.T), pca.transform), "umap": (reducer.embedding_, reducer.transform)}
+    proj = {"pca": (scores, pca.transform), "umap": (reducer.embedding_, reducer.transform)}
 
     out = {
         "year": year,
@@ -107,10 +116,18 @@ def bake_year(year: str, ps: list[int], bins: int, normalization: str | None,
     }
     for name, (cloud, transform) in proj.items():
         out[name] = {
-            "density": density(cloud, bins),
+            "density": density(cloud[:, :2], bins),
             "ends": {str(p): {m: rnd(transform(ends[p][m].T)) for m in METHODS} for p in ps},
         }
-    out["pca"] = {"explained": rnd(pca.explained_variance_ratio_), **out["pca"]}
+    out["pca"] = {
+        "explained": rnd(pca.explained_variance_ratio_),
+        **out["pca"],
+        "pair_bins": pair_bins,
+        "pairs": {
+            f"{i + 1}-{j + 1}": density(scores[:, [i, j]], pair_bins)
+            for i in range(n_pcs) for j in range(i + 1, n_pcs) if (i, j) != (0, 1)
+        },
+    }
     out["min_loading"] = {
         str(p): {m: float(f"{ends[p][m].min():.{SIG}g}") for m in METHODS} for p in ps
     }
@@ -126,6 +143,8 @@ def main() -> None:
     ap.add_argument("--p-min", type=int, default=2)
     ap.add_argument("--p-max", type=int, default=7)
     ap.add_argument("--bins", type=int, default=512, help="density grid per axis")
+    ap.add_argument("--pair-bins", type=int, default=256,
+                    help="density grid per axis for the PCA pairs past PC1 × PC2")
     ap.add_argument(
         "--normalization",
         choices=list(NORMALIZATIONS),
@@ -141,7 +160,8 @@ def main() -> None:
     years = args.years or (YEARS if args.normalization == "vote_sum" else PER_BALLOT_YEARS)
     ps = list(range(args.p_min, args.p_max + 1))
     for year in years:
-        payload = bake_year(year, ps, args.bins, args.normalization, args.recompute)
+        payload = bake_year(year, ps, args.bins, args.pair_bins, args.normalization,
+                            args.recompute)
         # data/projections/[<normalization>/]{year}.json — method-independent
         out_dir = args.out / "projections" / run_subdir(
             year_config(year, args.normalization), "mvsa"

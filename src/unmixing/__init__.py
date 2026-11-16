@@ -12,6 +12,7 @@ from .matching import (
 )
 from .metrics import resolution
 from .methods import METHODS, method_params, extract_endmembers
+from .purity import PURITY_THRESHOLDS, outside_simplex, purity, purity_counts
 
 __all__ = [
     # Endmember extraction
@@ -39,7 +40,12 @@ __all__ = [
     "relabel_density_to_reference",
     # Metrics
     "resolution",
-    # Method switch (MVSA / NMF) shared by the pipeline scripts
+    # Pixel purity checks from the unmixing literature (notebook 11)
+    "outside_simplex",
+    "purity",
+    "purity_counts",
+    "PURITY_THRESHOLDS",
+    # Method switch (MVSA / NMF / VCA) shared by the pipeline scripts
     "METHODS",
     "method_params",
     "extract_endmembers",

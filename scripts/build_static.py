@@ -32,16 +32,19 @@ What it writes under ``--out`` (default ``site/data``)::
                                        Prerequisites).
     order_sensitivity/{year}.json      copied from data/order_sensitivity/ (see
                                        Prerequisites).
+    purity/{year}.json                 pixel purity checks per p (notebook 11),
+                                       from the sweep's purity_trials.parquet
+                                       and purity_ref.parquet
     projections/{year}.json            copied from data/projections/ (see
                                        Prerequisites); one per normalization,
                                        shared by MVSA and NMF (not under nmf/).
-    nmf/...                            the same per-year tree (values/, loadings/,
+    {nmf,vca}/...                      the same per-year tree (values/, loadings/,
                                        sweep/, lineage/, distinctness/,
-                                       order_sensitivity/) for NMF endmembers —
+                                       order_sensitivity/) for NMF / VCA endmembers —
                                        the sidebar's extraction-method switch.
                                        Geometry stays shared at the top level.
-                                       Years without NMF outputs are skipped.
-    vote_sum/[nmf/]...                 the same tree again for vote-sum
+                                       Years without that method's outputs are skipped.
+    vote_sum/[{nmf,vca}/]...           the same tree again for vote-sum
                                        normalization (the sidebar's
                                        normalization switch; NORMS). The top
                                        level holds per-ballot runs, which
@@ -71,9 +74,9 @@ configs/config_{year}.ini; rerun them after changing a year's data or its
                                        -> data/projections/ (needs umap-learn;
                                        reuses bake_distinctness.py's endmembers).
 
-NMF counterparts come from the same scripts with ``--method nmf`` (outputs
-under data/processed/<year>/nmf/, data/distinctness/nmf/,
-data/order_sensitivity/nmf/), and vote-sum counterparts with
+NMF and VCA counterparts come from the same scripts with ``--method nmf`` /
+``--method vca`` (outputs under data/processed/<year>/{nmf,vca}/,
+data/distinctness/{nmf,vca}/, data/order_sensitivity/{nmf,vca}/), and vote-sum counterparts with
 ``--normalization vote_sum`` (one more vote_sum/ level above nmf/; 2013/2016
 default to vote_sum in their configs). The NMF loadings bars also overlay the
 deterministic NNDSVD-initialized run when ``scripts/run_nndsvd.py`` has
@@ -84,6 +87,8 @@ Run from the repo root:
     python scripts/bake_order_sensitivity.py   # prerequisite (~20-30 min/year)
     python scripts/bake_distinctness.py --method nmf       # NMF prerequisites
     python scripts/bake_order_sensitivity.py --method nmf
+    python scripts/bake_distinctness.py --method vca       # VCA prerequisites
+    python scripts/bake_order_sensitivity.py --method vca
     python scripts/bake_projections.py         # after both distinctness bakes
     python scripts/bake_projections.py --normalization vote_sum
     python scripts/run_nndsvd.py --config configs/config_{year}.ini  # optional
@@ -762,6 +767,52 @@ def run_dir(out: Path, norm: str, method: str) -> Path:
     return out.joinpath(*[x for x in parts if x])
 
 
+def build_purity(cfg, method: str, sweep: dict) -> dict | None:
+    """Pixel purity checks of notebook 11 for every p of one run's sweep
+    (Li et al. 2015, Sec. V and IV-B; src/unmixing/purity.py).
+
+    Per p, over the sweep's trials: mean and SD of the share of precincts
+    outside the simplex, and of the smallest per-archetype maximum purity (the
+    largest purity among the precincts each archetype dominates, then the
+    minimum over archetypes). From the reference trial (purity_ref.parquet,
+    written by run_sweep.py): the number of precincts with purity at or above
+    each threshold. Returns None when the sweep has no purity files (run before
+    they were added).
+    """
+    ps, outside, min_pur, counts = [], [], [], {}
+    n_trials = n_precincts = None
+    for p in sorted(sweep):
+        folder = method_path(cfg, method, "sweep", f"p{p}")
+        if not all((folder / f).exists() for f in ("purity_trials.parquet", "purity_ref.parquet")):
+            continue
+        t = pd.read_parquet(folder / "purity_trials.parquet")
+        share = t[t.measure == "share_outside"].set_index("trial")["value"]
+        arch = t[(t.measure == "max_purity") & (t.archetype >= 0)]
+        lowest = arch.pivot(index="trial", columns="archetype", values="value").min(axis=1)
+        ref = pd.read_parquet(folder / "purity_ref.parquet")
+        thresholds = [float(t) for t in ref["threshold"]]
+        ps.append(p)
+        outside.append((share.mean(), share.std(ddof=1)))
+        min_pur.append((lowest.mean(), lowest.std(ddof=1)))
+        counts[str(p)] = [int(n) for n in ref["n_at_least"]]
+        n_trials, n_precincts = int(share.size), int(ref["n_precincts"].iloc[0])
+    if not ps:
+        return None
+    stat = lambda rows: {
+        "mean": [_round(m, 4) for m, _ in rows],
+        "std": [_round(s, 4) for _, s in rows],
+    }
+    return {
+        "ps": ps,
+        "n_trials": n_trials,
+        "n_precincts": n_precincts,
+        "share_outside": stat(outside),
+        "min_arch_purity": stat(min_pur),
+        "thresholds": thresholds,
+        "n_at_least": counts,
+    }
+
+
 def bake_year(
     year: str,
     cfg,
@@ -900,6 +951,11 @@ def bake_year(
                 lvl[w_tag(weighted)] = {"mean": mean_recs, "std": std_recs}
             sw["levels"][level] = lvl
         write(f"sweep/{year}_p{p}.json", sw)
+
+    # --- pixel purity checks across the sweep (notebook 11) ---
+    purity_payload = build_purity(cfg, method, sweep)
+    if purity_payload is not None:
+        write(f"purity/{year}.json", {"year": year, **purity_payload})
 
     # --- archetype lineage across the whole sweep (comparison network) ---
     if len(sweep) > 1:
