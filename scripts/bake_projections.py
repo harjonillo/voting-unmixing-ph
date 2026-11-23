@@ -11,9 +11,12 @@ shared across p; the endmembers are placed with the fitted projection
 ``--bins`` density over each projection's bounding box (src.projection.density),
 not as points, so the file stays small whatever the precinct count.
 
-MVSA and NMF endmembers are the config-seed runs cached by
-scripts/bake_distinctness.py (run it first; missing ones are computed here and
-cached the same way). VCA endmembers and the UMAP fits share notebook 16's cache
+The endmembers are the site's archetypes: each method's sweep trial mean at p
+(``loadings_mean``, scripts/run_sweep.py; run it first), the same loadings every
+other tab shows, so endmember k of a method is its sweep column k and the site
+colors it by that column's lineage slot. A (p, method) without a sweep falls
+back to one config-seed run (MVSA / NMF: scripts/bake_distinctness.py's cache;
+VCA: notebook 16's), with a warning. The UMAP fits share notebook 16's cache
 (data/notebook_experiments/16_endmember_projections/, gitignored); a first UMAP
 fit takes about 2 minutes per year. Needs ``umap-learn`` (``pip install
 umap-learn``), which is not in requirements.txt: CI copies the baked files and
@@ -63,6 +66,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.config import load_config, run_subdir, set_normalization
 from src.data import load_complete
+from src.data.loading import load_sweep
 from src.data.preprocessing import NORMALIZATIONS, preprocess_from_config
 from src.projection import density, load_or_extract, load_or_fit_umap, load_or_vca
 
@@ -86,19 +90,35 @@ def rnd(a) -> list:
     return np.vectorize(lambda v: float(f"{v:.{SIG}g}"))(a).tolist()
 
 
+def sweep_endmembers(sweep: dict, labels: list[str], p: int) -> np.ndarray | None:
+    """The sweep's trial-mean endmembers at p as an (L, p) array, rows in
+    `labels` order, or None when the sweep lacks p or some candidate."""
+    entry = sweep.get(p)
+    if entry is None:
+        return None
+    mean = entry["loadings_mean"].reindex(labels)
+    if mean.shape[1] != p or mean.isna().any().any():
+        return None
+    return mean.to_numpy()
+
+
 def bake_year(year: str, ps: list[int], bins: int, pair_bins: int,
               normalization: str | None, recompute: bool) -> dict:
     config = year_config(year, normalization)
     t0 = time.time()
-    Y = preprocess_from_config(load_complete(config), config, verbose=False).Y
-    ends = {
-        p: {
-            "VCA": load_or_vca(Y, config, year, p, recompute),
-            "MVSA": load_or_extract(Y, config, year, p, "mvsa", recompute),
-            "NMF": load_or_extract(Y, config, year, p, "nmf", recompute),
-        }
-        for p in ps
-    }
+    pre = preprocess_from_config(load_complete(config), config, verbose=False)
+    Y = pre.Y
+    sweeps = {m: load_sweep(config, method=m.lower()) for m in METHODS}
+    ends = {}
+    for p in ps:
+        ends[p] = {}
+        for m in METHODS:
+            M = sweep_endmembers(sweeps[m], pre.candidate_labels, p)
+            if M is None:  # no sweep at this p: one config-seed run instead
+                print(f"  (!) {year} p = {p}: no {m} sweep, plotting a config-seed run")
+                M = (load_or_vca(Y, config, year, p, recompute) if m == "VCA"
+                     else load_or_extract(Y, config, year, p, m.lower(), recompute))
+            ends[p][m] = M
     n_pcs = max(2, max(ps) - 1)
     pca = PCA(n_pcs).fit(Y.T)
     scores = pca.transform(Y.T)

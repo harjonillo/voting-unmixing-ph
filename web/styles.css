@@ -421,7 +421,35 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .proj-detail[hidden] { display: none; }
 .proj-detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
 .proj-detail-title { font-weight: 600; margin-right: auto; }
-.proj-detail-plot { width: 100%; max-width: 760px; height: 600px; }
+/* Enlarged cloud with the archetypes' compact loading bars to its right
+   (below it when narrow). */
+.proj-detail-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 24px; }
+.proj-detail-plot { flex: 1 1 420px; min-width: 0; max-width: 760px; height: 600px; }
+.proj-bars {
+  flex: 1 1 260px; max-width: 340px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.proj-bars > .note { margin: 0 0 2px; }
+.proj-bars-arch { display: flex; flex-direction: column; padding: 2px 4px; }
+.proj-bars-arch.on { background: var(--hairline); }   /* its point is hovered */
+.proj-bars-arch .plot-title { margin-bottom: 2px; }
+.proj-bars-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 96px 38px; align-items: center;
+  gap: 8px; height: 15px; font-size: var(--fs--2); line-height: 15px;
+}
+.proj-bars-row .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.proj-bars-row .track { position: relative; height: 9px; }
+.proj-bars-row .bar { position: absolute; top: 0; bottom: 0; }
+/* ± 1 SD whisker: a line with end caps, in the Overview bars' whisker ink */
+.proj-bars-row .sd {
+  position: absolute; top: 2px; bottom: 2px; box-sizing: border-box; min-width: 2px;
+  border-left: 1px solid #3a3936; border-right: 1px solid #3a3936;
+  background: linear-gradient(#3a3936, #3a3936) center / 100% 1.5px no-repeat;
+}
+.proj-bars-row .zero {
+  position: absolute; top: -3px; bottom: -3px; width: 1px; background: #a8a7a0;
+}
+.proj-bars-row .val { font-family: var(--font-mono); color: var(--ink-muted); text-align: right; }
 .proj-note {
   text-align: center; font-family: var(--font-mono); font-size: var(--fs--2);
   color: var(--ink-2);

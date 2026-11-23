@@ -1185,12 +1185,13 @@ async function renderDiagnostics() {
 
 // ------------------------------------- compare tab: archetypes in the precinct cloud
 // Notebook 16 (Li & Bioucas-Dias 2008, Fig. 1): the precincts in two dimensions
-// (PCA or UMAP, the card's own toggle) with the VCA, MVSA and NMF endmembers at
-// each p overlaid, for the sidebar's year and normalization
+// (PCA or UMAP, the card's own toggle) with the VCA, MVSA and NMF archetypes
+// (each method's sweep trial mean, as on every tab) at each p overlaid, for the sidebar's year and normalization
 // (projections/{year}.json, baked by scripts/bake_projections.py; one file per
 // normalization, so it lives in the MVSA tree whichever method is selected).
-// Precincts are a sparse log-count density; methods differ by marker shape, the
-// sidebar's method in ink, the others smaller in gray (hue means archetype).
+// Precincts are a sparse log-count density; methods differ by marker shape. The
+// sidebar method's points take their archetype's color (as on every tab); the
+// other methods are smaller and gray.
 const projURL = (year) => {
   const base = MANIFEST.methods.mvsa.norms[activeNorm()]?.base;
   return `${base ? `${DATA}/${base}` : DATA}/projections/${year}.json`;
@@ -1224,6 +1225,29 @@ function densityZ(url, proj, d, bins, flip = false) {
   return _densityZ.get(key);
 }
 
+// Display column ("arch_<lineage slot>") of each of the sidebar method's n
+// points at p. The plotted endmembers are the method's sweep archetypes (point k
+// = sweep column k), so the lineage gives each the name and color it has on the
+// rest of the site.
+function projArchCols(lin, p, n) {
+  const toSlot = lineageSlots(lin, p);
+  return Array.from({ length: n }, (_, k) => toSlot(`arch_${k}`));
+}
+// Marker trace of method m's endmembers (`pts`: [[x, y], ...]); `cols` (the
+// archetype columns, sidebar method only) colors and names each point.
+function projMarkers(m, p, pts, cols, size, width, coords) {
+  const color = cols ? cols.map(archColor) : INK_2;
+  return {
+    type: "scatter", mode: "markers", name: m,
+    x: pts.map((q) => q[0]), y: pts.map((q) => q[1]),
+    customdata: cols ? cols.map(archLabel) : pts.map((_, i) => `archetype ${i}`),
+    marker: { symbol: PROJ_METHODS[m].symbol, size, color, line: { color, width } },
+    opacity: cols ? 1 : 0.7,
+    hovertemplate: `${m}, p = ${p}<br>%{customdata}` +
+      (coords ? "<br>(%{x:.2f}, %{y:.2f})" : "") + "<extra></extra>",
+  };
+}
+
 function markerSwatch(symbol, color, size) {
   const s = 14, c = s / 2, r = size / 2;
   const shapes = {
@@ -1242,7 +1266,9 @@ async function renderProjections() {
   const sub = document.getElementById("cmp-proj-sub");
   const legend = document.getElementById("cmp-proj-legend");
   const url = projURL(state.year);
-  const data = await getJSON(url).catch(() => null);
+  const [data, lin] = await Promise.all([
+    getJSON(url).catch(() => null), getJSON(lineageURL(state.year)).catch(() => null),
+  ]);
   for (const d of host.querySelectorAll(".plot")) Plotly.purge(d);
   host.innerHTML = "";
   legend.innerHTML = "";
@@ -1260,10 +1286,12 @@ async function renderProjections() {
   sub.textContent = proj === "pca"
     ? `The ${n} precincts on their first two principal components ` +
       `(${(100 * P.explained[0]).toFixed(0)}% and ${(100 * P.explained[1]).toFixed(0)}% of ` +
-      "the variance), with each method's archetypes, one panel per p. PCA is linear, so " +
+      "the variance), with each method's archetypes (the sweep's trial mean, as on the " +
+      "map), one panel per p. PCA is linear, so " +
       `an archetype outside the cloud stays outside. ${corner} Click a panel to enlarge ` +
       "it and see the other principal components."
-    : `The ${n} precincts in a UMAP map, with each method's archetypes placed by the same ` +
+    : `The ${n} precincts in a UMAP map, with each method's archetypes (the sweep's ` +
+      "trial mean, as on the map) placed by the same " +
       "map. UMAP keeps neighborhoods, not distances: archetypes beyond the cloud are " +
       "pulled back onto it, so read it for which part of the cloud an archetype points " +
       `at, not how far out it is. ${corner} Click a panel to enlarge it.`;
@@ -1273,6 +1301,7 @@ async function renderProjections() {
   const dx = (ext.x[1] - ext.x[0]) / data.bins, dy = (ext.y[1] - ext.y[0]) / data.bins;
   const on = (m) => PROJ_METHODS[m].key === state.method;
   const order = [...data.methods].sort((a, b) => on(a) - on(b));   // emphasized last (on top)
+  const shown = new Set();   // archetype columns drawn in color, for the legend
 
   for (const p of data.ps) {
     const ends = P.ends[p];
@@ -1285,7 +1314,7 @@ async function renderProjections() {
     panel.addEventListener("click", () => {
       state.cmp.projP = state.cmp.projP === p ? null : p;
       markOpenPanel();
-      renderProjDetail(data, url);
+      renderProjDetail(data, url, lin);
     });
     host.appendChild(panel);
     const traces = [{
@@ -1303,17 +1332,9 @@ async function renderProjections() {
     }
     for (const m of order) {
       const em = on(m);
-      traces.push({
-        type: "scatter", mode: "markers", name: m,
-        x: ends[m].map((q) => q[0]), y: ends[m].map((q) => q[1]),
-        customdata: ends[m].map((_, i) => i),
-        marker: {
-          symbol: PROJ_METHODS[m].symbol, size: em ? 11 : 8, color: em ? INK : INK_2,
-          line: { color: em ? INK : INK_2, width: em ? 2 : 1.25 },
-        },
-        opacity: em ? 1 : 0.7,
-        hovertemplate: `${m}, p = ${p}<br>archetype %{customdata}<extra></extra>`,
-      });
+      const cols = em ? projArchCols(lin, p, ends[m].length) : null;
+      if (cols) cols.forEach((c) => shown.add(c));
+      traces.push(projMarkers(m, p, ends[m], cols, em ? 11 : 8, em ? 2.5 : 1.25, false));
     }
     // Ranges cover the cloud and every archetype, so the cloud shrinks as the
     // MVSA vertices move out with p.
@@ -1341,7 +1362,12 @@ async function renderProjections() {
     const em = on(m);
     const item = el("span", em ? "legend-item on" : "legend-item");
     item.append(markerSwatch(PROJ_METHODS[m].symbol, em ? INK : INK_2, 9),
-      PROJ_METHODS[m].label + (em ? " (sidebar method)" : ""));
+      PROJ_METHODS[m].label + (em ? " (sidebar method, colored by archetype)" : ""));
+    legend.appendChild(item);
+  }
+  for (const c of [...shown].sort((a, b) => archIndex(a) - archIndex(b))) {
+    const item = el("span", "legend-item");
+    item.append(dot(archColor(c)), archLabel(c));
     legend.appendChild(item);
   }
   const ramp = el("span", "legend-item");
@@ -1353,7 +1379,7 @@ async function renderProjections() {
   box.style.borderColor = INK;
   ring.append(box, "black frame: the panel shown enlarged below");
   legend.appendChild(ring);
-  renderProjDetail(data, url);
+  renderProjDetail(data, url, lin);
 }
 
 // Black plot frame on the panel that is open in the enlarged view (the others
@@ -1375,7 +1401,9 @@ function markOpenPanel() {
 // p - 1 dimensions, so those are the components its vertices can differ on.
 // PC1 × PC2 uses the grid's density; the other pairs are baked per pair
 // (pca.pairs["i-j"], i < j) and flipped here when drawn as j × i.
-function renderProjDetail(data, url) {
+// To its right: the sidebar method's archetypes at this p as compact loading
+// bars (renderProjBars), in the points' colors.
+function renderProjDetail(data, url, lin) {
   const host = document.getElementById("cmp-proj-detail");
   const old = host.querySelector(".plot");
   if (old) Plotly.purge(old);
@@ -1405,7 +1433,7 @@ function renderProjDetail(data, url) {
       b.type = "button";
       b.setAttribute("aria-pressed", String(k === value));
       b.disabled = k === other;   // the other axis already shows this PC
-      b.addEventListener("click", () => { set(k); renderProjDetail(data, url); });
+      b.addEventListener("click", () => { set(k); renderProjDetail(data, url, lin); });
       group.appendChild(b);
     }
     wrap.appendChild(group);
@@ -1421,11 +1449,14 @@ function renderProjDetail(data, url) {
   close.addEventListener("click", () => {
     state.cmp.projP = null;
     markOpenPanel();
-    renderProjDetail(data, url);
+    renderProjDetail(data, url, lin);
   });
   head.appendChild(close);
   const div = el("div", "plot proj-detail-plot");
-  host.append(head, div, el("p", "note",
+  const bars = el("div", "proj-bars");
+  const body = el("div", "proj-detail-body");
+  body.append(div, bars);
+  host.append(head, body, el("p", "note",
     "Scroll to zoom, drag to pan, double-click to reset." +
     (isPca && p >= 3 && nPc < 3 ? " At p = 3 the simplex is a triangle, fully shown on PC1 × PC2." : "") +
     (isPca && p === 2 ? " At p = 2 the two archetypes span a line." : "")));
@@ -1456,20 +1487,13 @@ function renderProjDetail(data, url) {
       opacity: 0.6, hoverinfo: "skip",
     });
   }
+  let emCols = null, emMethod = null;
   for (const m of order) {
     const em = on(m);
-    traces.push({
-      type: "scatter", mode: "markers", name: m,
-      x: ends[m].map((q) => q[cx]), y: ends[m].map((q) => q[cy]),
-      customdata: ends[m].map((_, i) => i),
-      marker: {
-        symbol: PROJ_METHODS[m].symbol, size: em ? 14 : 10, color: em ? INK : INK_2,
-        line: { color: em ? INK : INK_2, width: em ? 2.25 : 1.5 },
-      },
-      opacity: em ? 1 : 0.7,
-      hovertemplate: `${m}, p = ${p}<br>archetype %{customdata}<br>` +
-        "(%{x:.2f}, %{y:.2f})<extra></extra>",
-    });
+    const cols = em ? projArchCols(lin, p, ends[m].length) : null;
+    if (em) { emCols = cols; emMethod = m; }
+    traces.push(projMarkers(m, p, ends[m].map((q) => [q[cx], q[cy]]), cols,
+      em ? 14 : 10, em ? 2.75 : 1.5, true));
   }
   const xs = [ex[0], ex[1], ...data.methods.flatMap((m) => ends[m].map((q) => q[cx]))];
   const ys = [ey[0], ey[1], ...data.methods.flatMap((m) => ends[m].map((q) => q[cy]))];
@@ -1498,6 +1522,83 @@ function renderProjDetail(data, url) {
     yaxis: { ...axis, range: yr, scaleanchor: "x", scaleratio,
       title: axisTitle(isPca ? `PC${iy} (${pct(iy)})` : "UMAP 2") },
   }, { ...PLOTLY_CFG, scrollZoom: true });
+
+  // hovering one of the sidebar method's points marks its archetype's bars
+  const mark = (c) => {
+    for (const b of bars.querySelectorAll(".proj-bars-arch")) {
+      b.classList.toggle("on", b.dataset.arch === c);
+    }
+  };
+  div.on("plotly_hover", (ev) => {
+    const pt = ev.points[0];
+    mark(pt && pt.data.name === emMethod ? emCols[pt.pointIndex] : null);
+  });
+  div.on("plotly_unhover", () => mark(null));
+  renderProjBars(bars, p);
+}
+
+// The sidebar method's archetypes at p as compact loading bars beside the
+// enlarged cloud: per archetype (in its color), the top candidates of the
+// sweep's trial mean (± 1 SD whiskers), as on the Overview, on one axis shared
+// by all of them.
+// The number of candidates shrinks as p grows, so the column stays about as
+// tall as the plot.
+const PROJ_BARS = { height: 540, head: 34, row: 15, min: 3, max: 8 };
+async function renderProjBars(host, p) {
+  const year = state.year;
+  if (!yearMeta(year).sweep_ps.includes(p)) {
+    host.appendChild(el("p", "muted", `No ${methodLabel()} sweep at p = ${p} for this year.`));
+    return;
+  }
+  const view = await archetypeView(year, state.level, p).catch(() => null);
+  if (!host.isConnected) return;   // the panel was closed or redrawn meanwhile
+  if (!view) { host.appendChild(el("p", "muted", "No loadings for this run.")); return; }
+  const B = PROJ_BARS;
+  const topN = Math.max(B.min, Math.min(B.max,
+    Math.floor((B.height - p * B.head) / (p * B.row))));
+  const rowsBy = loadingsRows(view.loadings, view.cols, topN);
+  // axis over the bars and their ± 1 SD whiskers
+  const hasSd = !!view.loadings.std;
+  const all = rowsBy.flat().flatMap((r) => [r.v - r.sd, r.v + r.sd]);
+  const lo = Math.min(0, ...all), hi = Math.max(0, ...all), span = hi - lo || 1;
+  const pos = (v) => `${(100 * (v - lo)) / span}%`;
+  host.appendChild(el("p", "note",
+    `${methodLabel()} archetypes at p = ${p}: top ${topN} candidates by loading ` +
+    `(${units().loading}), mean${hasSd ? " ± 1 SD" : ""} over the sweep's trials. ` +
+    "All bars share one axis."));
+  view.cols.forEach((c, k) => {
+    const block = el("div", "proj-bars-arch");
+    block.dataset.arch = c;
+    const head = el("div", "plot-title");
+    head.append(dot(archColor(c)), archLabel(c));
+    block.appendChild(head);
+    for (const r of rowsBy[k]) {
+      const { name, tag } = splitLabel(r.label);
+      const row = el("div", "proj-bars-row");
+      row.title = `${name}${tag ? ` ${tag}` : ""}: ${fmtSigned(r.v, 3)}` +
+        (hasSd ? ` ± ${r.sd.toFixed(3)}` : "");
+      const track = el("span", "track");
+      const bar = el("span", "bar");
+      bar.style.left = pos(Math.min(0, r.v));
+      bar.style.width = `${(100 * Math.abs(r.v)) / span}%`;
+      bar.style.background = archColor(c);
+      track.appendChild(bar);
+      if (lo < 0) {
+        const zero = el("span", "zero");
+        zero.style.left = pos(0);
+        track.appendChild(zero);
+      }
+      if (hasSd && r.sd > 0) {
+        const sd = el("span", "sd");
+        sd.style.left = pos(r.v - r.sd);
+        sd.style.width = `${(200 * r.sd) / span}%`;
+        track.appendChild(sd);
+      }
+      row.append(el("span", "name", name), track, el("span", "val", fmtSigned(r.v, 2)));
+      block.appendChild(row);
+    }
+    host.appendChild(block);
+  });
 }
 
 // ----------------------------------------------------------------- tab: compare
